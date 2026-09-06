@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1788736183|1260558';
+const CACHE_VERSION = '1788737364|1296124';
 /** @type {string} */
 const CACHE_PREFIX = 'Astro Neighbor-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
