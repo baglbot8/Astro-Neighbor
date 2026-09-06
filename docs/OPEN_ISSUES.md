@@ -192,10 +192,107 @@ The camera builder updated their own three showcases to reference `CameraRig.DIS
 ## 30. OPEN — wide flat decorations can hide the player from the camera fade
 The camera fade is physics-based, so it only sees a prop's collider. `deco_star_flag` has `collide_radius = 0.28` around its pole while the banner reaches ~0.9 m sideways, so the banner can cover the astronaut and never fade. Same shape problem on the holo sign and the nebula rug. Pre-existing, not caused by the camera change. Fix in `src/decorations/items/`: give the visual extent a collider, or mark the banner non-blocking but present on layer 4.
 
-## 31. OPEN — the web export renders incorrectly, because WebGL forces the Compatibility renderer
-Tested by actually building and running the HTML5 export, not assumed.
-**What works:** the export builds clean (49 MB, largest file 37 MB, inside GitHub's limits), loads in a browser, and the title screen renders correctly — planet, stars, orbiting rocket, menu.
-**What does not:** the browser must use **Compatibility (WebGL 2)**; Forward+ is unavailable there. Reproduced on desktop with `--rendering-driver opengl3`, which is the fast way to test this without a browser: the world renders, but **grass tufts render as solid black silhouettes** and **tree canopies show black and tan patches**. Frame: `~/.astro_captures/compatchk/compat.png`.
-**Ruled out by direct test:** custom `light()` functions are *not* the problem — a minimal shader with a custom `light()` renders correctly under `gl_compatibility` (scratch test, sphere centre `(1,163,36)` rather than black). The fault is narrower and is most likely in the MultiMesh grass and the foliage shader.
-**Also found and fixed while testing:** pointer lock throws `WrongDocumentError: The root document of this element is not valid for pointer lock` in a browser. `CameraRig` now refuses to grab the cursor when `OS.has_feature("web")` or `Platform.is_mobile()`. `project.godot` was also missing `renderer/rendering_method` entirely — set explicitly now.
-**The important consequence for platform choice:** Android does **not** have this problem. It uses the Mobile renderer, which supports the same shader features as Forward+. So an APK would look correct today, while the web build needs the foliage and grass shaders ported to Compatibility first.
+
+## 31. [DONE 2026-09-06 by orchestrator] Web export rendered black grass and flowers — MultiMesh wipes vertex COLOR under Compatibility
+Tested by building and running the HTML5 export, then reproduced far faster on desktop with
+`godot --path . --rendering-driver opengl3`, which is the way to test this without a browser.
+
+**Symptom.** In the browser (and under `opengl3`) every grass tuft and every flower rendered as a
+solid black silhouette. Trees, bushes, rocks and the ground were fine.
+
+**Root cause, bisected in-engine rather than guessed.** Three probes, each rendered and measured:
+1. Replacing the foliage shader's `base` with a constant colour made the grass render correctly, so
+   `light()` was innocent and the fault was upstream in `v_col`.
+2. Replacing `INSTANCE_CUSTOM.rgb` with magenta left the grass black, so the per-instance tint was
+   innocent too — which meant `step(0.5, COLOR.a)` was returning 0 even though `grass_tuft()` bakes
+   `COLOR.a = 1.0`.
+3. Rendering `vec3(COLOR.a)` directly showed grass **white** under Forward+ and **black** under
+   Compatibility, while trees stayed white under both.
+
+So: **under the Compatibility (WebGL2) renderer a MultiMesh always reads an instance-colour vertex
+attribute and multiplies it into `COLOR`. With `use_colors` off that attribute is never supplied and
+`COLOR` arrives as `(0,0,0,0)`**, wiping the mesh's baked vertex colour. Forward+ tolerates the
+missing attribute, which is why this only ever appeared in the browser build.
+
+**Fix.** `PlanetProps._multimesh()` now sets `mm.use_colors = true` and writes `Color.WHITE` to every
+instance, making the multiply a no-op. The per-instance tint stays in custom data. Verified: Forward+
+frames are pixel-identical apart from player animation phase (max diff confined to the astronaut);
+Compatibility renders grass and flowers correctly on home, Zorp, Bolt and the hub.
+
+**Ruled out by direct test, so nobody repeats the work:** custom `light()` functions work fine under
+Compatibility; `INSTANCE_CUSTOM` read in `vertex()` works fine; `pc_detail_lod`'s `dFdx`/`dFdy`
+derivatives agree between renderers to within 2% (clump-band LOD mean 0.870 Forward+ vs 0.854
+Compatibility). Reading `INSTANCE_CUSTOM` in `fragment()` does **not** compile under Compatibility
+("Unknown identifier"), but no shader in this project does that.
+
+**Also fixed while testing:** pointer lock threw `WrongDocumentError` in a browser; `CameraRig` now
+refuses to grab the cursor under `OS.has_feature("web")` or `Platform.is_mobile()`. And
+`project.godot` line 223 had a comment mashed into it with its spaces stripped
+(`Compatibility-SSAOandsomeglowmodesareunavailablethere.renderer/rendering_method="forward_plus"`),
+so the key parsed as garbage and `renderer/rendering_method` was never actually set — desktop worked
+only because `forward_plus` is the default. Repaired with real `;` comment lines.
+
+
+## 32. OPEN — the browser build renders one power of albedo too bright — OWNER: needs a dedicated shading pass
+**Root cause found and proven. The naive fix was tried, measured, and REVERTED because it ruined the
+art — read this whole entry before attempting it again.**
+
+### The finding
+**Forward+ multiplies the final `DIFFUSE_LIGHT` by `ALBEDO` after `light()` returns. The
+Compatibility (WebGL2) renderer does not.** The web export is forced onto Compatibility, and every
+colour in this game is authored against the Forward+ behaviour, so the browser renders the world one
+power of albedo too bright — which is lighter *and* less saturated, because `albedo^1` sits closer to
+white than `albedo^2`.
+
+Reproducible probe (run it before trusting any of this): set `ALBEDO = vec3(0.25)` in
+`grass_planet.gdshader`'s `fragment()` and replace its `light()` body with
+`DIFFUSE_LIGHT = vec3(1.0); SPECULAR_LIGHT = vec3(0.0);`, then capture the same frame under
+`--rendering-driver vulkan` and `--rendering-driver opengl3`. Measured ground pixel:
+**Forward+ `(182,182,183)`, Compatibility `(87,92,105)`.**
+
+Measured on the home-planet ground crop `(250,470)-(1050,640)`:
+
+| | value mean | saturation mean |
+|---|---|---|
+| Forward+ (desktop, correct) | 0.609 | 0.519 |
+| Compatibility, as shipped | 0.772 | **0.307** — fails the R2.6 gate of 0.40-0.52 |
+| Compatibility, with the albedo multiply put back | 0.674 | 0.587 |
+
+The same pale cast is visible on Zorp's violet ground and Bolt's chrome.
+
+### What was tried and reverted
+A global fix: `global uniform float astro_compat` (1.0 only under Compatibility, set by the `Platform`
+autoload via `RenderingServer.get_rendering_device() == null`), a `pc_diffuse_out(diffuse, albedo)`
+helper in `planet_common.gdshaderinc` returning `diffuse * mix(vec3(1.0), albedo, astro_compat)`, and
+all 12 `DIFFUSE_LIGHT +=` sites across the 8 custom-`light()` shaders wrapped in it.
+
+It compiled, it was a verified no-op on Forward+, and it moved the ground's numbers most of the way
+home (see the table). **It was still reverted**, because the rendered frame got *worse*: grass tufts
+went black again, tree canopies went dark with black patches, and the pink flowers turned red. The
+per-shader constants (`planet_foliage`'s `light_gain 0.36`, `shade_floor 0.70`, `ambient_damp 0.24`,
+and the equivalents in `toon_soft` and `metal_plates`) were each hand-derived around the Forward+
+albedo multiply, so restoring the multiply globally double-applies whatever compensation an
+individual shader already makes for it. `planet_foliage` in particular already routes its light
+through `pc_light_term`, which divides the albedo back out.
+
+This is the same trap as the palette work: **the metric improved while the art got worse.**
+
+### What the real fix looks like
+One shader at a time, not one global switch. For each of the 8 custom-`light()` shaders: put the
+albedo multiply back under Compatibility, then re-derive that shader's own brightness constants
+against a captured frame, and check the frame — not just the numbers — under **both** renderers
+before moving to the next shader. This is the same shape of job as item 19 (the double-albedo fix
+plus palette re-author) and should probably be done in the same pass, since both are about where the
+albedo multiply lands.
+
+### Ruled out, so nobody repeats the work
+SSAO (disabling it under Forward+ changes the ground's numbers by 0.000), tonemap mode (LINEAR moves
+Forward+ to 0.530/0.480 — the wrong direction), sky ambient (`AMBIENT_SOURCE_COLOR` moves
+Compatibility only 0.772 -> 0.778), `pc_detail_lod`'s `dFdx`/`dFdy` derivatives (clump-band LOD mean
+0.870 Forward+ vs 0.854 Compatibility), and the `sd_fbm` noise itself. Dividing by albedo instead of
+multiplying makes it worse (saturation 0.307 -> 0.166), which is what fixed the direction of the
+diagnosis.
+
+### Cosmetic, same cause family
+The atmosphere's warm limb haze is dimmer in the browser. That is the glow difference — Compatibility
+supports fewer glow modes — and is separate from the albedo issue.
