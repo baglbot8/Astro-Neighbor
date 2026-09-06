@@ -20,12 +20,13 @@ export GIT_INDEX_FILE="$(mktemp -t ghpages-index)"
 rm -f "$GIT_INDEX_FILE"
 git --work-tree="$OUT" add -A -f .
 TREE="$(git write-tree)"
-PARENT=""
+# zsh does NOT word-split an unquoted variable the way bash does, so the parent has to be an
+# array or `git commit-tree` receives "-p <sha>" as a single argument and rejects it.
+parent_args=()
 if git show-ref --verify --quiet refs/heads/gh-pages; then
-	PARENT="-p $(git rev-parse refs/heads/gh-pages)"
+	parent_args=(-p "$(git rev-parse refs/heads/gh-pages)")
 fi
-# shellcheck disable=SC2086
-COMMIT="$(git commit-tree "$TREE" $PARENT -m "Publish the playable web build
+COMMIT="$(git commit-tree "$TREE" "${parent_args[@]}" -m "Publish the playable web build
 
 Built from $BASE.")"
 git update-ref refs/heads/gh-pages "$COMMIT"
