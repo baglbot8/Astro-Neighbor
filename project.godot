@@ -215,16 +215,14 @@ zoom_out={
 
 [rendering]
 
-# Explicit, because it had gone missing and the default is silent. Desktop and mobile both use
-# Forward+; the web export falls back to Compatibility (WebGL 2) regardless, which is why the
-# browser build reports "Compatibility" - SSAO and some glow modes are unavailable there.
-renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="forward_plus"
-
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=4
 textures/default_filters/anisotropic_filtering_level=3
 anti_aliasing/quality/msaa_3d=2
 environment/defaults/default_clear_color=Color(0.53, 0.78, 0.96, 1)
+; Desktop and mobile both run Forward+. The web export forces Compatibility (WebGL2),
+; where SSAO and some glow modes are unavailable.
+renderer/rendering_method="forward_plus"
 
 [shader_globals]
 
