@@ -24,3 +24,7 @@ _critic_tmp/
 # direction while building. They are excluded so the repository contains nothing we do not own.
 # docs/STYLE_GUIDE.md describes what they showed, so the guidance survives without the files.
 reference/
+
+# Web export output. It is published on the gh-pages branch, not committed to main:
+# keeping it here also made Godot scan its PNGs and litter the folder with .import files.
+docs_build/
