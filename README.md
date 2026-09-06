@@ -25,6 +25,40 @@ godot --path . res://src/world/world.tscn -- --skip-title --new-game --planet=hu
 godot --path . --resolution 2340x1080 res://src/world/world.tscn -- --skip-title --ui=mobile
 ```
 
+## Playing it in a browser (and on a phone)
+
+The web export runs in any modern browser, including Safari on iPhone, with no install.
+
+**On your own network**, serve the build and open the printed address on a phone on the same Wi-Fi:
+
+```bash
+tools/serve_web.sh --build
+```
+
+**On the internet**, this repository publishes the build through GitHub Pages from the `gh-pages`
+branch, which holds the exported game at its root. After pushing, enable it once under
+*Settings -> Pages -> Build and deployment -> Deploy from a branch -> `gh-pages` / `(root)`*. The
+game then lives at `https://<user>.github.io/<repo>/`.
+
+To publish a new build:
+
+```bash
+tools/publish_web.sh
+```
+
+Notes, all verified rather than assumed:
+
+* The browser is forced onto Godot's **Compatibility (WebGL2)** renderer, which behaves differently
+  from the Forward+ renderer used on desktop. See `docs/OPEN_ISSUES.md` items 31 and 32 — 31 is
+  fixed, 32 is a known remaining tone difference in the ground.
+* First load takes roughly **40 seconds** on a phone: the build is single-threaded WebAssembly and
+  every planet is generated procedurally at startup. The screen is black while that happens.
+* The game picks its control scheme by asking the browser whether the primary pointer is a finger,
+  so a phone gets touch controls and a laptop gets keyboard and mouse. The pause menu's **Controls**
+  setting overrides it either way. The resolved mode is printed to the browser console at startup as
+  `[Platform] ui mode: ...`.
+* Play in **landscape**.
+
 ## Controls
 
 **Desktop** — WASD move, Shift run, Space jump (hold to fly), mouse look, wheel zoom, E interact,
