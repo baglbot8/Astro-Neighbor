@@ -33,6 +33,9 @@ var _forced: bool = false
 func _ready() -> void:
 	_mode = _detect()
 	_apply_orientation()
+	# Printed on every start. On the web build this is the only way to confirm from outside the
+	# game which control scheme a real phone actually got — see the browser note in _detect().
+	print("[Platform] ui mode: ", mode_name(), " (forced: ", _forced, ")")
 
 
 func _detect() -> Mode:
@@ -58,11 +61,31 @@ func _detect() -> Mode:
 		return Mode.MOBILE
 	if pref == "desktop":
 		return Mode.DESKTOP
+	# THE WEB BUILD MUST BE ASKED DIFFERENTLY, and getting this wrong makes the game unplayable on a
+	# phone. Neither test below works in a browser: Godot's web export always reports FEATURE_MOUSE
+	# (the browser platform claims it whatever the hardware is), and its feature tags are "web" and
+	# "html5" but never "mobile". An iPhone in Safari therefore falls all the way through to DESKTOP
+	# and gets the keyboard HUD with no touch controls at all. Ask the browser instead.
+	if OS.has_feature("web"):
+		return Mode.MOBILE if _web_touch_is_primary() else Mode.DESKTOP
 	# A touchscreen laptop still has a mouse and keyboard, so require the absence of a mouse
 	# before assuming a phone.
 	if DisplayServer.is_touchscreen_available() and not DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE):
 		return Mode.MOBILE
 	return Mode.MOBILE if OS.has_feature("mobile") else Mode.DESKTOP
+
+
+## Is the browser's PRIMARY pointer a finger? `(pointer: coarse)` is the standard CSS test for
+## exactly that and is what distinguishes a phone or tablet from a touchscreen laptop, which still
+## reports `(pointer: fine)` because its mouse is the primary pointer. Falls back to Godot's own
+## touchscreen probe if the eval is unavailable. The player can always override this from the
+## settings menu, which calls set_mobile().
+func _web_touch_is_primary() -> bool:
+	var res: Variant = JavaScriptBridge.eval(
+		"(navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches) ? 1 : 0", true)
+	if res == null:
+		return DisplayServer.is_touchscreen_available()
+	return int(res) == 1
 
 
 func is_mobile() -> bool:
