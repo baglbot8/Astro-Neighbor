@@ -195,10 +195,19 @@ func _multimesh(mesh: ArrayMesh, xfs: Array[Transform3D], tints: PackedColorArra
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	# WEB/COMPATIBILITY FIX. Under the Compatibility (WebGL2) renderer a MultiMesh always reads an
+	# instance-colour attribute and multiplies it into COLOR. With use_colors OFF that attribute is
+	# never supplied, so COLOR arrives as (0,0,0,0): the mesh's baked vertex colour is wiped and every
+	# grass tuft and flower rendered as a black silhouette. Forward+ ignored the missing attribute and
+	# looked fine, which is why this only ever showed up in the browser build.
+	# Enabling colours and writing pure white makes the multiply a no-op, so Forward+ is unchanged and
+	# Compatibility gets its vertex colours back. The per-instance TINT stays in custom data.
+	mm.use_colors = true
 	mm.mesh = mesh
 	mm.instance_count = xfs.size()
 	for i in xfs.size():
 		mm.set_instance_transform(i, xfs[i])
+		mm.set_instance_color(i, Color.WHITE)
 		mm.set_instance_custom_data(i, tints[i].srgb_to_linear())
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
