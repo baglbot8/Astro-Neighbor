@@ -1,0 +1,17 @@
+[
+  {"t": 0.6,  "log": "walk out toward the tall props"},
+  {"t": 0.6,  "press": "move_forward"},
+  {"t": 1.0,  "log": "hold boost: jump + thruster, fly the whole row"},
+  {"t": 1.0,  "press": "jump"},
+  {"t": 1.0,  "press": "boost"},
+  {"t": 2.2,  "release": "jump"},
+  {"t": 2.4,  "capture": "jet_climb"},
+  {"t": 3.2,  "capture": "jet_over_beacon"},
+  {"t": 4.0,  "capture": "jet_cruise"},
+  {"t": 4.4,  "release": "boost"},
+  {"t": 5.2,  "capture": "jet_landed"},
+  {"t": 5.2,  "log": "on the ground: tank refills"},
+  {"t": 7.0,  "capture": "jet_refilled"},
+  {"t": 7.2,  "release": "move_forward"},
+  {"t": 7.4,  "quit": true}
+]

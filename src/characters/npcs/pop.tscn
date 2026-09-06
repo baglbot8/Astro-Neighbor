@@ -1,0 +1,46 @@
+[gd_scene load_steps=6 format=3 uid="uid://b0astronpc0032"]
+
+[ext_resource type="Script" path="res://src/characters/npc.gd" id="1"]
+[ext_resource type="Script" path="res://src/characters/models/twin_model.gd" id="2"]
+[ext_resource type="Script" path="res://src/core/interactable.gd" id="3"]
+
+[sub_resource type="CapsuleShape3D" id="Capsule_body"]
+radius = 0.272
+height = 1.12
+
+[sub_resource type="SphereShape3D" id="Sphere_talk"]
+radius = 0.72
+
+[node name="Pop" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 73
+script = ExtResource("1")
+npc_id = "pop"
+display_name = "Pop"
+voice_profile = "kid"
+accent_color = Color(0.7216, 0.7882, 0.2275, 1)
+wander_radius_m = 5.0
+walk_speed = 2.2
+
+[node name="Model" type="Node3D" parent="."]
+script = ExtResource("2")
+skin = Color(0.7569, 0.7922, 0.4392, 1)
+antenna_count = 2
+bounce_phase = 0.85
+
+[node name="Body" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56, 0)
+shape = SubResource("Capsule_body")
+
+[node name="TalkArea" type="Area3D" parent="."]
+collision_layer = 16
+collision_mask = 0
+monitoring = false
+script = ExtResource("3")
+prompt_text = "Talk"
+reach = 2.6
+require_facing = false
+
+[node name="TalkShape" type="CollisionShape3D" parent="TalkArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56, 0)
+shape = SubResource("Sphere_talk")

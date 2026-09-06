@@ -1,0 +1,23 @@
+[
+  {"t": 0.6, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 1.0, "call": {"node": "/root/World/IntegProbe", "method": "list_group", "args": ["interactables"]}},
+  {"t": 1.6, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "player_home/@Area3D", 1.6]}},
+  {"t": 2.4, "capture": "h01_mailbox"},
+  {"t": 2.8, "tap": "interact"},
+  {"t": 4.2, "capture": "h02_mail"},
+  {"t": 4.6, "tap": "interact"},
+  {"t": 5.9, "tap": "interact"},
+  {"t": 7.2, "tap": "interact"},
+  {"t": 8.0, "capture": "h03_mail_end"},
+  {"t": 8.6, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "player_home/Door", 2.4]}},
+  {"t": 9.4, "capture": "h04_house"},
+  {"t": 9.8, "tap": "interact"},
+  {"t": 11.2, "capture": "h05_house_talk"},
+  {"t": 11.6, "tap": "interact"},
+  {"t": 12.9, "tap": "interact"},
+  {"t": 14.2, "tap": "interact"},
+  {"t": 15.0, "capture": "h06_house_end"},
+  {"t": 15.6, "tap": "cancel"},
+  {"t": 16.2, "call": {"node": "/root/World/IntegProbe", "method": "liveness", "args": ["end"]}},
+  {"t": 16.8, "quit": true}
+]

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b0astro0npctalk"]
+
+[ext_resource type="Script" path="res://src/characters/showcase/npc_talk_showcase.gd" id="1"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1")

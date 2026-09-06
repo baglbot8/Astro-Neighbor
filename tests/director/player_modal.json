@@ -1,0 +1,10 @@
+[
+  {"t": 0.3, "log": "player_modal: input must be ignored while a modal is open"},
+  {"t": 0.5, "call": {"node": "/root/EventBus", "method": "emit_signal", "args": ["ui_modal_opened", "test"]}},
+  {"t": 0.6, "press": "move_forward"},
+  {"t": 1.0, "tap": "jump"},
+  {"t": 2.5, "log": "modal closes now; player should start walking"},
+  {"t": 2.5, "call": {"node": "/root/EventBus", "method": "emit_signal", "args": ["ui_modal_closed", "test"]}},
+  {"t": 4.0, "release": "move_forward"},
+  {"t": 4.5, "quit": true}
+]

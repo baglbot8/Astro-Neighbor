@@ -1,0 +1,9 @@
+[
+  {"t": 0.2, "log": "planet builder: foliage probe - walk to the hero bush and hold"},
+  {"t": 2.2, "press": "move_forward"},
+  {"t": 4.2, "release": "move_forward"},
+  {"t": 5.6, "press": "move_left"},
+  {"t": 7.6, "release": "move_left"},
+  {"t": 8.6, "capture": "g2"},
+  {"t": 8.9, "quit": true}
+]

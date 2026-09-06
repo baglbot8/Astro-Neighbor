@@ -1,0 +1,345 @@
+[
+  {
+    "t": 0.2,
+    "log": "skip the first-run intro so the timeline is deterministic (it opens a cutscene modal)"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 0.4,
+    "log": "ui_mobile_play: touch controls on the home planet. Run with -- --ui=mobile"
+  },
+  {
+    "t": 1.0,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "idle"
+      ]
+    }
+  },
+  {
+    "t": 1.2,
+    "capture": "m01_idle"
+  },
+  {
+    "t": 1.6,
+    "log": "small push = walk (analogue, no run key)"
+  },
+  {
+    "t": 1.7,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_stick",
+      "args": [
+        0.35,
+        -0.94,
+        0.45,
+        true
+      ]
+    }
+  },
+  {
+    "t": 2.4,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "walk"
+      ]
+    }
+  },
+  {
+    "t": 2.6,
+    "capture": "m02_walk_touched"
+  },
+  {
+    "t": 3.0,
+    "log": "full push = run, same stick"
+  },
+  {
+    "t": 3.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_stick",
+      "args": [
+        0.35,
+        -0.94,
+        1.0,
+        true
+      ]
+    }
+  },
+  {
+    "t": 4.0,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "run"
+      ]
+    }
+  },
+  {
+    "t": 4.2,
+    "capture": "m03_run_touched"
+  },
+  {
+    "t": 4.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_stick",
+      "args": [
+        0.0,
+        0.0,
+        0.0,
+        false
+      ]
+    }
+  },
+  {
+    "t": 5.0,
+    "log": "hold Boost: must fly exactly as holding the key does"
+  },
+  {
+    "t": 5.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "boost",
+        true
+      ]
+    }
+  },
+  {
+    "t": 6.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "boosting"
+      ]
+    }
+  },
+  {
+    "t": 6.2,
+    "capture": "m04_boost_touched"
+  },
+  {
+    "t": 6.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "boost",
+        false
+      ]
+    }
+  },
+  {
+    "t": 7.4,
+    "log": "camera drag on the open right-hand side"
+  },
+  {
+    "t": 7.5,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_touch",
+      "args": [
+        1,
+        1050.0,
+        420.0,
+        true
+      ]
+    }
+  },
+  {
+    "t": 7.7,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_drag",
+      "args": [
+        1,
+        1130.0,
+        430.0
+      ]
+    }
+  },
+  {
+    "t": 7.9,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_drag",
+      "args": [
+        1,
+        1220.0,
+        445.0
+      ]
+    }
+  },
+  {
+    "t": 8.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_drag",
+      "args": [
+        1,
+        1320.0,
+        460.0
+      ]
+    }
+  },
+  {
+    "t": 8.3,
+    "capture": "m05_camera_drag"
+  },
+  {
+    "t": 8.5,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_touch",
+      "args": [
+        1,
+        1320.0,
+        460.0,
+        false
+      ]
+    }
+  },
+  {
+    "t": 9.0,
+    "log": "pinch to zoom"
+  },
+  {
+    "t": 9.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_pinch",
+      "args": [
+        0.0
+      ]
+    }
+  },
+  {
+    "t": 9.3,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_pinch",
+      "args": [
+        120.0
+      ]
+    }
+  },
+  {
+    "t": 9.5,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_pinch",
+      "args": [
+        260.0
+      ]
+    }
+  },
+  {
+    "t": 9.7,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "pinched_in"
+      ]
+    }
+  },
+  {
+    "t": 9.9,
+    "capture": "m06_pinch_in"
+  },
+  {
+    "t": 10.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_pinch_end"
+    }
+  },
+  {
+    "t": 10.6,
+    "log": "walk to the rocket pad so the context button shows a real prompt"
+  },
+  {
+    "t": 10.7,
+    "call": {
+      "node": "/root/World",
+      "method": "_spawn_optional",
+      "args": [
+        "res://tests/director/integ_probe.tscn",
+        "IntegProbe"
+      ]
+    }
+  },
+  {
+    "t": 11.0,
+    "call": {
+      "node": "/root/World/IntegProbe",
+      "method": "goto_pad",
+      "args": [
+        2.2
+      ]
+    }
+  },
+  {
+    "t": 12.0,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "at_pad"
+      ]
+    }
+  },
+  {
+    "t": 12.2,
+    "capture": "m07_context_button"
+  },
+  {
+    "t": 12.8,
+    "log": "idle fade: the controls sink further after a few seconds of nothing"
+  },
+  {
+    "t": 17.4,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "faded"
+      ]
+    }
+  },
+  {
+    "t": 17.6,
+    "capture": "m08_faded"
+  },
+  {
+    "t": 18.0,
+    "quit": true
+  }
+]

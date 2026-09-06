@@ -1,0 +1,154 @@
+[
+ {
+  "t": 0.4,
+  "log": "DEPARTURE HALF of the continuous journey (R2.5): find the pad from the real spawn, choose a destination ON THE PAD, board, and climb until the sky is space. Run with --new-game BEFORE --planet."
+ },
+ {
+  "t": 0.45,
+  "log": "Preamble: ten `interact` taps page through whatever intro dialogue is up on a fresh save (the onboarding radio intro holds the frame otherwise). They hit nothing if there is none."
+ },
+ {
+  "t": 0.5,
+  "tap": "interact"
+ },
+ {
+  "t": 0.78,
+  "tap": "interact"
+ },
+ {
+  "t": 1.06,
+  "tap": "interact"
+ },
+ {
+  "t": 1.34,
+  "tap": "interact"
+ },
+ {
+  "t": 1.62,
+  "tap": "interact"
+ },
+ {
+  "t": 1.9,
+  "tap": "interact"
+ },
+ {
+  "t": 2.18,
+  "tap": "interact"
+ },
+ {
+  "t": 2.46,
+  "tap": "interact"
+ },
+ {
+  "t": 2.74,
+  "tap": "interact"
+ },
+ {
+  "t": 3.02,
+  "tap": "interact"
+ },
+ {
+  "t": 4.5,
+  "capture": "01_real_spawn_can_i_see_it"
+ },
+ {
+  "t": 4.6,
+  "press": "camera_right"
+ },
+ {
+  "t": 5.65,
+  "release": "camera_right"
+ },
+ {
+  "t": 5.95,
+  "capture": "02_turned_toward_pad"
+ },
+ {
+  "t": 6.1,
+  "press": "move_forward"
+ },
+ {
+  "t": 9.2,
+  "release": "move_forward"
+ },
+ {
+  "t": 9.5,
+  "capture": "03_at_the_pad"
+ },
+ {
+  "t": 9.8,
+  "tap": "interact"
+ },
+ {
+  "t": 10.4,
+  "capture": "04_where_to_card"
+ },
+ {
+  "t": 10.6,
+  "tap": "move_right"
+ },
+ {
+  "t": 11.0,
+  "capture": "05_second_destination"
+ },
+ {
+  "t": 11.2,
+  "tap": "interact"
+ },
+ {
+  "t": 12.0,
+  "capture": "06_walking_to_hatch"
+ },
+ {
+  "t": 12.9,
+  "capture": "07_hatch_open"
+ },
+ {
+  "t": 13.8,
+  "capture": "08_climbing_in"
+ },
+ {
+  "t": 14.5,
+  "capture": "09_ignition_flame_dust"
+ },
+ {
+  "t": 15.5,
+  "capture": "10_liftoff_planet_below"
+ },
+ {
+  "t": 16.5,
+  "capture": "11_planet_shrinking"
+ },
+ {
+  "t": 17.5,
+  "capture": "12_planet_smaller"
+ },
+ {
+  "t": 18.5,
+  "capture": "13_sky_darkening"
+ },
+ {
+  "t": 19.5,
+  "capture": "14_stars_out"
+ },
+ {
+  "t": 20.5,
+  "capture": "15_leaning_toward_the_destination"
+ },
+ {
+  "t": 21.1,
+  "capture": "16_last_frame_on_this_planet"
+ },
+ {
+  "t": 21.8,
+  "capture": "17_first_frames_in_space"
+ },
+ {
+  "t": 23.1,
+  "capture": "18_cruise_begins"
+ },
+ {
+  "t": 24.1,
+  "quit": true
+ }
+]

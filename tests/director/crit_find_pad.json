@@ -1,0 +1,14 @@
+[
+  {"t": 0.8, "capture": "01_spawn_facing"},
+  {"t": 1.0, "press": "camera_right"},
+  {"t": 1.55, "capture": "02_turn_60"},
+  {"t": 2.05, "release": "camera_right"},
+  {"t": 2.4, "capture": "03_turned_toward_pad"},
+  {"t": 2.6, "press": "move_forward"},
+  {"t": 3.6, "capture": "04_walk_1s"},
+  {"t": 4.4, "capture": "05_walk_2s"},
+  {"t": 5.1, "release": "move_forward"},
+  {"t": 5.6, "capture": "06_at_pad_prompt"},
+  {"t": 6.4, "capture": "07_prompt_hold"},
+  {"t": 7.0, "quit": true}
+]

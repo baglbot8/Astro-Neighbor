@@ -1,0 +1,202 @@
+[
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/FavorSystem",
+   "method": "force_template",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.4,
+  "release": "move_right"
+ },
+ {
+  "t": 2.7,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.2,
+  "capture": "m00_can_offer"
+ },
+ {
+  "t": 3.6,
+  "tap": "interact"
+ },
+ {
+  "t": 3.93,
+  "tap": "interact"
+ },
+ {
+  "t": 4.26,
+  "tap": "interact"
+ },
+ {
+  "t": 4.59,
+  "tap": "interact"
+ },
+ {
+  "t": 4.92,
+  "tap": "interact"
+ },
+ {
+  "t": 5.25,
+  "tap": "interact"
+ },
+ {
+  "t": 5.58,
+  "tap": "interact"
+ },
+ {
+  "t": 5.91,
+  "tap": "interact"
+ },
+ {
+  "t": 6.24,
+  "tap": "interact"
+ },
+ {
+  "t": 6.57,
+  "tap": "interact"
+ },
+ {
+  "t": 6.9,
+  "tap": "interact"
+ },
+ {
+  "t": 7.23,
+  "tap": "interact"
+ },
+ {
+  "t": 7.56,
+  "tap": "interact"
+ },
+ {
+  "t": 7.89,
+  "tap": "interact"
+ },
+ {
+  "t": 8.22,
+  "tap": "interact"
+ },
+ {
+  "t": 8.55,
+  "tap": "interact"
+ },
+ {
+  "t": 8.88,
+  "tap": "interact"
+ },
+ {
+  "t": 9.21,
+  "tap": "interact"
+ },
+ {
+  "t": 9.54,
+  "tap": "interact"
+ },
+ {
+  "t": 9.87,
+  "tap": "interact"
+ },
+ {
+  "t": 10.2,
+  "tap": "interact"
+ },
+ {
+  "t": 10.53,
+  "tap": "interact"
+ },
+ {
+  "t": 10.86,
+  "tap": "interact"
+ },
+ {
+  "t": 11.19,
+  "tap": "interact"
+ },
+ {
+  "t": 11.52,
+  "tap": "interact"
+ },
+ {
+  "t": 11.85,
+  "tap": "interact"
+ },
+ {
+  "t": 12.4,
+  "capture": "m01_active_not_ready"
+ },
+ {
+  "t": 13.0,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "crystal_chunk",
+    6
+   ]
+  }
+ },
+ {
+  "t": 13.0,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "moon_flower",
+    6
+   ]
+  }
+ },
+ {
+  "t": 13.0,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "stardust_shard",
+    6
+   ]
+  }
+ },
+ {
+  "t": 13.0,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "gear_bit",
+    6
+   ]
+  }
+ },
+ {
+  "t": 15.0,
+  "capture": "m02_ready_marker"
+ },
+ {
+  "t": 15.6,
+  "quit": true
+ }
+]

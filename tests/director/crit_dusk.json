@@ -1,0 +1,44 @@
+[
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.3,
+  "release": "move_right"
+ },
+ {
+  "t": 2.6,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.4,
+  "press": "camera_left"
+ },
+ {
+  "t": 4.6,
+  "release": "camera_left"
+ },
+ {
+  "t": 5.4,
+  "capture": "d01_dusk_shadows"
+ },
+ {
+  "t": 5.8,
+  "quit": true
+ }
+]

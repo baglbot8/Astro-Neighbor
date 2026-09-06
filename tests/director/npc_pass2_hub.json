@@ -1,0 +1,176 @@
+[
+ {
+  "t": 0.3,
+  "log": "R2.3/R2.6 pass: line the five hub neighbours up ~7 m in front of the player and capture a real noon gameplay frame. The PLAYER is never teleported - teleport_to_dir leaves the camera rig staring straight down for several seconds, which is why the earlier version of this timeline produced top-down frames."
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/NPCs/pip",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/NPCs/pop",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/NPCs/stella",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/NPCs/mayor_orbit",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/NPCs/dj_nova",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/NPCs/pip",
+   "method": "place_on_planet",
+   "args": [
+    [
+     -0.2223,
+     0.9184,
+     0.3272
+    ],
+    [
+     0.0,
+     -0.336,
+     0.942
+    ],
+    0.06
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/NPCs/pop",
+   "method": "place_on_planet",
+   "args": [
+    [
+     -0.1139,
+     0.9359,
+     0.3334
+    ],
+    [
+     0.0,
+     -0.336,
+     0.942
+    ],
+    0.06
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/NPCs/stella",
+   "method": "place_on_planet",
+   "args": [
+    [
+     0.0,
+     0.942,
+     0.3356
+    ],
+    [
+     0.0,
+     -0.336,
+     0.942
+    ],
+    0.06
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/NPCs/mayor_orbit",
+   "method": "place_on_planet",
+   "args": [
+    [
+     0.1139,
+     0.9359,
+     0.3334
+    ],
+    [
+     0.0,
+     -0.336,
+     0.942
+    ],
+    0.06
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/NPCs/dj_nova",
+   "method": "place_on_planet",
+   "args": [
+    [
+     0.2223,
+     0.9184,
+     0.3272
+    ],
+    [
+     0.0,
+     -0.336,
+     0.942
+    ],
+    0.06
+   ]
+  }
+ },
+ {
+  "t": 2.6,
+  "capture": "hub_row"
+ },
+ {
+  "t": 3.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 4.0,
+  "release": "move_forward"
+ },
+ {
+  "t": 5.2,
+  "capture": "hub_row_close"
+ },
+ {
+  "t": 5.8,
+  "quit": true
+ }
+]

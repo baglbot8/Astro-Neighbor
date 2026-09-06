@@ -1,0 +1,6 @@
+[
+{"t": 0.2, "log": "player_gait: 4 s walk then 5 s run, camera left where it starts (directly behind)"},
+{"t": 0.4, "press": "move_forward"},
+{"t": 4.4, "press": "run"},
+{"t": 9.6, "quit": true}
+]

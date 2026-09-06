@@ -1,0 +1,14 @@
+[
+  {"t": 0.4, "log": "ROCKET: exhaust close-ups — ignition on the pad, then the climb into space."},
+  {"t": 3.60, "capture": "f01_ignition"},
+  {"t": 4.10, "capture": "f02_burn_on_pad"},
+  {"t": 4.60, "capture": "f03_liftoff"},
+  {"t": 5.40, "capture": "f04_climb_low"},
+  {"t": 6.60, "capture": "f05_climb_mid"},
+  {"t": 8.20, "capture": "f06_climb_high"},
+  {"t": 9.80, "capture": "f07_space"},
+  {"t": 10.60, "capture": "f08_seam"},
+  {"t": 11.60, "capture": "f09_cruise"},
+  {"t": 13.00, "capture": "f10_cruise2"},
+  {"t": 14.00, "quit": true}
+]

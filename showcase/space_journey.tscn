@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://b0astro0showspacej"]
+
+[ext_resource type="PackedScene" path="res://src/rocket/space_travel.tscn" id="1"]
+
+[node name="SpaceTravel" instance=ExtResource("1")]
+origin_id = "home"
+journey_preview = "home>zorp"

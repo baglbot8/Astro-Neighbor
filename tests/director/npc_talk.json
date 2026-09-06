@@ -1,0 +1,240 @@
+[
+ {
+  "t": 0.45,
+  "log": "npc_talk: pin Zorp in place so the scripted walk is deterministic"
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "log": "npc_talk: force a fetch favour so the run is deterministic"
+ },
+ {
+  "t": 0.7,
+  "call": {
+   "node": "/root/World/FavorSystem",
+   "method": "force_template",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "log": "walk to Zorp"
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.55,
+  "release": "move_right"
+ },
+ {
+  "t": 2.9,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.2,
+  "capture": "01_approach"
+ },
+ {
+  "t": 3.6,
+  "tap": "interact"
+ },
+ {
+  "t": 3.95,
+  "tap": "interact"
+ },
+ {
+  "t": 4.1,
+  "capture": "02_intro"
+ },
+ {
+  "t": 4.3,
+  "tap": "interact"
+ },
+ {
+  "t": 4.65,
+  "tap": "interact"
+ },
+ {
+  "t": 5.0,
+  "tap": "interact"
+ },
+ {
+  "t": 5.35,
+  "tap": "interact"
+ },
+ {
+  "t": 5.7,
+  "tap": "interact"
+ },
+ {
+  "t": 6.05,
+  "tap": "interact"
+ },
+ {
+  "t": 6.2,
+  "capture": "03_request"
+ },
+ {
+  "t": 6.4,
+  "tap": "interact"
+ },
+ {
+  "t": 6.75,
+  "tap": "interact"
+ },
+ {
+  "t": 7.1,
+  "tap": "interact"
+ },
+ {
+  "t": 7.45,
+  "tap": "interact"
+ },
+ {
+  "t": 7.8,
+  "tap": "interact"
+ },
+ {
+  "t": 7.95,
+  "capture": "04_choice"
+ },
+ {
+  "t": 8.15,
+  "tap": "interact"
+ },
+ {
+  "t": 8.5,
+  "tap": "interact"
+ },
+ {
+  "t": 8.85,
+  "tap": "interact"
+ },
+ {
+  "t": 9.2,
+  "tap": "interact"
+ },
+ {
+  "t": 9.75,
+  "capture": "05_accepted"
+ },
+ {
+  "t": 10.15,
+  "log": "simulate collecting the goods"
+ },
+ {
+  "t": 10.35,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "crystal_chunk",
+    4
+   ]
+  }
+ },
+ {
+  "t": 10.35,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "moon_flower",
+    4
+   ]
+  }
+ },
+ {
+  "t": 10.75,
+  "capture": "06_collected"
+ },
+ {
+  "t": 11.15,
+  "tap": "interact"
+ },
+ {
+  "t": 11.5,
+  "tap": "interact"
+ },
+ {
+  "t": 11.65,
+  "capture": "07_greet"
+ },
+ {
+  "t": 11.85,
+  "tap": "interact"
+ },
+ {
+  "t": 12.2,
+  "tap": "interact"
+ },
+ {
+  "t": 12.55,
+  "tap": "interact"
+ },
+ {
+  "t": 12.9,
+  "tap": "interact"
+ },
+ {
+  "t": 13.05,
+  "capture": "08_thanks"
+ },
+ {
+  "t": 13.25,
+  "tap": "interact"
+ },
+ {
+  "t": 13.6,
+  "tap": "interact"
+ },
+ {
+  "t": 13.95,
+  "tap": "interact"
+ },
+ {
+  "t": 14.3,
+  "tap": "interact"
+ },
+ {
+  "t": 14.45,
+  "capture": "09_reward"
+ },
+ {
+  "t": 14.65,
+  "tap": "interact"
+ },
+ {
+  "t": 15.0,
+  "tap": "interact"
+ },
+ {
+  "t": 15.95,
+  "capture": "10_after"
+ },
+ {
+  "t": 16.35,
+  "log": "npc_talk done"
+ },
+ {
+  "t": 16.55,
+  "quit": true
+ }
+]

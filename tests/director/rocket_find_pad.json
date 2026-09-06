@@ -1,0 +1,12 @@
+[
+  {"t": 0.9, "capture": "01_spawn_default_facing"},
+  {"t": 1.2, "press": "camera_right"},
+  {"t": 1.75, "capture": "02_pan_60"},
+  {"t": 2.28, "release": "camera_right"},
+  {"t": 2.6, "capture": "03_pan_120_pad_should_be_here"},
+  {"t": 2.8, "press": "move_forward"},
+  {"t": 4.2, "capture": "04_walking"},
+  {"t": 5.6, "release": "move_forward"},
+  {"t": 6.1, "capture": "05_arrived"},
+  {"t": 6.6, "quit": true}
+]

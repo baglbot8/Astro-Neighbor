@@ -1,0 +1,16 @@
+[
+  {"t": 0.5, "log": "start"},
+  {"t": 1.0, "press": "move_forward"},
+  {"t": 3.5, "release": "move_forward"},
+  {"t": 3.6, "capture": "after_walk"},
+  {"t": 4.0, "tap": "jump"},
+  {"t": 4.3, "capture": "mid_jump"},
+  {"t": 5.0, "press": "move_left"},
+  {"t": 6.5, "release": "move_left"},
+  {"t": 7.0, "press": "run"},
+  {"t": 7.0, "press": "move_forward"},
+  {"t": 10.0, "release": "move_forward"},
+  {"t": 10.0, "release": "run"},
+  {"t": 10.5, "capture": "after_run"},
+  {"t": 11.0, "quit": true}
+]

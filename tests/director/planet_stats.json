@@ -1,0 +1,4 @@
+[
+  {"t": 0.2, "call": {"node": "/root/PlanetShowcase/Planet", "method": "terrain_stats", "args": [4000, true]}},
+  {"t": 0.4, "quit": true}
+]

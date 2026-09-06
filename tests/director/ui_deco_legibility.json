@@ -1,0 +1,85 @@
+[
+  {
+    "t": 0.2,
+    "log": "ui_deco_legibility: R2.10's hard limit - is a PLACED decoration still legible at the mobile framing?"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 0.6,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_moon_lamp",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.4,
+    "tap": "decorate"
+  },
+  {
+    "t": 2.0,
+    "tap": "interact"
+  },
+  {
+    "t": 2.6,
+    "tap": "interact"
+  },
+  {
+    "t": 3.8,
+    "tap": "interact"
+  },
+  {
+    "t": 4.3,
+    "capture": "deco_just_placed"
+  },
+  {
+    "t": 4.6,
+    "tap": "cancel"
+  },
+  {
+    "t": 5.2,
+    "log": "placed - now back off and look at it from the ordinary gameplay camera"
+  },
+  {
+    "t": 5.4,
+    "press": "move_back"
+  },
+  {
+    "t": 6.5,
+    "release": "move_back"
+  },
+  {
+    "t": 7.0,
+    "capture": "deco_mid_backoff"
+  },
+  {
+    "t": 8.0,
+    "capture": "deco_gameplay_view"
+  },
+  {
+    "t": 8.6,
+    "quit": true
+  }
+]

@@ -1,0 +1,100 @@
+[
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/SaveManager",
+   "method": "load_game",
+   "args": []
+  }
+ },
+ {
+  "t": 0.9,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "capture": "v10_after_load"
+ },
+ {
+  "t": 1.5,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.5,
+  "press": "move_right"
+ },
+ {
+  "t": 2.9,
+  "release": "move_right"
+ },
+ {
+  "t": 3.2,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.9,
+  "tap": "interact"
+ },
+ {
+  "t": 4.24,
+  "tap": "interact"
+ },
+ {
+  "t": 4.58,
+  "tap": "interact"
+ },
+ {
+  "t": 4.92,
+  "tap": "interact"
+ },
+ {
+  "t": 5.26,
+  "tap": "interact"
+ },
+ {
+  "t": 5.6,
+  "tap": "interact"
+ },
+ {
+  "t": 5.94,
+  "tap": "interact"
+ },
+ {
+  "t": 6.28,
+  "tap": "interact"
+ },
+ {
+  "t": 6.8,
+  "capture": "v11_progress_line"
+ },
+ {
+  "t": 7.0,
+  "tap": "interact"
+ },
+ {
+  "t": 7.34,
+  "tap": "interact"
+ },
+ {
+  "t": 7.68,
+  "tap": "interact"
+ },
+ {
+  "t": 8.02,
+  "tap": "interact"
+ },
+ {
+  "t": 8.6,
+  "capture": "v12_progress_count"
+ },
+ {
+  "t": 9.2,
+  "quit": true
+ }
+]

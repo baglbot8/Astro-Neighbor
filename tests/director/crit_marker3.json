@@ -1,0 +1,144 @@
+[
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/FavorSystem",
+   "method": "force_template",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.4,
+  "release": "move_right"
+ },
+ {
+  "t": 2.7,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.4,
+  "tap": "interact"
+ },
+ {
+  "t": 3.73,
+  "tap": "interact"
+ },
+ {
+  "t": 4.06,
+  "tap": "interact"
+ },
+ {
+  "t": 4.39,
+  "tap": "interact"
+ },
+ {
+  "t": 4.72,
+  "tap": "interact"
+ },
+ {
+  "t": 5.05,
+  "tap": "interact"
+ },
+ {
+  "t": 5.38,
+  "tap": "interact"
+ },
+ {
+  "t": 5.71,
+  "tap": "interact"
+ },
+ {
+  "t": 6.04,
+  "tap": "interact"
+ },
+ {
+  "t": 6.37,
+  "tap": "interact"
+ },
+ {
+  "t": 6.7,
+  "tap": "interact"
+ },
+ {
+  "t": 7.03,
+  "tap": "interact"
+ },
+ {
+  "t": 7.36,
+  "tap": "interact"
+ },
+ {
+  "t": 7.69,
+  "tap": "interact"
+ },
+ {
+  "t": 8.02,
+  "tap": "interact"
+ },
+ {
+  "t": 8.35,
+  "tap": "interact"
+ },
+ {
+  "t": 9.0,
+  "press": "move_back"
+ },
+ {
+  "t": 10.6,
+  "release": "move_back"
+ },
+ {
+  "t": 11.2,
+  "capture": "p01_active_no_marker"
+ },
+ {
+  "t": 11.8,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "crystal_chunk",
+    6
+   ]
+  }
+ },
+ {
+  "t": 11.8,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "moon_flower",
+    6
+   ]
+  }
+ },
+ {
+  "t": 14.4,
+  "capture": "p02_ready_marker"
+ },
+ {
+  "t": 15.0,
+  "quit": true
+ }
+]

@@ -1,0 +1,16 @@
+[
+  {"t": 1.0,  "log": "real world: walk, then hold boost and fly"},
+  {"t": 1.0,  "press": "move_forward"},
+  {"t": 1.8,  "press": "jump"},
+  {"t": 1.8,  "press": "boost"},
+  {"t": 2.4,  "release": "jump"},
+  {"t": 2.6,  "capture": "w_boost_climb"},
+  {"t": 3.4,  "capture": "w_boost_cruise"},
+  {"t": 4.2,  "capture": "w_boost_float"},
+  {"t": 4.7,  "release": "boost"},
+  {"t": 5.6,  "capture": "w_boost_land"},
+  {"t": 6.6,  "capture": "w_boost_refill"},
+  {"t": 7.0,  "release": "move_forward"},
+  {"t": 8.0,  "capture": "w_boost_idle"},
+  {"t": 8.3,  "quit": true}
+]

@@ -1,0 +1,56 @@
+[
+ {
+  "t": 0.4,
+  "log": "wander soak: park the player at Zorp's home and watch him roam"
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.45,
+     0.84,
+     -0.3
+    ]
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "capture": "wander_00"
+ },
+ {
+  "t": 7.0,
+  "capture": "wander_01"
+ },
+ {
+  "t": 11.0,
+  "capture": "wander_02"
+ },
+ {
+  "t": 15.0,
+  "capture": "wander_03"
+ },
+ {
+  "t": 19.0,
+  "capture": "wander_04"
+ },
+ {
+  "t": 23.0,
+  "capture": "wander_05"
+ },
+ {
+  "t": 27.0,
+  "capture": "wander_06"
+ },
+ {
+  "t": 31.0,
+  "capture": "wander_07"
+ },
+ {
+  "t": 35.5,
+  "quit": true
+ }
+]

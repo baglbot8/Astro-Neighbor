@@ -1,0 +1,186 @@
+[
+  {
+    "t": 0.2,
+    "log": "skip the first-run intro so the timeline is deterministic (it opens a cutscene modal)"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 0.3,
+    "log": "ui_mobile_shop: Cosmo Depot on the hub, driven by taps. Run with --planet=hub -- --ui=mobile"
+  },
+  {
+    "t": 0.4,
+    "call": {
+      "node": "/root/World",
+      "method": "_spawn_optional",
+      "args": [
+        "res://tests/director/integ_probe.tscn",
+        "IntegProbe"
+      ]
+    }
+  },
+  {
+    "t": 0.7,
+    "call": {
+      "node": "/root/World/IntegProbe",
+      "method": "set_stardust",
+      "args": [
+        420
+      ]
+    }
+  },
+  {
+    "t": 1.0,
+    "call": {
+      "node": "/root/World/IntegProbe",
+      "method": "goto_named",
+      "args": [
+        "interactables",
+        "deco_store/Door",
+        2.6
+      ]
+    }
+  },
+  {
+    "t": 2.0,
+    "capture": "s00_hub_gameplay"
+  },
+  {
+    "t": 2.4,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "primary",
+        true
+      ]
+    }
+  },
+  {
+    "t": 2.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "primary",
+        false
+      ]
+    }
+  },
+  {
+    "t": 3.6,
+    "tap": "interact"
+  },
+  {
+    "t": 5.0,
+    "tap": "interact"
+  },
+  {
+    "t": 6.4,
+    "tap": "interact"
+  },
+  {
+    "t": 7.8,
+    "tap": "interact"
+  },
+  {
+    "t": 9.0,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_report",
+      "args": [
+        "shop_open"
+      ]
+    }
+  },
+  {
+    "t": 9.2,
+    "capture": "s01_shop"
+  },
+  {
+    "t": 9.8,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_tap_card",
+      "args": [
+        7
+      ]
+    }
+  },
+  {
+    "t": 10.6,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_report",
+      "args": [
+        "card_tapped"
+      ]
+    }
+  },
+  {
+    "t": 10.8,
+    "capture": "s02_shop_card"
+  },
+  {
+    "t": 11.4,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_tap_action",
+      "args": [
+        0
+      ]
+    }
+  },
+  {
+    "t": 12.4,
+    "capture": "s03_confirm"
+  },
+  {
+    "t": 13.0,
+    "tap": "cancel"
+  },
+  {
+    "t": 13.8,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_tap_close"
+    }
+  },
+  {
+    "t": 14.6,
+    "call": {
+      "node": "/root/World/HUD/ShopPanel",
+      "method": "debug_report",
+      "args": [
+        "closed"
+      ]
+    }
+  },
+  {
+    "t": 14.8,
+    "capture": "s04_after"
+  },
+  {
+    "t": 15.2,
+    "quit": true
+  }
+]

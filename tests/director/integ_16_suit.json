@@ -1,0 +1,197 @@
+[
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.7,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "set_stardust",
+   "args": [
+    4000
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_named",
+   "args": [
+    "interactables",
+    "clothes_store/Door",
+    2.6
+   ]
+  }
+ },
+ {
+  "t": 1.8,
+  "capture": "01_before"
+ },
+ {
+  "t": 2.2,
+  "tap": "interact"
+ },
+ {
+  "t": 3.7,
+  "tap": "interact"
+ },
+ {
+  "t": 5.2,
+  "tap": "interact"
+ },
+ {
+  "t": 6.7,
+  "capture": "02_choice"
+ },
+ {
+  "t": 7.2,
+  "tap": "interact"
+ },
+ {
+  "t": 8.8,
+  "capture": "03_shop"
+ },
+ {
+  "t": 9.4,
+  "tap": "move_back"
+ },
+ {
+  "t": 10.0,
+  "tap": "move_back"
+ },
+ {
+  "t": 10.6,
+  "tap": "move_right"
+ },
+ {
+  "t": 11.2,
+  "tap": "move_right"
+ },
+ {
+  "t": 12.0,
+  "capture": "04_deep_space_selected"
+ },
+ {
+  "t": 12.6,
+  "tap": "interact"
+ },
+ {
+  "t": 13.8,
+  "capture": "05_actions"
+ },
+ {
+  "t": 14.4,
+  "tap": "interact"
+ },
+ {
+  "t": 15.8,
+  "capture": "06_confirm"
+ },
+ {
+  "t": 16.6,
+  "tap": "interact"
+ },
+ {
+  "t": 18.0,
+  "capture": "07_bought"
+ },
+ {
+  "t": 18.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_suit_buy"
+   ]
+  }
+ },
+ {
+  "t": 19.0,
+  "tap": "cancel"
+ },
+ {
+  "t": 20.2,
+  "tap": "cancel"
+ },
+ {
+  "t": 21.4,
+  "tap": "cancel"
+ },
+ {
+  "t": 22.6,
+  "tap": "cancel"
+ },
+ {
+  "t": 23.6,
+  "capture": "08_wearing"
+ },
+ {
+  "t": 24.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 25.4,
+  "release": "move_forward"
+ },
+ {
+  "t": 26.0,
+  "capture": "09_wearing_walk"
+ },
+ {
+  "t": 26.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "END"
+   ]
+  }
+ },
+ {
+  "t": 26.8,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "liveness",
+   "args": [
+    "END"
+   ]
+  }
+ },
+ {
+  "t": 26.9,
+  "press": "camera_right"
+ },
+ {
+  "t": 28.4,
+  "release": "camera_right"
+ },
+ {
+  "t": 29.2,
+  "capture": "10_front_dark_suit"
+ },
+ {
+  "t": 29.6,
+  "press": "zoom_in"
+ },
+ {
+  "t": 30.6,
+  "release": "zoom_in"
+ },
+ {
+  "t": 31.2,
+  "capture": "11_front_dark_close"
+ },
+ {
+  "t": 31.6,
+  "quit": true
+ }
+]

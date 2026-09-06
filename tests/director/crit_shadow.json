@@ -1,0 +1,108 @@
+[
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.4,
+  "release": "move_right"
+ },
+ {
+  "t": 2.7,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.0,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.08,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.16,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.24,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.32,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.4,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.48,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.56,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.64,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.72,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.8,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.88,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 4.4,
+  "capture": "s01_close_noon"
+ },
+ {
+  "t": 4.6,
+  "press": "camera_left"
+ },
+ {
+  "t": 6.0,
+  "release": "camera_left"
+ },
+ {
+  "t": 6.4,
+  "capture": "s02_side_noon"
+ },
+ {
+  "t": 6.6,
+  "press": "camera_left"
+ },
+ {
+  "t": 8.0,
+  "release": "camera_left"
+ },
+ {
+  "t": 8.4,
+  "capture": "s03_back_noon"
+ },
+ {
+  "t": 8.8,
+  "quit": true
+ }
+]

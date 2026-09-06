@@ -1,0 +1,334 @@
+[
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.533,
+     0.468,
+     0.704
+    ]
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "capture": "h01_twins"
+ },
+ {
+  "t": 2.6,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 2.68,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 2.76,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 2.84,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 2.92,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.0,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.08,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.16,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.24,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.32,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 3.6,
+  "capture": "h02_twins_zoom"
+ },
+ {
+  "t": 4.0,
+  "tap": "interact"
+ },
+ {
+  "t": 4.32,
+  "tap": "interact"
+ },
+ {
+  "t": 4.64,
+  "tap": "interact"
+ },
+ {
+  "t": 4.96,
+  "tap": "interact"
+ },
+ {
+  "t": 5.28,
+  "tap": "interact"
+ },
+ {
+  "t": 5.6,
+  "tap": "interact"
+ },
+ {
+  "t": 6.1,
+  "capture": "h03_twin_talk"
+ },
+ {
+  "t": 6.3,
+  "tap": "interact"
+ },
+ {
+  "t": 6.62,
+  "tap": "interact"
+ },
+ {
+  "t": 6.94,
+  "tap": "interact"
+ },
+ {
+  "t": 7.26,
+  "tap": "interact"
+ },
+ {
+  "t": 7.58,
+  "tap": "interact"
+ },
+ {
+  "t": 7.9,
+  "tap": "interact"
+ },
+ {
+  "t": 8.22,
+  "tap": "interact"
+ },
+ {
+  "t": 8.54,
+  "tap": "interact"
+ },
+ {
+  "t": 9.0,
+  "capture": "h04_twin_end"
+ },
+ {
+  "t": 9.3,
+  "tap": "interact"
+ },
+ {
+  "t": 9.62,
+  "tap": "interact"
+ },
+ {
+  "t": 9.94,
+  "tap": "interact"
+ },
+ {
+  "t": 10.26,
+  "tap": "interact"
+ },
+ {
+  "t": 10.58,
+  "tap": "interact"
+ },
+ {
+  "t": 10.9,
+  "tap": "interact"
+ },
+ {
+  "t": 11.4,
+  "capture": "h05_rapid_second"
+ },
+ {
+  "t": 11.6,
+  "tap": "interact"
+ },
+ {
+  "t": 11.92,
+  "tap": "interact"
+ },
+ {
+  "t": 12.24,
+  "tap": "interact"
+ },
+ {
+  "t": 12.56,
+  "tap": "interact"
+ },
+ {
+  "t": 12.88,
+  "tap": "interact"
+ },
+ {
+  "t": 13.2,
+  "tap": "interact"
+ },
+ {
+  "t": 13.52,
+  "tap": "interact"
+ },
+ {
+  "t": 13.84,
+  "tap": "interact"
+ },
+ {
+  "t": 14.3,
+  "capture": "h06_after"
+ },
+ {
+  "t": 15.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.0,
+     1.0,
+     0.0
+    ]
+   ]
+  }
+ },
+ {
+  "t": 16.3,
+  "capture": "h07_mayor"
+ },
+ {
+  "t": 16.6,
+  "tap": "interact"
+ },
+ {
+  "t": 16.92,
+  "tap": "interact"
+ },
+ {
+  "t": 17.24,
+  "tap": "interact"
+ },
+ {
+  "t": 17.56,
+  "tap": "interact"
+ },
+ {
+  "t": 17.88,
+  "tap": "interact"
+ },
+ {
+  "t": 18.2,
+  "tap": "interact"
+ },
+ {
+  "t": 18.7,
+  "capture": "h08_mayor_talk"
+ },
+ {
+  "t": 19.6,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.0,
+     0.258,
+     0.967
+    ]
+   ]
+  }
+ },
+ {
+  "t": 20.9,
+  "capture": "h09_dj"
+ },
+ {
+  "t": 21.2,
+  "tap": "interact"
+ },
+ {
+  "t": 21.52,
+  "tap": "interact"
+ },
+ {
+  "t": 21.84,
+  "tap": "interact"
+ },
+ {
+  "t": 22.16,
+  "tap": "interact"
+ },
+ {
+  "t": 22.48,
+  "tap": "interact"
+ },
+ {
+  "t": 22.8,
+  "tap": "interact"
+ },
+ {
+  "t": 23.3,
+  "capture": "h10_dj_talk"
+ },
+ {
+  "t": 24.2,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.533,
+     0.468,
+     0.704
+    ]
+   ]
+  }
+ },
+ {
+  "t": 25.5,
+  "capture": "h11_stella"
+ },
+ {
+  "t": 25.8,
+  "tap": "interact"
+ },
+ {
+  "t": 26.12,
+  "tap": "interact"
+ },
+ {
+  "t": 26.44,
+  "tap": "interact"
+ },
+ {
+  "t": 26.76,
+  "tap": "interact"
+ },
+ {
+  "t": 27.08,
+  "tap": "interact"
+ },
+ {
+  "t": 27.4,
+  "tap": "interact"
+ },
+ {
+  "t": 27.9,
+  "capture": "h12_stella_talk"
+ },
+ {
+  "t": 28.4,
+  "quit": true
+ }
+]

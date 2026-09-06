@@ -1,0 +1,10 @@
+[
+  {"t": 0.3, "press": "move_forward"},
+  {"t": 0.3, "press": "run"},
+  {"t": 0.5, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/env_perf_probe.tscn", "EnvPerf"]}},
+  {"t": 3.0, "press": "camera_right"},
+  {"t": 4.2, "release": "camera_right"},
+  {"t": 6.5, "release": "run"},
+  {"t": 6.5, "release": "move_forward"},
+  {"t": 7.5, "quit": true}
+]

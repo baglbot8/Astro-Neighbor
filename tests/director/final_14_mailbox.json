@@ -1,0 +1,5 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World/Buildings/player_home/Mailbox", "method": "get_path", "args": []}},
+  {"t": 1.4, "call": {"node": "/root/World/Buildings/player_home", "method": "get_path", "args": []}},
+  {"t": 2.0, "quit": true}
+]

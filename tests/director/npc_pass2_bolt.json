@@ -1,0 +1,11 @@
+[
+ {"t": 0.3, "log": "R2.3/R2.6 pass: put Bolt 4.5 m in front of the player and capture real noon gameplay + dialogue frames"},
+ {"t": 0.6, "call": {"node": "/root/World/NPCs/bolt", "method": "wander_enabled", "args": [false]}},
+ {"t": 1.2, "call": {"node": "/root/World/NPCs/bolt", "method": "place_on_planet", "args": [[0.06, 0.945, -0.32], [0.0, 0.32, 0.945], 0.06]}},
+ {"t": 2.6, "capture": "bolt_gameplay"},
+ {"t": 3.0, "press": "move_forward"},
+ {"t": 4.0, "release": "move_forward"},
+ {"t": 5.0, "tap": "interact"},
+ {"t": 5.8, "capture": "bolt_dialogue"},
+ {"t": 6.4, "quit": true}
+]

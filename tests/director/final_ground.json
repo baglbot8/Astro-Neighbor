@@ -1,0 +1,16 @@
+[
+  {"t": 0.2, "log": "FINAL CRITIC: four gameplay frames per planet for the ground-tone gates."},
+  {"t": 1.8, "capture": "g0"},
+  {"t": 2.2, "press": "move_forward"},
+  {"t": 4.2, "release": "move_forward"},
+  {"t": 5.2, "capture": "g1"},
+  {"t": 5.6, "press": "move_left"},
+  {"t": 7.6, "release": "move_left"},
+  {"t": 8.6, "capture": "g2"},
+  {"t": 9.0, "press": "move_forward"},
+  {"t": 9.0, "press": "run"},
+  {"t": 12.0, "release": "run"},
+  {"t": 12.0, "release": "move_forward"},
+  {"t": 13.0, "capture": "g3"},
+  {"t": 13.6, "quit": true}
+]

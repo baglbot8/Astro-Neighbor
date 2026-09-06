@@ -1,0 +1,469 @@
+[
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.8,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "force_favor",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "npc",
+    0,
+    1.9
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "tap": "interact"
+ },
+ {
+  "t": 3.35,
+  "tap": "interact"
+ },
+ {
+  "t": 4.5,
+  "tap": "interact"
+ },
+ {
+  "t": 5.65,
+  "tap": "interact"
+ },
+ {
+  "t": 6.8,
+  "tap": "interact"
+ },
+ {
+  "t": 7.95,
+  "tap": "interact"
+ },
+ {
+  "t": 9.1,
+  "tap": "interact"
+ },
+ {
+  "t": 10.25,
+  "tap": "interact"
+ },
+ {
+  "t": 11.4,
+  "tap": "interact"
+ },
+ {
+  "t": 12.55,
+  "tap": "interact"
+ },
+ {
+  "t": 13.7,
+  "tap": "interact"
+ },
+ {
+  "t": 14.85,
+  "tap": "interact"
+ },
+ {
+  "t": 16.0,
+  "tap": "interact"
+ },
+ {
+  "t": 17.15,
+  "tap": "interact"
+ },
+ {
+  "t": 18.3,
+  "tap": "interact"
+ },
+ {
+  "t": 19.45,
+  "tap": "interact"
+ },
+ {
+  "t": 20.6,
+  "tap": "interact"
+ },
+ {
+  "t": 21.75,
+  "tap": "interact"
+ },
+ {
+  "t": 22.9,
+  "tap": "interact"
+ },
+ {
+  "t": 25.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_accept"
+   ]
+  }
+ },
+ {
+  "t": 26.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 26.45,
+  "tap": "interact"
+ },
+ {
+  "t": 26.95,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 27.4,
+  "tap": "interact"
+ },
+ {
+  "t": 27.9,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 28.35,
+  "tap": "interact"
+ },
+ {
+  "t": 28.85,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 29.3,
+  "tap": "interact"
+ },
+ {
+  "t": 29.8,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 30.25,
+  "tap": "interact"
+ },
+ {
+  "t": 30.75,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 31.2,
+  "tap": "interact"
+ },
+ {
+  "t": 31.7,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 32.15,
+  "tap": "interact"
+ },
+ {
+  "t": 32.65,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 33.1,
+  "tap": "interact"
+ },
+ {
+  "t": 33.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 34.05,
+  "tap": "interact"
+ },
+ {
+  "t": 34.55,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 35.0,
+  "tap": "interact"
+ },
+ {
+  "t": 35.5,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 35.95,
+  "tap": "interact"
+ },
+ {
+  "t": 36.45,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 36.9,
+  "tap": "interact"
+ },
+ {
+  "t": 37.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 37.85,
+  "tap": "interact"
+ },
+ {
+  "t": 38.35,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 38.8,
+  "tap": "interact"
+ },
+ {
+  "t": 39.9,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "npc",
+    0,
+    1.7
+   ]
+  }
+ },
+ {
+  "t": 40.8,
+  "tap": "interact"
+ },
+ {
+  "t": 41.95,
+  "tap": "interact"
+ },
+ {
+  "t": 43.1,
+  "tap": "interact"
+ },
+ {
+  "t": 44.25,
+  "tap": "interact"
+ },
+ {
+  "t": 45.4,
+  "tap": "interact"
+ },
+ {
+  "t": 46.55,
+  "tap": "interact"
+ },
+ {
+  "t": 47.7,
+  "tap": "interact"
+ },
+ {
+  "t": 48.85,
+  "tap": "interact"
+ },
+ {
+  "t": 50.0,
+  "tap": "interact"
+ },
+ {
+  "t": 51.15,
+  "tap": "interact"
+ },
+ {
+  "t": 52.3,
+  "tap": "interact"
+ },
+ {
+  "t": 53.45,
+  "tap": "interact"
+ },
+ {
+  "t": 54.6,
+  "tap": "interact"
+ },
+ {
+  "t": 55.75,
+  "tap": "interact"
+ },
+ {
+  "t": 56.9,
+  "tap": "interact"
+ },
+ {
+  "t": 58.05,
+  "tap": "interact"
+ },
+ {
+  "t": 59.2,
+  "tap": "interact"
+ },
+ {
+  "t": 60.35,
+  "tap": "interact"
+ },
+ {
+  "t": 61.5,
+  "tap": "interact"
+ },
+ {
+  "t": 62.65,
+  "tap": "interact"
+ },
+ {
+  "t": 63.8,
+  "tap": "interact"
+ },
+ {
+  "t": 65.75,
+  "capture": "j01_handin"
+ },
+ {
+  "t": 66.35,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_handin"
+   ]
+  }
+ },
+ {
+  "t": 66.95,
+  "quit": true
+ }
+]

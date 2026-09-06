@@ -1,0 +1,211 @@
+[
+ {
+  "t": 0.4,
+  "log": "ROCKET: dense sampling of the departure cut, every 0.15 s (mirrors the integration critic's method)."
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_pad",
+   "args": [
+    2.4
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "tap": "interact"
+ },
+ {
+  "t": 6.2,
+  "tap": "interact"
+ },
+ {
+  "t": 13.2,
+  "capture": "d000"
+ },
+ {
+  "t": 13.35,
+  "capture": "d001"
+ },
+ {
+  "t": 13.5,
+  "capture": "d002"
+ },
+ {
+  "t": 13.65,
+  "capture": "d003"
+ },
+ {
+  "t": 13.8,
+  "capture": "d004"
+ },
+ {
+  "t": 13.95,
+  "capture": "d005"
+ },
+ {
+  "t": 14.1,
+  "capture": "d006"
+ },
+ {
+  "t": 14.25,
+  "capture": "d007"
+ },
+ {
+  "t": 14.4,
+  "capture": "d008"
+ },
+ {
+  "t": 14.55,
+  "capture": "d009"
+ },
+ {
+  "t": 14.7,
+  "capture": "d010"
+ },
+ {
+  "t": 14.85,
+  "capture": "d011"
+ },
+ {
+  "t": 15.0,
+  "capture": "d012"
+ },
+ {
+  "t": 15.15,
+  "capture": "d013"
+ },
+ {
+  "t": 15.3,
+  "capture": "d014"
+ },
+ {
+  "t": 15.45,
+  "capture": "d015"
+ },
+ {
+  "t": 15.6,
+  "capture": "d016"
+ },
+ {
+  "t": 15.75,
+  "capture": "d017"
+ },
+ {
+  "t": 15.9,
+  "capture": "d018"
+ },
+ {
+  "t": 16.05,
+  "capture": "d019"
+ },
+ {
+  "t": 16.2,
+  "capture": "d020"
+ },
+ {
+  "t": 16.35,
+  "capture": "d021"
+ },
+ {
+  "t": 16.5,
+  "capture": "d022"
+ },
+ {
+  "t": 16.65,
+  "capture": "d023"
+ },
+ {
+  "t": 16.8,
+  "capture": "d024"
+ },
+ {
+  "t": 16.95,
+  "capture": "d025"
+ },
+ {
+  "t": 17.1,
+  "capture": "d026"
+ },
+ {
+  "t": 17.25,
+  "capture": "d027"
+ },
+ {
+  "t": 17.4,
+  "capture": "d028"
+ },
+ {
+  "t": 17.55,
+  "capture": "d029"
+ },
+ {
+  "t": 17.7,
+  "capture": "d030"
+ },
+ {
+  "t": 17.85,
+  "capture": "d031"
+ },
+ {
+  "t": 18.0,
+  "capture": "d032"
+ },
+ {
+  "t": 18.15,
+  "capture": "d033"
+ },
+ {
+  "t": 18.3,
+  "capture": "d034"
+ },
+ {
+  "t": 18.45,
+  "capture": "d035"
+ },
+ {
+  "t": 18.6,
+  "capture": "d036"
+ },
+ {
+  "t": 18.75,
+  "capture": "d037"
+ },
+ {
+  "t": 18.9,
+  "capture": "d038"
+ },
+ {
+  "t": 19.05,
+  "capture": "d039"
+ },
+ {
+  "t": 19.2,
+  "capture": "d040"
+ },
+ {
+  "t": 19.35,
+  "capture": "d041"
+ },
+ {
+  "t": 19.5,
+  "capture": "d042"
+ },
+ {
+  "t": 20.2,
+  "quit": true
+ }
+]

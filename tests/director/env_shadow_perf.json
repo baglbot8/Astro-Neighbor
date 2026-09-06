@@ -1,0 +1,9 @@
+[
+  {"t": 0.3, "log": "environment shadow perf: walk in a circle at noon and sample frame cost"},
+  {"t": 0.4, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/env_perf_probe.tscn", "EnvPerf"]}},
+  {"t": 0.8, "press": "move_forward"},
+  {"t": 0.8, "press": "camera_left"},
+  {"t": 6.4, "release": "camera_left"},
+  {"t": 6.6, "release": "move_forward"},
+  {"t": 7.0, "quit": true}
+]

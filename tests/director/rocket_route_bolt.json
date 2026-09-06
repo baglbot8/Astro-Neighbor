@@ -1,0 +1,15 @@
+[
+  {"t": 1.0, "log": "space map docked at home; pick BOLT (near-opposite orbit) and check the sun"},
+  {"t": 1.4, "tap": "move_right"},
+  {"t": 2.1, "tap": "move_right"},
+  {"t": 2.9, "capture": "01_bolt_focused"},
+  {"t": 3.3, "tap": "interact"},
+  {"t": 4.4, "capture": "02_lift"},
+  {"t": 6.0, "capture": "03_cruise_early"},
+  {"t": 7.4, "capture": "04_cruise_mid"},
+  {"t": 8.8, "capture": "05_cruise_late"},
+  {"t": 9.8, "capture": "06_orbit_start"},
+  {"t": 10.6, "capture": "07_orbit_hero"},
+  {"t": 11.3, "capture": "08_orbit_late"},
+  {"t": 12.6, "quit": true}
+]

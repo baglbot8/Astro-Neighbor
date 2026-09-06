@@ -1,0 +1,7 @@
+[
+  {"t": 1.6, "capture": "t0"},
+  {"t": 2.0, "press": "move_forward"},
+  {"t": 3.6, "release": "move_forward"},
+  {"t": 4.4, "capture": "t1"},
+  {"t": 4.8, "quit": true}
+]

@@ -1,0 +1,232 @@
+[
+ {
+  "t": 0.3,
+  "log": "player_face_shade: same instant, sun vs canopy shadow, face to camera"
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "place_on_planet",
+   "args": [
+    [
+     0,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ {
+  "t": 1.3,
+  "press": "move_back"
+ },
+ {
+  "t": 1.52,
+  "release": "move_back"
+ },
+ {
+  "t": 1.9,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree0",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.92,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree1",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.94,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree2",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.96,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree3",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.98,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree4",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.0,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree5",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.02,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree6",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.04,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree7",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.06,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree8",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.08,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree9",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.1,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree10",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.12,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree11",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.14,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree12",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.16,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree13",
+   "property": "global_position",
+   "value": [
+    0.0,
+    -40.0,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 3.6,
+  "capture": "sun"
+ },
+ {
+  "t": 3.9,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree0",
+   "property": "global_rotation",
+   "value": [
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ {
+  "t": 3.95,
+  "set": {
+   "node": "/root/World/Planet/Props/PuffTree0",
+   "property": "global_position",
+   "value": [
+    -1.995,
+    15.775,
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 4.5,
+  "capture": "shade"
+ },
+ {
+  "t": 4.9,
+  "quit": true
+ }
+]

@@ -1,0 +1,7 @@
+[
+  {"t": 0.8, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/size_probe.tscn", "SizeProbe"]}},
+  {"t": 1.2, "call": {"node": "/root/World/SizeProbe", "method": "report", "args": ["spawn"]}},
+  {"t": 1.6, "call": {"node": "/root/World/SizeProbe", "method": "seat_check", "args": [0.25]}},
+  {"t": 2.0, "call": {"node": "/root/World/SizeProbe", "method": "collision", "args": []}},
+  {"t": 2.4, "quit": true}
+]

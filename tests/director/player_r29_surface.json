@@ -1,0 +1,14 @@
+[
+  {"t": 0.3, "log": "R2.9 surface texture: a steady walk at the gameplay camera, then a slow orbit around a standing astronaut. Captured as a movie strip so the fine weave/grain can be checked for swim (it is model-space, so it must not) and for shimmer (the fine lod must have faded it out by 6.5 m)."},
+  {"t": 0.6, "press": "move_forward"},
+  {"t": 2.0, "capture": "r29_walk_a"},
+  {"t": 3.0, "capture": "r29_walk_b"},
+  {"t": 4.0, "capture": "r29_walk_c"},
+  {"t": 5.5, "release": "move_forward"},
+  {"t": 6.0, "press": "camera_right"},
+  {"t": 7.0, "capture": "r29_orbit_a"},
+  {"t": 8.5, "capture": "r29_orbit_b"},
+  {"t": 9.5, "release": "camera_right"},
+  {"t": 10.0, "capture": "r29_still"},
+  {"t": 10.4, "quit": true}
+]

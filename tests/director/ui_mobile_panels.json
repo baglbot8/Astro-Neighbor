@@ -1,0 +1,561 @@
+[
+  {
+    "t": 0.2,
+    "log": "skip the first-run intro so the timeline is deterministic (it opens a cutscene modal)"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 0.4,
+    "log": "ui_mobile_panels: every full-screen panel driven by TAPS only. Run with -- --ui=mobile"
+  },
+  {
+    "t": 0.5,
+    "call": {
+      "node": "/root/World",
+      "method": "_spawn_optional",
+      "args": [
+        "res://tests/director/critic_probe.tscn",
+        "Probe"
+      ]
+    }
+  },
+  {
+    "t": 0.6,
+    "call": {
+      "node": "/root/World",
+      "method": "_spawn_optional",
+      "args": [
+        "res://tests/director/integ_probe.tscn",
+        "IntegProbe"
+      ]
+    }
+  },
+  {
+    "t": 0.8,
+    "call": {
+      "node": "/root/World/IntegProbe",
+      "method": "set_stardust",
+      "args": [
+        900
+      ]
+    }
+  },
+  {
+    "t": 1.0,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_moon_lamp",
+        3
+      ]
+    }
+  },
+  {
+    "t": 1.0,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_crater_bench",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.0,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_star_flag",
+        2
+      ]
+    }
+  },
+  {
+    "t": 1.1,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_alien_egg",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.1,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_antenna_tree",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.1,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "deco_beacon_tower",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "crystal_chunk",
+        6
+      ]
+    }
+  },
+  {
+    "t": 1.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "moon_flower",
+        4
+      ]
+    }
+  },
+  {
+    "t": 1.3,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "suit_sunrise",
+        1
+      ]
+    }
+  },
+  {
+    "t": 1.3,
+    "call": {
+      "node": "/root/GameState",
+      "method": "add_item",
+      "args": [
+        "hat_bubble",
+        1
+      ]
+    }
+  },
+  {
+    "t": 2.0,
+    "log": "TAP the bag button in the touch HUD row"
+  },
+  {
+    "t": 2.1,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "bag",
+        true
+      ]
+    }
+  },
+  {
+    "t": 2.3,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "bag",
+        false
+      ]
+    }
+  },
+  {
+    "t": 3.0,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_report",
+      "args": [
+        "bag_open"
+      ]
+    }
+  },
+  {
+    "t": 3.1,
+    "capture": "p01_bag"
+  },
+  {
+    "t": 3.5,
+    "log": "TAP a tab, then TAP a card, then TAP its action - no keyboard, no mouse"
+  },
+  {
+    "t": 3.6,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_tab",
+      "args": [
+        1
+      ]
+    }
+  },
+  {
+    "t": 4.1,
+    "capture": "p02_bag_tab_tapped"
+  },
+  {
+    "t": 4.4,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_card",
+      "args": [
+        2
+      ]
+    }
+  },
+  {
+    "t": 4.9,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_report",
+      "args": [
+        "card_tapped"
+      ]
+    }
+  },
+  {
+    "t": 5.0,
+    "capture": "p03_bag_card_tapped"
+  },
+  {
+    "t": 5.4,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_close"
+    }
+  },
+  {
+    "t": 5.9,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_report",
+      "args": [
+        "closed_by_tap"
+      ]
+    }
+  },
+  {
+    "t": 6.4,
+    "log": "TAP the journal button"
+  },
+  {
+    "t": 6.5,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "journal",
+        true
+      ]
+    }
+  },
+  {
+    "t": 6.7,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "journal",
+        false
+      ]
+    }
+  },
+  {
+    "t": 7.4,
+    "capture": "p04_journal"
+  },
+  {
+    "t": 7.8,
+    "tap": "cancel"
+  },
+  {
+    "t": 8.4,
+    "log": "TAP the pause button, then open Settings and show the UI-mode control"
+  },
+  {
+    "t": 8.5,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "pause",
+        true
+      ]
+    }
+  },
+  {
+    "t": 8.7,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "pause",
+        false
+      ]
+    }
+  },
+  {
+    "t": 9.4,
+    "capture": "p05_pause"
+  },
+  {
+    "t": 9.8,
+    "tap": "ui_down"
+  },
+  {
+    "t": 10.1,
+    "tap": "ui_down"
+  },
+  {
+    "t": 10.4,
+    "tap": "ui_down"
+  },
+  {
+    "t": 10.8,
+    "tap": "interact"
+  },
+  {
+    "t": 11.6,
+    "capture": "p06_settings_ui_mode"
+  },
+  {
+    "t": 12.0,
+    "tap": "cancel"
+  },
+  {
+    "t": 12.4,
+    "tap": "cancel"
+  },
+  {
+    "t": 13.0,
+    "log": "dialogue: tap-to-advance is the ONLY way on a phone (the controls hide behind a modal)"
+  },
+  {
+    "t": 13.1,
+    "call": {
+      "node": "/root/World/Probe",
+      "method": "start_lines"
+    }
+  },
+  {
+    "t": 14.2,
+    "capture": "p07_dialogue"
+  },
+  {
+    "t": 14.6,
+    "call": {
+      "node": "/root/World/HUD/DialogueBox",
+      "method": "debug_tap"
+    }
+  },
+  {
+    "t": 15.2,
+    "call": {
+      "node": "/root/World/HUD/DialogueBox",
+      "method": "debug_tap"
+    }
+  },
+  {
+    "t": 15.8,
+    "capture": "p08_dialogue_advanced"
+  },
+  {
+    "t": 16.2,
+    "call": {
+      "node": "/root/World/HUD/DialogueBox",
+      "method": "debug_tap"
+    }
+  },
+  {
+    "t": 16.8,
+    "call": {
+      "node": "/root/World/HUD/DialogueBox",
+      "method": "debug_tap"
+    }
+  },
+  {
+    "t": 17.6,
+    "log": "choice box: thumb-sized option pills"
+  },
+  {
+    "t": 17.8,
+    "call": {
+      "node": "/root/World/Probe",
+      "method": "start_choice"
+    }
+  },
+  {
+    "t": 19.0,
+    "capture": "p09_choice"
+  },
+  {
+    "t": 19.4,
+    "tap": "cancel"
+  },
+  {
+    "t": 20.0,
+    "log": "placement mode: rotate / cancel appear in the action cluster"
+  },
+  {
+    "t": 20.2,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "bag",
+        true
+      ]
+    }
+  },
+  {
+    "t": 20.4,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "bag",
+        false
+      ]
+    }
+  },
+  {
+    "t": 21.0,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_tab",
+      "args": [
+        1
+      ]
+    }
+  },
+  {
+    "t": 21.6,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_card",
+      "args": [
+        0
+      ]
+    }
+  },
+  {
+    "t": 22.2,
+    "call": {
+      "node": "/root/World/HUD/Inventory",
+      "method": "debug_tap_action",
+      "args": [
+        0
+      ]
+    }
+  },
+  {
+    "t": 23.2,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "placing"
+      ]
+    }
+  },
+  {
+    "t": 23.4,
+    "capture": "p10_placement"
+  },
+  {
+    "t": 23.8,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "rotate_r",
+        true
+      ]
+    }
+  },
+  {
+    "t": 24.0,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "rotate_r",
+        false
+      ]
+    }
+  },
+  {
+    "t": 24.4,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "primary",
+        true
+      ]
+    }
+  },
+  {
+    "t": 24.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "primary",
+        false
+      ]
+    }
+  },
+  {
+    "t": 25.4,
+    "capture": "p11_placed"
+  },
+  {
+    "t": 25.8,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "after_place"
+      ]
+    }
+  },
+  {
+    "t": 26.2,
+    "quit": true
+  }
+]

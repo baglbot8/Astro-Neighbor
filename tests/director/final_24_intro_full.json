@@ -1,0 +1,163 @@
+[
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 4.0,
+  "tap": "interact"
+ },
+ {
+  "t": 5.2,
+  "tap": "interact"
+ },
+ {
+  "t": 6.4,
+  "tap": "interact"
+ },
+ {
+  "t": 7.6,
+  "tap": "interact"
+ },
+ {
+  "t": 8.8,
+  "tap": "interact"
+ },
+ {
+  "t": 10.0,
+  "tap": "interact"
+ },
+ {
+  "t": 11.2,
+  "tap": "interact"
+ },
+ {
+  "t": 12.4,
+  "tap": "interact"
+ },
+ {
+  "t": 13.6,
+  "tap": "interact"
+ },
+ {
+  "t": 14.8,
+  "tap": "interact"
+ },
+ {
+  "t": 16.0,
+  "tap": "interact"
+ },
+ {
+  "t": 17.2,
+  "tap": "interact"
+ },
+ {
+  "t": 18.4,
+  "tap": "interact"
+ },
+ {
+  "t": 19.6,
+  "tap": "interact"
+ },
+ {
+  "t": 20.8,
+  "tap": "interact"
+ },
+ {
+  "t": 22.0,
+  "tap": "interact"
+ },
+ {
+  "t": 23.2,
+  "tap": "interact"
+ },
+ {
+  "t": 24.4,
+  "tap": "interact"
+ },
+ {
+  "t": 25.6,
+  "tap": "interact"
+ },
+ {
+  "t": 26.8,
+  "tap": "interact"
+ },
+ {
+  "t": 28.0,
+  "tap": "interact"
+ },
+ {
+  "t": 29.2,
+  "tap": "interact"
+ },
+ {
+  "t": 30.4,
+  "tap": "interact"
+ },
+ {
+  "t": 31.6,
+  "tap": "interact"
+ },
+ {
+  "t": 32.8,
+  "tap": "interact"
+ },
+ {
+  "t": 34.0,
+  "tap": "interact"
+ },
+ {
+  "t": 35.2,
+  "tap": "interact"
+ },
+ {
+  "t": 36.4,
+  "tap": "interact"
+ },
+ {
+  "t": 37.6,
+  "tap": "interact"
+ },
+ {
+  "t": 38.8,
+  "tap": "interact"
+ },
+ {
+  "t": 41.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "run1"
+   ]
+  }
+ },
+ {
+  "t": 41.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "save_now",
+   "args": []
+  }
+ },
+ {
+  "t": 42.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump_save",
+   "args": []
+  }
+ },
+ {
+  "t": 42.8,
+  "quit": true
+ }
+]

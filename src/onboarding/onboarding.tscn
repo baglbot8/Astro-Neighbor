@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/onboarding/intro_director.gd" id="1"]
+[ext_resource type="Script" path="res://src/onboarding/journal_hotkey.gd" id="2"]
+
+[node name="Onboarding" type="Node"]
+script = ExtResource("1")
+
+[node name="JournalHotkey" type="Node" parent="."]
+script = ExtResource("2")

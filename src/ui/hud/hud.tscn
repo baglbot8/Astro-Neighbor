@@ -1,0 +1,55 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/ui/hud/hud.gd" id="1"]
+[ext_resource type="Theme" path="res://src/ui/theme/astro_theme.tres" id="2"]
+[ext_resource type="PackedScene" path="res://src/ui/dialogue/dialogue_box.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://src/ui/inventory/inventory.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://src/ui/shop/shop_panel.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://src/ui/pause/pause_menu.tscn" id="6"]
+[ext_resource type="Script" path="res://src/ui/mobile/touch_controls.gd" id="7"]
+
+[node name="HUD" type="CanvasLayer"]
+process_mode = 3
+layer = 10
+script = ExtResource("1")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2")
+
+[node name="DialogueBox" parent="." instance=ExtResource("3")]
+
+[node name="Inventory" parent="." instance=ExtResource("4")]
+
+[node name="ShopPanel" parent="." instance=ExtResource("5")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("6")]
+
+[node name="TouchControls" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2")
+script = ExtResource("7")
+
+[node name="Toasts" type="VBoxContainer" parent="."]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+theme = ExtResource("2")

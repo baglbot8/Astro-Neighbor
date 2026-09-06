@@ -1,0 +1,15 @@
+[
+  {"t": 0.3, "log": "HUB: Mayor Orbit stands in the Town Hall doorway. Before/after the always-on porch fill."},
+  {"t": 1.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 1.8, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "town_hall/Door", 4.2]}},
+  {"t": 2.6, "set": {"node": "/root/World/Buildings/town_hall/InteriorLamp", "property": "light_energy", "value": 0.0}},
+  {"t": 3.4, "capture": "t1_doorway_unlit_BEFORE"},
+  {"t": 3.8, "set": {"node": "/root/World/Buildings/town_hall/InteriorLamp", "property": "light_energy", "value": 1.05}},
+  {"t": 4.6, "capture": "t2_doorway_lit_AFTER"},
+  {"t": 5.2, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["npcs", "mayor_orbit", 2.6]}},
+  {"t": 6.0, "set": {"node": "/root/World/Buildings/town_hall/InteriorLamp", "property": "light_energy", "value": 0.0}},
+  {"t": 6.8, "capture": "t3_mayor_unlit_BEFORE"},
+  {"t": 7.2, "set": {"node": "/root/World/Buildings/town_hall/InteriorLamp", "property": "light_energy", "value": 1.05}},
+  {"t": 8.0, "capture": "t4_mayor_lit_AFTER"},
+  {"t": 8.6, "quit": true}
+]

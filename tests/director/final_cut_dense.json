@@ -1,0 +1,175 @@
+[
+ {
+  "t": 0.4,
+  "log": "FINAL CRITIC: dense sampling of the departure cut"
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_pad",
+   "args": [
+    2.4
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "tap": "interact"
+ },
+ {
+  "t": 6.2,
+  "tap": "interact"
+ },
+ {
+  "t": 12.0,
+  "capture": "c000"
+ },
+ {
+  "t": 12.15,
+  "capture": "c001"
+ },
+ {
+  "t": 12.3,
+  "capture": "c002"
+ },
+ {
+  "t": 12.45,
+  "capture": "c003"
+ },
+ {
+  "t": 12.6,
+  "capture": "c004"
+ },
+ {
+  "t": 12.75,
+  "capture": "c005"
+ },
+ {
+  "t": 12.9,
+  "capture": "c006"
+ },
+ {
+  "t": 13.05,
+  "capture": "c007"
+ },
+ {
+  "t": 13.2,
+  "capture": "c008"
+ },
+ {
+  "t": 13.35,
+  "capture": "c009"
+ },
+ {
+  "t": 13.5,
+  "capture": "c010"
+ },
+ {
+  "t": 13.65,
+  "capture": "c011"
+ },
+ {
+  "t": 13.8,
+  "capture": "c012"
+ },
+ {
+  "t": 13.95,
+  "capture": "c013"
+ },
+ {
+  "t": 14.1,
+  "capture": "c014"
+ },
+ {
+  "t": 14.25,
+  "capture": "c015"
+ },
+ {
+  "t": 14.4,
+  "capture": "c016"
+ },
+ {
+  "t": 14.55,
+  "capture": "c017"
+ },
+ {
+  "t": 14.7,
+  "capture": "c018"
+ },
+ {
+  "t": 14.85,
+  "capture": "c019"
+ },
+ {
+  "t": 15.0,
+  "capture": "c020"
+ },
+ {
+  "t": 15.15,
+  "capture": "c021"
+ },
+ {
+  "t": 15.3,
+  "capture": "c022"
+ },
+ {
+  "t": 15.45,
+  "capture": "c023"
+ },
+ {
+  "t": 15.6,
+  "capture": "c024"
+ },
+ {
+  "t": 15.75,
+  "capture": "c025"
+ },
+ {
+  "t": 15.9,
+  "capture": "c026"
+ },
+ {
+  "t": 16.05,
+  "capture": "c027"
+ },
+ {
+  "t": 16.2,
+  "capture": "c028"
+ },
+ {
+  "t": 16.35,
+  "capture": "c029"
+ },
+ {
+  "t": 16.5,
+  "capture": "c030"
+ },
+ {
+  "t": 16.65,
+  "capture": "c031"
+ },
+ {
+  "t": 16.8,
+  "capture": "c032"
+ },
+ {
+  "t": 16.95,
+  "capture": "c033"
+ },
+ {
+  "t": 17.6,
+  "quit": true
+ }
+]

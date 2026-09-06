@@ -1,0 +1,16 @@
+[
+  {"t": 0.2, "log": "critic: place 4 items, save, wipe GameState, load, reload the world scene, compare positions"},
+  {"t": 0.35, "call": {"node": "/root/World/Player", "method": "teleport_to_dir", "args": [[0.7581, 0.6086, -0.2343]]}},
+  {"t": 0.8,  "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_moon_lamp", [0.80487, 0.59326, -0.01524], 0.0]}},
+  {"t": 0.9,  "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_beacon_tower", [0.86872, 0.41623, -0.26849], 0.7]}},
+  {"t": 1.0,  "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_supply_crate", [0.78414, 0.46808, -0.40747], 0.6]}},
+  {"t": 1.1,  "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_crater_bench", [0.789, 0.60385, -0.11336], 0.9]}},
+  {"t": 3.0, "capture": "A_before_save"},
+  {"t": 3.3, "call": {"node": "/root/SaveManager", "method": "save_game"}},
+  {"t": 3.6, "call": {"node": "/root/GameState", "method": "reset_new_game"}},
+  {"t": 3.9, "call": {"node": "/root/SaveManager", "method": "load_game"}},
+  {"t": 4.2, "call": {"node": "/root/SceneRouter", "method": "go_to_planet", "args": ["home", false]}},
+  {"t": 7.0, "call": {"node": "/root/World/Player", "method": "teleport_to_dir", "args": [[0.7581, 0.6086, -0.2343]]}},
+  {"t": 9.7, "capture": "B_after_load"},
+  {"t": 10.0, "quit": true}
+]

@@ -1,0 +1,14 @@
+[
+ {"t": 1.0, "capture": "w00_spawn"},
+ {"t": 1.2, "press": "move_left"},
+ {"t": 2.6, "release": "move_left"},
+ {"t": 2.8, "press": "move_forward"},
+ {"t": 6.6, "release": "move_forward"},
+ {"t": 7.4, "capture": "w01_town_hall_door"},
+ {"t": 7.8, "press": "move_right"},
+ {"t": 8.9, "release": "move_right"},
+ {"t": 9.1, "press": "move_forward"},
+ {"t": 10.6, "release": "move_forward"},
+ {"t": 11.4, "capture": "w02_town_hall_steps"},
+ {"t": 12.0, "quit": true}
+]

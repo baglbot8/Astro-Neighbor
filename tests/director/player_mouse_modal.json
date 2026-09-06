@@ -1,0 +1,622 @@
+[
+{
+"t": 0.3,
+"log": "player_mouse_modal: mouse-capture lifecycle. Each 'blocked' case is measured against a SETTLED baseline captured just before it, so camera smoothing cannot be mistaken for a leak."
+},
+{
+"t": 2.0,
+"capture": "01_start"
+},
+{
+"t": 2.2,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.25,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.3,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.35,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.4,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.45,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.5,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.55,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.6,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 2.65,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 3.5,
+"capture": "02_mouse_orbited"
+},
+{
+"t": 3.8,
+"tap": "pause"
+},
+{
+"t": 4.8,
+"capture": "03_paused_baseline"
+},
+{
+"t": 4.9,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 4.95,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.0,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.05,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.1,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.15,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.2,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.25,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.3,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 5.35,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 6.1,
+"capture": "04_paused_after_motion"
+},
+{
+"t": 6.3,
+"tap": "cancel"
+},
+{
+"t": 7.5,
+"capture": "05_unpaused"
+},
+{
+"t": 7.7,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 7.75,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 7.8,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 7.85,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 7.9,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 7.95,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 8.0,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 8.05,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 8.1,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 8.15,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 9.0,
+"capture": "06_orbits_again"
+},
+{
+"t": 9.9,
+"capture": "07_settled_baseline"
+},
+{
+"t": 10.1,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_send_action",
+"args": [
+"ui_cancel"
+]
+}
+},
+{
+"t": 10.4,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.45,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.5,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.55,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.6,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.65,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.7,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.75,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.8,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 10.85,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 11.6,
+"capture": "08_after_ui_cancel_no_move"
+},
+{
+"t": 11.9,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_click",
+"args": []
+}
+},
+{
+"t": 12.2,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.25,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.3,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.35,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.4,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.45,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.5,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.55,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.6,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 12.65,
+"call": {
+"node": "/root/World/CameraRig",
+"method": "debug_mouse_motion",
+"args": [
+60.0,
+0.0
+]
+}
+},
+{
+"t": 13.4,
+"capture": "09_after_click_moves"
+},
+{
+"t": 14.0,
+"quit": true
+}
+]

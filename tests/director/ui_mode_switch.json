@@ -1,0 +1,220 @@
+[
+  {
+    "t": 0.2,
+    "log": "skip the first-run intro so the timeline is deterministic (it opens a cutscene modal)"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 0.4,
+    "log": "ui_mode_switch: force either front end from the pause menu, on any machine, with no restart"
+  },
+  {
+    "t": 1.2,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "start"
+      ]
+    }
+  },
+  {
+    "t": 1.4,
+    "capture": "x01_desktop_gameplay"
+  },
+  {
+    "t": 1.8,
+    "tap": "pause"
+  },
+  {
+    "t": 2.4,
+    "tap": "ui_down"
+  },
+  {
+    "t": 2.7,
+    "tap": "ui_down"
+  },
+  {
+    "t": 3.0,
+    "tap": "ui_down"
+  },
+  {
+    "t": 3.4,
+    "tap": "interact"
+  },
+  {
+    "t": 4.2,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report",
+      "args": [
+        "settings_open"
+      ]
+    }
+  },
+  {
+    "t": 4.4,
+    "capture": "x02_settings_desktop"
+  },
+  {
+    "t": 4.8,
+    "log": "tap the Phone segment"
+  },
+  {
+    "t": 4.9,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_tap_ui_mode",
+      "args": [
+        2
+      ]
+    }
+  },
+  {
+    "t": 5.8,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report",
+      "args": [
+        "forced_phone"
+      ]
+    }
+  },
+  {
+    "t": 6.0,
+    "capture": "x03_settings_after_phone"
+  },
+  {
+    "t": 6.4,
+    "tap": "cancel"
+  },
+  {
+    "t": 6.8,
+    "tap": "cancel"
+  },
+  {
+    "t": 7.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "now_phone"
+      ]
+    }
+  },
+  {
+    "t": 7.8,
+    "capture": "x04_gameplay_phone"
+  },
+  {
+    "t": 8.4,
+    "log": "and straight back to the computer layout"
+  },
+  {
+    "t": 8.6,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "pause",
+        true
+      ]
+    }
+  },
+  {
+    "t": 8.8,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_widget",
+      "args": [
+        "pause",
+        false
+      ]
+    }
+  },
+  {
+    "t": 9.4,
+    "tap": "ui_down"
+  },
+  {
+    "t": 9.7,
+    "tap": "ui_down"
+  },
+  {
+    "t": 10.0,
+    "tap": "ui_down"
+  },
+  {
+    "t": 10.4,
+    "tap": "interact"
+  },
+  {
+    "t": 11.2,
+    "capture": "x05_settings_phone_layout"
+  },
+  {
+    "t": 11.6,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_tap_ui_mode",
+      "args": [
+        1
+      ]
+    }
+  },
+  {
+    "t": 12.4,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report",
+      "args": [
+        "forced_computer"
+      ]
+    }
+  },
+  {
+    "t": 12.8,
+    "tap": "cancel"
+  },
+  {
+    "t": 13.2,
+    "tap": "cancel"
+  },
+  {
+    "t": 14.0,
+    "call": {
+      "node": "/root/World/HUD/TouchControls",
+      "method": "debug_report",
+      "args": [
+        "back_to_desktop"
+      ]
+    }
+  },
+  {
+    "t": 14.2,
+    "capture": "x06_gameplay_desktop_again"
+  },
+  {
+    "t": 14.6,
+    "quit": true
+  }
+]

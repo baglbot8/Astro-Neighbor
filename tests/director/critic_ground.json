@@ -1,0 +1,640 @@
+[
+ {
+  "t": 0.2,
+  "log": "critic: 28 supply crates around the XZ great circle - do they sit on the ground on banks and crater walls?"
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.54,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.97493,
+     0.0,
+     0.22252
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.58,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.90097,
+     0.0,
+     0.43388
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.62,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.78183,
+     0.0,
+     0.62349
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.66,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.62349,
+     0.0,
+     0.78183
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.7,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.43388,
+     0.0,
+     0.90097
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.74,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.22252,
+     0.0,
+     0.97493
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.78,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.0,
+     0.0,
+     1.0
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.82,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.22252,
+     0.0,
+     0.97493
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.86,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.43388,
+     0.0,
+     0.90097
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.9,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.62349,
+     0.0,
+     0.78183
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.94,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.78183,
+     0.0,
+     0.62349
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.98,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.90097,
+     0.0,
+     0.43388
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.02,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.97493,
+     0.0,
+     0.22252
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.06,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.1,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.97493,
+     -0.0,
+     -0.22252
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.14,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.90097,
+     -0.0,
+     -0.43388
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.18,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.78183,
+     -0.0,
+     -0.62349
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.22,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.62349,
+     -0.0,
+     -0.78183
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.26,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.43388,
+     -0.0,
+     -0.90097
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.3,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.22252,
+     -0.0,
+     -0.97493
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.34,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     -0.0,
+     -0.0,
+     -1.0
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.38,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.22252,
+     0.0,
+     -0.97493
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.42,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.43388,
+     0.0,
+     -0.90097
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.46,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.62349,
+     0.0,
+     -0.78183
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.5,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.78183,
+     0.0,
+     -0.62349
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.54,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.90097,
+     0.0,
+     -0.43388
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.58,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_supply_crate",
+    [
+     0.97493,
+     0.0,
+     -0.22252
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.4,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ]
+   ]
+  }
+ },
+ {
+  "t": 3.1,
+  "press": "zoom_in"
+ },
+ {
+  "t": 3.7,
+  "release": "zoom_in"
+ },
+ {
+  "t": 4.3,
+  "capture": "c00"
+ },
+ {
+  "t": 5.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.62349,
+     0.0,
+     0.78183
+    ]
+   ]
+  }
+ },
+ {
+  "t": 5.7,
+  "press": "zoom_in"
+ },
+ {
+  "t": 6.3,
+  "release": "zoom_in"
+ },
+ {
+  "t": 6.9,
+  "capture": "c01"
+ },
+ {
+  "t": 7.6,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.22252,
+     0.0,
+     0.97493
+    ]
+   ]
+  }
+ },
+ {
+  "t": 8.3,
+  "press": "zoom_in"
+ },
+ {
+  "t": 8.9,
+  "release": "zoom_in"
+ },
+ {
+  "t": 9.5,
+  "capture": "c02"
+ },
+ {
+  "t": 10.2,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.90097,
+     0.0,
+     0.43388
+    ]
+   ]
+  }
+ },
+ {
+  "t": 10.9,
+  "press": "zoom_in"
+ },
+ {
+  "t": 11.5,
+  "release": "zoom_in"
+ },
+ {
+  "t": 12.1,
+  "capture": "c03"
+ },
+ {
+  "t": 12.8,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.90097,
+     -0.0,
+     -0.43388
+    ]
+   ]
+  }
+ },
+ {
+  "t": 13.5,
+  "press": "zoom_in"
+ },
+ {
+  "t": 14.1,
+  "release": "zoom_in"
+ },
+ {
+  "t": 14.7,
+  "capture": "c04"
+ },
+ {
+  "t": 15.4,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.22252,
+     -0.0,
+     -0.97493
+    ]
+   ]
+  }
+ },
+ {
+  "t": 16.1,
+  "press": "zoom_in"
+ },
+ {
+  "t": 16.7,
+  "release": "zoom_in"
+ },
+ {
+  "t": 17.3,
+  "capture": "c05"
+ },
+ {
+  "t": 18.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.62349,
+     0.0,
+     -0.78183
+    ]
+   ]
+  }
+ },
+ {
+  "t": 18.7,
+  "press": "zoom_in"
+ },
+ {
+  "t": 19.3,
+  "release": "zoom_in"
+ },
+ {
+  "t": 19.9,
+  "capture": "c06"
+ },
+ {
+  "t": 20.6,
+  "quit": true
+ }
+]

@@ -1,0 +1,26 @@
+# Godot's import cache and generated data — rebuilt on first open, never committed.
+.godot/
+*.import
+export_presets.cfg
+
+# Build output
+build/
+*.apk
+*.aab
+*.ipa
+*.pck
+*.zip
+
+# Scratch and review artefacts
+_critic_tmp/
+*.log
+*.tmp
+
+# macOS
+.DS_Store
+
+# THIRD-PARTY REFERENCE IMAGES — not ours to redistribute.
+# reference/ holds Animal Crossing screenshots and stock astronaut artwork used only as art
+# direction while building. They are excluded so the repository contains nothing we do not own.
+# docs/STYLE_GUIDE.md describes what they showed, so the guidance survives without the files.
+reference/

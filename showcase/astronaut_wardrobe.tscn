@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b0astro0ward000"]
+
+[ext_resource type="Script" path="res://src/player/wardrobe_showcase.gd" id="1"]
+
+[node name="AstronautWardrobe" type="Node3D"]
+script = ExtResource("1")

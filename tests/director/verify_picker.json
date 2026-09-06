@@ -1,0 +1,10 @@
+[
+  {"t": 1.0,  "log": "walk to the pad"},
+  {"t": 1.2,  "call": {"node": "/root/World/Player", "method": "teleport_to_dir", "args": [[0.55, 0.75, 0.35]]}},
+  {"t": 2.5,  "capture": "01_at_pad"},
+  {"t": 3.0,  "tap": "interact"},
+  {"t": 4.5,  "capture": "02_after_interact"},
+  {"t": 5.5,  "tap": "move_right"},
+  {"t": 6.5,  "capture": "03_after_move_right"},
+  {"t": 7.5,  "quit": true}
+]

@@ -1,0 +1,11 @@
+[
+ {"t": 0.3, "log": "docs/OPEN_ISSUES.md issue 1: A/B for the reverted head-shadow cheat. Frame A is the shipping config (head CASTS); frame B flips ChibiModel.head_shadow_cheat back on at runtime so hf_noise.py can compare the same pixels."},
+ {"t": 0.6, "call": {"node": "/root/World/NPCs/bolt", "method": "wander_enabled", "args": [false]}},
+ {"t": 1.2, "call": {"node": "/root/World/NPCs/bolt", "method": "place_on_planet", "args": [[0.06, 0.945, -0.32], [0.0, 0.32, 0.945], 0.06]}},
+ {"t": 2.6, "capture": "shadow_a_head_casts"},
+ {"t": 3.0, "call": {"node": "/root/World/NPCs/bolt/Model", "method": "set_head_shadow_cheat", "args": [true]}},
+ {"t": 3.6, "capture": "shadow_b_cheat_on"},
+ {"t": 4.0, "call": {"node": "/root/World/NPCs/bolt/Model", "method": "set_head_shadow_cheat", "args": [false]}},
+ {"t": 4.6, "capture": "shadow_c_head_casts_again"},
+ {"t": 5.0, "quit": true}
+]

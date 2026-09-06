@@ -1,0 +1,190 @@
+[
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/FavorSystem",
+   "method": "force_template",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 1.0,
+  "press": "move_right"
+ },
+ {
+  "t": 2.4,
+  "release": "move_right"
+ },
+ {
+  "t": 2.7,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.4,
+  "tap": "interact"
+ },
+ {
+  "t": 3.73,
+  "tap": "interact"
+ },
+ {
+  "t": 4.06,
+  "tap": "interact"
+ },
+ {
+  "t": 4.39,
+  "tap": "interact"
+ },
+ {
+  "t": 4.72,
+  "tap": "interact"
+ },
+ {
+  "t": 5.05,
+  "tap": "interact"
+ },
+ {
+  "t": 5.38,
+  "tap": "interact"
+ },
+ {
+  "t": 5.71,
+  "tap": "interact"
+ },
+ {
+  "t": 6.04,
+  "tap": "interact"
+ },
+ {
+  "t": 6.37,
+  "tap": "interact"
+ },
+ {
+  "t": 6.7,
+  "tap": "interact"
+ },
+ {
+  "t": 7.03,
+  "tap": "interact"
+ },
+ {
+  "t": 7.36,
+  "tap": "interact"
+ },
+ {
+  "t": 7.69,
+  "tap": "interact"
+ },
+ {
+  "t": 8.02,
+  "tap": "interact"
+ },
+ {
+  "t": 8.35,
+  "tap": "interact"
+ },
+ {
+  "t": 8.68,
+  "tap": "interact"
+ },
+ {
+  "t": 9.01,
+  "tap": "interact"
+ },
+ {
+  "t": 9.34,
+  "tap": "interact"
+ },
+ {
+  "t": 9.67,
+  "tap": "interact"
+ },
+ {
+  "t": 10.0,
+  "tap": "interact"
+ },
+ {
+  "t": 10.33,
+  "tap": "interact"
+ },
+ {
+  "t": 10.66,
+  "tap": "interact"
+ },
+ {
+  "t": 10.99,
+  "tap": "interact"
+ },
+ {
+  "t": 11.32,
+  "tap": "interact"
+ },
+ {
+  "t": 11.65,
+  "tap": "interact"
+ },
+ {
+  "t": 12.3,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.2,
+     0.93,
+     -0.3
+    ]
+   ]
+  }
+ },
+ {
+  "t": 13.3,
+  "capture": "q01_active_no_marker"
+ },
+ {
+  "t": 13.8,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "crystal_chunk",
+    6
+   ]
+  }
+ },
+ {
+  "t": 13.8,
+  "call": {
+   "node": "/root/GameState",
+   "method": "add_item",
+   "args": [
+    "moon_flower",
+    6
+   ]
+  }
+ },
+ {
+  "t": 16.4,
+  "capture": "q02_ready_marker"
+ },
+ {
+  "t": 17.0,
+  "quit": true
+ }
+]

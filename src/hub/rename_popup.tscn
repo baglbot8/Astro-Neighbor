@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/hub/rename_popup.gd" id="1"]
+
+[node name="RenamePopup" type="CanvasLayer"]
+script = ExtResource("1")

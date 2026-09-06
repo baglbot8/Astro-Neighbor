@@ -1,0 +1,28 @@
+[
+  {"t": 0.4, "log": "player_dark_suit: the two suits that broke the visor read (Deep Space, Void Runner), worn in the real game at gameplay distance, walking the hub past the lamp posts and bushes"},
+  {"t": 0.4, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 0.8, "set": {"node": "/root/GameState", "property": "player_style", "value": {"name": "Astro", "suit_color": "#2e3760", "trouser_color": "#42419c", "panel_color": "#5f92cc", "accent_color": "#ffc94d", "visor_tint": "#ffe9a8", "backpack_id": "pack_basic", "hat_id": "", "pattern_id": ""}}},
+  {"t": 0.85, "call": {"node": "/root/EventBus", "method": "emit_signal", "args": ["player_style_changed"]}},
+  {"t": 1.4, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "clothes_store/Door", 3.0]}},
+  {"t": 2.4, "capture": "01_deep_space_door"},
+  {"t": 2.8, "tap": "emote"},
+  {"t": 3.8, "capture": "02_deep_space_front"},
+  {"t": 5.6, "press": "move_left"},
+  {"t": 7.0, "release": "move_left"},
+  {"t": 7.4, "capture": "03_deep_space_walk"},
+  {"t": 7.8, "press": "camera_right"},
+  {"t": 9.0, "release": "camera_right"},
+  {"t": 9.5, "capture": "04_deep_space_orbit"},
+
+  {"t": 10.0, "set": {"node": "/root/GameState", "property": "player_style", "value": {"name": "Astro", "suit_color": "#232a3f", "trouser_color": "#42419c", "panel_color": "#5f92cc", "accent_color": "#4fe0bd", "visor_tint": "#7cffd0", "backpack_id": "pack_basic", "hat_id": "", "pattern_id": ""}}},
+  {"t": 10.05, "call": {"node": "/root/EventBus", "method": "emit_signal", "args": ["player_style_changed"]}},
+  {"t": 10.8, "capture": "05_void_runner"},
+  {"t": 11.2, "tap": "emote"},
+  {"t": 12.2, "capture": "06_void_runner_front"},
+  {"t": 14.0, "press": "move_forward"},
+  {"t": 15.4, "release": "move_forward"},
+  {"t": 15.9, "capture": "07_void_runner_walk"},
+  {"t": 16.4, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "town_hall/Door", 3.0]}},
+  {"t": 17.4, "capture": "08_void_runner_plaza"},
+  {"t": 17.8, "quit": true}
+]

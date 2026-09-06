@@ -1,0 +1,14 @@
+[
+  {"t": 0.5, "log": "environment: Environment.set_space_blend(t) climb-to-space ramp (R2.5 API for the rocket builder)"},
+  {"t": 0.6, "call": {"node": "/root/World/Environment", "method": "set_time", "args": [13.0]}},
+  {"t": 1.0, "capture": "climb_00_ground"},
+  {"t": 1.2, "call": {"node": "/root/World/Environment", "method": "set_space_blend", "args": [0.35]}},
+  {"t": 1.6, "capture": "climb_35"},
+  {"t": 1.8, "call": {"node": "/root/World/Environment", "method": "set_space_blend", "args": [0.7]}},
+  {"t": 2.2, "capture": "climb_70"},
+  {"t": 2.4, "call": {"node": "/root/World/Environment", "method": "set_space_blend", "args": [1.0]}},
+  {"t": 2.8, "capture": "climb_100_space"},
+  {"t": 3.0, "call": {"node": "/root/World/Environment", "method": "set_space_blend", "args": [0.0]}},
+  {"t": 3.4, "capture": "climb_back_to_ground"},
+  {"t": 3.8, "quit": true}
+]

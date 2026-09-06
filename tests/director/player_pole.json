@@ -1,0 +1,14 @@
+[
+  {"t": 0.3, "log": "player_pole: walk straight 12 s (half the planet, over the pole; passes the test sign -> prompt), then run 6 s"},
+  {"t": 0.5, "press": "move_forward"},
+  {"t": 3.5, "capture": "pole_a"},
+  {"t": 6.5, "capture": "pole_b"},
+  {"t": 9.5, "capture": "pole_c"},
+  {"t": 12.5, "capture": "pole_d"},
+  {"t": 12.5, "press": "run"},
+  {"t": 15.5, "capture": "pole_e"},
+  {"t": 18.5, "release": "move_forward"},
+  {"t": 18.5, "release": "run"},
+  {"t": 19.3, "capture": "pole_f"},
+  {"t": 19.6, "quit": true}
+]

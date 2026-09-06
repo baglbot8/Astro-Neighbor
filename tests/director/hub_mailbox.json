@@ -1,0 +1,141 @@
+[
+ {
+  "t": 0.4,
+  "log": "HUB: the mailbox must open the MAIL, not the door. Walk up to it and press interact."
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "list_group",
+   "args": [
+    "interactables"
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_named",
+   "args": [
+    "interactables",
+    "player_home/MailboxPost",
+    1.2
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "capture": "m1_prompt_at_mailbox"
+ },
+ {
+  "t": 3.4,
+  "tap": "interact"
+ },
+ {
+  "t": 4.4,
+  "capture": "m2_letter"
+ },
+ {
+  "t": 5.2,
+  "tap": "interact"
+ },
+ {
+  "t": 6.0,
+  "tap": "interact"
+ },
+ {
+  "t": 6.8,
+  "tap": "interact"
+ },
+ {
+  "t": 7.6,
+  "tap": "interact"
+ },
+ {
+  "t": 8.4,
+  "tap": "interact"
+ },
+ {
+  "t": 9.2,
+  "tap": "interact"
+ },
+ {
+  "t": 9.8,
+  "capture": "m3_after_letter"
+ },
+ {
+  "t": 10.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_named",
+   "args": [
+    "interactables",
+    "player_home/Door",
+    1.4
+   ]
+  }
+ },
+ {
+  "t": 11.2,
+  "capture": "m4_prompt_at_door"
+ },
+ {
+  "t": 11.6,
+  "tap": "interact"
+ },
+ {
+  "t": 12.4,
+  "tap": "interact"
+ },
+ {
+  "t": 13.2,
+  "capture": "m5_home_line"
+ },
+ {
+  "t": 13.3,
+  "tap": "interact"
+ },
+ {
+  "t": 14.2,
+  "tap": "interact"
+ },
+ {
+  "t": 15.1,
+  "tap": "interact"
+ },
+ {
+  "t": 16.0,
+  "capture": "m6_home_line2"
+ },
+ {
+  "t": 17.2,
+  "capture": "m7_after_door"
+ },
+ {
+  "t": 17.8,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "liveness",
+   "args": [
+    "mailbox_done"
+   ]
+  }
+ },
+ {
+  "t": 18.4,
+  "quit": true
+ }
+]

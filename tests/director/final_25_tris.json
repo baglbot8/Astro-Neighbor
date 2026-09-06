@@ -1,0 +1,7 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/quad_probe.tscn", "QuadProbe"]}},
+  {"t": 1.6, "call": {"node": "/root/World/QuadProbe", "method": "tri_count", "args": ["/root/World/Player"]}},
+  {"t": 2.0, "call": {"node": "/root/World/QuadProbe", "method": "tri_count", "args": ["/root/World/Planet/Props"]}},
+  {"t": 2.4, "call": {"node": "/root/World/QuadProbe", "method": "tri_count", "args": ["/root/World/Rocket"]}},
+  {"t": 3.0, "quit": true}
+]

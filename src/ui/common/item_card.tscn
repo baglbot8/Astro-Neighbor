@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/common/item_card.gd" id="1"]
+[ext_resource type="Theme" path="res://src/ui/theme/astro_theme.tres" id="2"]
+
+[node name="ItemCard" type="Button"]
+custom_minimum_size = Vector2(112, 136)
+theme = ExtResource("2")
+theme_type_variation = &"Card"
+script = ExtResource("1")

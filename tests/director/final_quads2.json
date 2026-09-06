@@ -1,0 +1,9 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World/Player", "method": "teleport_to_dir", "args": [[0.62349, 0.0, 0.78183]]}},
+  {"t": 2.4, "capture": "with_sparkles"},
+  {"t": 2.8, "set": {"node": "/root/World/Planet/Collectibles", "property": "visible", "value": false}},
+  {"t": 3.4, "capture": "no_sparkles"},
+  {"t": 3.8, "set": {"node": "/root/World/Planet/Collectibles", "property": "visible", "value": true}},
+  {"t": 4.4, "capture": "with_sparkles2"},
+  {"t": 5.0, "quit": true}
+]

@@ -1,0 +1,338 @@
+[
+ {
+  "t": 0.2,
+  "log": "planet builder R2.9: moire sweep - the ground at every distance the fade crosses"
+ },
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/PlanetShowcase",
+   "method": "set_planet",
+   "args": [
+    "home"
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 4.0
+  }
+ },
+ {
+  "t": 1.55,
+  "capture": "home_d04"
+ },
+ {
+  "t": 1.8,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 9.0
+  }
+ },
+ {
+  "t": 2.15,
+  "capture": "home_d09"
+ },
+ {
+  "t": 2.4,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 14.0
+  }
+ },
+ {
+  "t": 2.75,
+  "capture": "home_d14"
+ },
+ {
+  "t": 3.0,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 20.0
+  }
+ },
+ {
+  "t": 3.35,
+  "capture": "home_d20"
+ },
+ {
+  "t": 3.6,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 30.0
+  }
+ },
+ {
+  "t": 3.95,
+  "capture": "home_d30"
+ },
+ {
+  "t": 4.2,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 42.0
+  }
+ },
+ {
+  "t": 4.55,
+  "capture": "home_d42"
+ },
+ {
+  "t": 5.1,
+  "call": {
+   "node": "/root/PlanetShowcase",
+   "method": "set_planet",
+   "args": [
+    "hub"
+   ]
+  }
+ },
+ {
+  "t": 5.9,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 4.0
+  }
+ },
+ {
+  "t": 6.25,
+  "capture": "hub_d04"
+ },
+ {
+  "t": 6.5,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 9.0
+  }
+ },
+ {
+  "t": 6.85,
+  "capture": "hub_d09"
+ },
+ {
+  "t": 7.1,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 14.0
+  }
+ },
+ {
+  "t": 7.45,
+  "capture": "hub_d14"
+ },
+ {
+  "t": 7.7,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 20.0
+  }
+ },
+ {
+  "t": 8.05,
+  "capture": "hub_d20"
+ },
+ {
+  "t": 8.3,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 30.0
+  }
+ },
+ {
+  "t": 8.65,
+  "capture": "hub_d30"
+ },
+ {
+  "t": 8.9,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 42.0
+  }
+ },
+ {
+  "t": 9.25,
+  "capture": "hub_d42"
+ },
+ {
+  "t": 9.8,
+  "call": {
+   "node": "/root/PlanetShowcase",
+   "method": "set_planet",
+   "args": [
+    "zorp"
+   ]
+  }
+ },
+ {
+  "t": 10.6,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 4.0
+  }
+ },
+ {
+  "t": 10.95,
+  "capture": "zorp_d04"
+ },
+ {
+  "t": 11.2,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 9.0
+  }
+ },
+ {
+  "t": 11.55,
+  "capture": "zorp_d09"
+ },
+ {
+  "t": 11.8,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 14.0
+  }
+ },
+ {
+  "t": 12.15,
+  "capture": "zorp_d14"
+ },
+ {
+  "t": 12.4,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 20.0
+  }
+ },
+ {
+  "t": 12.75,
+  "capture": "zorp_d20"
+ },
+ {
+  "t": 13.0,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 30.0
+  }
+ },
+ {
+  "t": 13.35,
+  "capture": "zorp_d30"
+ },
+ {
+  "t": 13.6,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 42.0
+  }
+ },
+ {
+  "t": 13.95,
+  "capture": "zorp_d42"
+ },
+ {
+  "t": 14.5,
+  "call": {
+   "node": "/root/PlanetShowcase",
+   "method": "set_planet",
+   "args": [
+    "bolt"
+   ]
+  }
+ },
+ {
+  "t": 15.3,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 4.0
+  }
+ },
+ {
+  "t": 15.65,
+  "capture": "bolt_d04"
+ },
+ {
+  "t": 15.9,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 9.0
+  }
+ },
+ {
+  "t": 16.25,
+  "capture": "bolt_d09"
+ },
+ {
+  "t": 16.5,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 14.0
+  }
+ },
+ {
+  "t": 16.85,
+  "capture": "bolt_d14"
+ },
+ {
+  "t": 17.1,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 20.0
+  }
+ },
+ {
+  "t": 17.45,
+  "capture": "bolt_d20"
+ },
+ {
+  "t": 17.7,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 30.0
+  }
+ },
+ {
+  "t": 18.05,
+  "capture": "bolt_d30"
+ },
+ {
+  "t": 18.3,
+  "set": {
+   "node": "/root/PlanetShowcase",
+   "property": "cam_distance",
+   "value": 42.0
+  }
+ },
+ {
+  "t": 18.65,
+  "capture": "bolt_d42"
+ },
+ {
+  "t": 19.7,
+  "quit": true
+ }
+]

@@ -1,0 +1,7 @@
+[
+  {"t": 0.2, "log": "planet builder: broadleaf canopy turntable, 5.2 m"},
+  {"t": 1.2, "capture": "c0"},
+  {"t": 4.2, "capture": "c1"},
+  {"t": 7.2, "capture": "c2"},
+  {"t": 7.6, "quit": true}
+]

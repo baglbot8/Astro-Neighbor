@@ -1,0 +1,8 @@
+[
+  {"t": 0.2, "log": "planet builder: stardust shard turntable at close range (cam 2.6 m)"},
+  {"t": 1.2, "capture": "s0"},
+  {"t": 3.2, "capture": "s1"},
+  {"t": 5.2, "capture": "s2"},
+  {"t": 7.2, "capture": "s3"},
+  {"t": 7.6, "quit": true}
+]

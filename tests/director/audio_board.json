@@ -1,0 +1,7 @@
+[
+  {"t": 0.5, "log": "audio board: sfx sweep"},
+  {"t": 15.0, "log": "audio board: voice blips"},
+  {"t": 25.5, "log": "audio board: music tracks"},
+  {"t": 52.0, "capture": "audio_board_end"},
+  {"t": 53.0, "quit": true}
+]

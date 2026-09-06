@@ -1,0 +1,15 @@
+[
+  {"t": 0.3, "log": "ui: pause must open DURING a conversation (integration critic)"},
+  {"t": 4.6, "capture": "p1_line_typed"},
+  {"t": 5.0, "tap": "pause"},
+  {"t": 6.0, "capture": "p2_paused_over_dialogue"},
+  {"t": 6.4, "tap": "ui_down"},
+  {"t": 6.8, "capture": "p3_pause_nav_works"},
+  {"t": 7.2, "tap": "cancel"},
+  {"t": 8.0, "capture": "p4_back_in_dialogue"},
+  {"t": 8.4, "tap": "interact"},
+  {"t": 10.0, "capture": "p5_next_line"},
+  {"t": 10.4, "tap": "interact"},
+  {"t": 12.0, "capture": "p6_third_line"},
+  {"t": 12.4, "quit": true}
+]

@@ -1,0 +1,11 @@
+[
+  {"t": 0.6, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 1.0, "call": {"node": "/root/World/IntegProbe", "method": "give", "args": ["deco_moon_lamp", 6]}},
+  {"t": 1.2, "call": {"node": "/root/World/Player", "method": "teleport_to_dir", "args": [[0.7, 0.6, 0.3]]}},
+  {"t": 1.6, "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_moon_lamp", [0.0, 1.0, 0.0], 0.0]}},
+  {"t": 1.8, "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_moon_lamp", [-0.6, 0.5, 0.6], 0.0]}},
+  {"t": 2.0, "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_moon_lamp", [0.1, -0.9, 0.4], 0.0]}},
+  {"t": 2.4, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["before_save"]}},
+  {"t": 2.8, "call": {"node": "/root/World/IntegProbe", "method": "save_now", "args": []}},
+  {"t": 3.4, "quit": true}
+]

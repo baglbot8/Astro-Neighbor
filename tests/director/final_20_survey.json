@@ -1,0 +1,7 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/quad_probe.tscn", "QuadProbe"]}},
+  {"t": 1.6, "call": {"node": "/root/World/QuadProbe", "method": "placement_survey", "args": [0.6, 4000]}},
+  {"t": 2.2, "call": {"node": "/root/World/QuadProbe", "method": "placement_survey", "args": [0.9, 4000]}},
+  {"t": 2.8, "call": {"node": "/root/World/QuadProbe", "method": "placement_survey", "args": [0.4, 4000]}},
+  {"t": 3.4, "quit": true}
+]

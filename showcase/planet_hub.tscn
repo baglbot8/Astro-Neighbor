@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0showcaseplanethub"]
+
+[ext_resource type="Script" path="res://src/planet/showcase/planet_showcase.gd" id="1"]
+
+[node name="PlanetShowcase" type="Node3D"]
+script = ExtResource("1")
+planet_ids = PackedStringArray("hub")
+orbit_mode = true
+orbit_seconds = 8.0

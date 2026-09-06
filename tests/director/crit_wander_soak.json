@@ -1,0 +1,84 @@
+[
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.45,
+     0.84,
+     -0.3
+    ]
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "capture": "w00"
+ },
+ {
+  "t": 5.5,
+  "capture": "w01"
+ },
+ {
+  "t": 8.0,
+  "capture": "w02"
+ },
+ {
+  "t": 10.5,
+  "capture": "w03"
+ },
+ {
+  "t": 13.0,
+  "capture": "w04"
+ },
+ {
+  "t": 15.5,
+  "capture": "w05"
+ },
+ {
+  "t": 18.0,
+  "capture": "w06"
+ },
+ {
+  "t": 20.5,
+  "capture": "w07"
+ },
+ {
+  "t": 23.0,
+  "capture": "w08"
+ },
+ {
+  "t": 25.5,
+  "capture": "w09"
+ },
+ {
+  "t": 28.0,
+  "capture": "w10"
+ },
+ {
+  "t": 30.5,
+  "capture": "w11"
+ },
+ {
+  "t": 33.0,
+  "capture": "w12"
+ },
+ {
+  "t": 35.5,
+  "capture": "w13"
+ },
+ {
+  "t": 38.0,
+  "capture": "w14"
+ },
+ {
+  "t": 40.5,
+  "capture": "w15"
+ },
+ {
+  "t": 43.5,
+  "quit": true
+ }
+]

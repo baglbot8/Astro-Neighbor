@@ -1,0 +1,430 @@
+[
+ {
+  "t": 0.2,
+  "log": "critic: line of benches/tents across the whole planet to test ground conformance on hills, banks, craters and shorelines"
+ },
+ {
+  "t": 0.35,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.7581,
+     0.6086,
+     -0.2343
+    ]
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     0.80487,
+     0.59326,
+     -0.01524
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.65,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     0.81106,
+     0.54801,
+     0.2046
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.7,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     0.77637,
+     0.47514,
+     0.41411
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.75,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     0.70254,
+     0.37831,
+     0.60276
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.8,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     0.5933,
+     0.26241,
+     0.76101
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.85,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     0.45414,
+     0.13329,
+     0.8809
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.9,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     0.29209,
+     -0.00256,
+     0.95639
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 0.95,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     0.11532,
+     -0.13827,
+     0.98366
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     -0.06727,
+     -0.26702,
+     0.96134
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.05,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     -0.24647,
+     -0.38231,
+     0.89056
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.1,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     -0.41324,
+     -0.47832,
+     0.77488
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.15,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     -0.55918,
+     -0.55022,
+     0.62015
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     -0.67693,
+     -0.59438,
+     0.43415
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.25,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     -0.76055,
+     -0.60858,
+     0.22626
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.3,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_crater_bench",
+    [
+     -0.80584,
+     -0.5921,
+     0.00697
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 1.35,
+  "call": {
+   "node": "/root/World/Decorations",
+   "method": "place",
+   "args": [
+    "deco_dome_tent",
+    [
+     -0.8105,
+     -0.54577,
+     -0.21268
+    ],
+    0.0
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.80487,
+     0.59326,
+     -0.01524
+    ]
+   ]
+  }
+ },
+ {
+  "t": 3.1,
+  "capture": "slope_00"
+ },
+ {
+  "t": 3.3,
+  "press": "camera_right"
+ },
+ {
+  "t": 4.1,
+  "release": "camera_right"
+ },
+ {
+  "t": 4.4,
+  "capture": "slope_00_b"
+ },
+ {
+  "t": 5.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.70254,
+     0.37831,
+     0.60276
+    ]
+   ]
+  }
+ },
+ {
+  "t": 5.9,
+  "capture": "slope_01"
+ },
+ {
+  "t": 6.1,
+  "press": "camera_right"
+ },
+ {
+  "t": 6.9,
+  "release": "camera_right"
+ },
+ {
+  "t": 7.2,
+  "capture": "slope_01_b"
+ },
+ {
+  "t": 7.8,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.11532,
+     -0.13827,
+     0.98366
+    ]
+   ]
+  }
+ },
+ {
+  "t": 8.7,
+  "capture": "slope_02"
+ },
+ {
+  "t": 8.9,
+  "press": "camera_right"
+ },
+ {
+  "t": 9.7,
+  "release": "camera_right"
+ },
+ {
+  "t": 10.0,
+  "capture": "slope_02_b"
+ },
+ {
+  "t": 10.6,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.55918,
+     -0.55022,
+     0.62015
+    ]
+   ]
+  }
+ },
+ {
+  "t": 11.5,
+  "capture": "slope_03"
+ },
+ {
+  "t": 11.7,
+  "press": "camera_right"
+ },
+ {
+  "t": 12.5,
+  "release": "camera_right"
+ },
+ {
+  "t": 12.8,
+  "capture": "slope_03_b"
+ },
+ {
+  "t": 13.4,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.8105,
+     -0.54577,
+     -0.21268
+    ]
+   ]
+  }
+ },
+ {
+  "t": 14.3,
+  "capture": "slope_04"
+ },
+ {
+  "t": 14.5,
+  "press": "camera_right"
+ },
+ {
+  "t": 15.3,
+  "release": "camera_right"
+ },
+ {
+  "t": 15.6,
+  "capture": "slope_04_b"
+ },
+ {
+  "t": 16.2,
+  "quit": true
+ }
+]

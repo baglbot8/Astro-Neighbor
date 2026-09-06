@@ -1,0 +1,5 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/quad_probe.tscn", "QuadProbe"]}},
+  {"t": 1.8, "call": {"node": "/root/World/QuadProbe", "method": "dump_multimesh", "args": []}},
+  {"t": 2.6, "quit": true}
+]

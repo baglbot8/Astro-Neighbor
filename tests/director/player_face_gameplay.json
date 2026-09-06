@@ -1,0 +1,13 @@
+[
+  {"t": 0.3, "log": "player_face_gameplay: gameplay-distance walk then run, for silhouette strips"},
+  {"t": 0.6, "press": "move_forward"},
+  {"t": 2.4, "capture": "gp_walk"},
+  {"t": 4.0, "release": "move_forward"},
+  {"t": 4.3, "press": "run"},
+  {"t": 4.3, "press": "move_forward"},
+  {"t": 6.4, "capture": "gp_run"},
+  {"t": 7.6, "release": "move_forward"},
+  {"t": 7.6, "release": "run"},
+  {"t": 8.6, "capture": "gp_idle"},
+  {"t": 9.0, "quit": true}
+]

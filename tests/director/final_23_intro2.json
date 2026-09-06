@@ -1,0 +1,6 @@
+[
+  {"t": 3.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 8.0, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["returning"]}},
+  {"t": 8.6, "call": {"node": "/root/World/IntegProbe", "method": "liveness", "args": ["returning"]}},
+  {"t": 9.2, "quit": true}
+]

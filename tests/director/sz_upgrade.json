@@ -1,0 +1,18 @@
+[
+  {"t": 0.8, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/size_probe.tscn", "SizeProbe"]}},
+  {"t": 1.2, "call": {"node": "/root/World/SizeProbe", "method": "report", "args": ["level0"]}},
+  {"t": 1.6, "call": {"node": "/root/World/SizeProbe", "method": "seat_check", "args": [0.25]}},
+  {"t": 1.9, "call": {"node": "/root/World/SizeProbe", "method": "collision", "args": []}},
+  {"t": 2.2, "capture": "sz_level0"},
+  {"t": 2.6, "call": {"node": "/root/World/SizeProbe", "method": "set_home_size", "args": [2]}},
+  {"t": 3.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 3.4, "call": {"node": "/root/World/IntegProbe", "method": "goto_planet", "args": ["zorp"]}},
+  {"t": 6.4, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 6.8, "call": {"node": "/root/World/IntegProbe", "method": "goto_planet", "args": ["home"]}},
+  {"t": 9.8, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/size_probe.tscn", "SizeProbe"]}},
+  {"t": 10.2, "call": {"node": "/root/World/SizeProbe", "method": "report", "args": ["level2"]}},
+  {"t": 10.6, "call": {"node": "/root/World/SizeProbe", "method": "seat_check", "args": [0.25]}},
+  {"t": 10.9, "call": {"node": "/root/World/SizeProbe", "method": "collision", "args": []}},
+  {"t": 11.3, "capture": "sz_level2"},
+  {"t": 11.7, "quit": true}
+]

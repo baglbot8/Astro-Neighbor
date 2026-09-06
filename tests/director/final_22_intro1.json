@@ -1,0 +1,14 @@
+[
+  {"t": 0.6, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 4.0, "tap": "interact"},
+  {"t": 5.4, "tap": "interact"},
+  {"t": 6.6, "tap": "interact"},
+  {"t": 9.4, "tap": "interact"},
+  {"t": 12.6, "tap": "interact"},
+  {"t": 15.4, "tap": "interact"},
+  {"t": 18.4, "tap": "interact"},
+  {"t": 21.0, "tap": "interact"},
+  {"t": 22.4, "call": {"node": "/root/World/IntegProbe", "method": "save_now", "args": []}},
+  {"t": 23.0, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["run1"]}},
+  {"t": 23.6, "quit": true}
+]

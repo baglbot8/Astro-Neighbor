@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0showcaseplanetcanopy"]
+
+[ext_resource type="Script" path="res://src/planet/showcase/planet_showcase.gd" id="1"]
+
+[node name="PlanetShowcase" type="Node3D"]
+script = ExtResource("1")
+planet_ids = PackedStringArray("home")
+orbit_mode = true
+orbit_seconds = 14.0
+hold_close = true
+focus = "prop:PuffTree0"
+cam_distance = 7.5
+look_height = 1.9
+hour = 12.0

@@ -1,0 +1,499 @@
+[
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "force_favor",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "npc",
+    0,
+    1.9
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "tap": "interact"
+ },
+ {
+  "t": 3.4,
+  "tap": "interact"
+ },
+ {
+  "t": 4.55,
+  "tap": "interact"
+ },
+ {
+  "t": 5.7,
+  "tap": "interact"
+ },
+ {
+  "t": 6.85,
+  "tap": "interact"
+ },
+ {
+  "t": 8.0,
+  "tap": "interact"
+ },
+ {
+  "t": 9.15,
+  "tap": "interact"
+ },
+ {
+  "t": 10.3,
+  "tap": "interact"
+ },
+ {
+  "t": 11.45,
+  "tap": "interact"
+ },
+ {
+  "t": 12.6,
+  "tap": "interact"
+ },
+ {
+  "t": 13.75,
+  "tap": "interact"
+ },
+ {
+  "t": 14.9,
+  "tap": "interact"
+ },
+ {
+  "t": 16.05,
+  "tap": "interact"
+ },
+ {
+  "t": 17.2,
+  "tap": "interact"
+ },
+ {
+  "t": 18.35,
+  "tap": "interact"
+ },
+ {
+  "t": 19.5,
+  "tap": "interact"
+ },
+ {
+  "t": 20.65,
+  "tap": "interact"
+ },
+ {
+  "t": 21.8,
+  "tap": "interact"
+ },
+ {
+  "t": 22.95,
+  "tap": "interact"
+ },
+ {
+  "t": 25.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_accept"
+   ]
+  }
+ },
+ {
+  "t": 25.4,
+  "press": "move_back"
+ },
+ {
+  "t": 26.8,
+  "release": "move_back"
+ },
+ {
+  "t": 27.5,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 27.95,
+  "tap": "interact"
+ },
+ {
+  "t": 28.45,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 28.9,
+  "tap": "interact"
+ },
+ {
+  "t": 29.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 29.85,
+  "tap": "interact"
+ },
+ {
+  "t": 30.35,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 30.8,
+  "tap": "interact"
+ },
+ {
+  "t": 31.3,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 31.75,
+  "tap": "interact"
+ },
+ {
+  "t": 32.25,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 32.7,
+  "tap": "interact"
+ },
+ {
+  "t": 33.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 33.65,
+  "tap": "interact"
+ },
+ {
+  "t": 34.15,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 34.6,
+  "tap": "interact"
+ },
+ {
+  "t": 35.1,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 35.55,
+  "tap": "interact"
+ },
+ {
+  "t": 36.05,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 36.5,
+  "tap": "interact"
+ },
+ {
+  "t": 37.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 37.45,
+  "tap": "interact"
+ },
+ {
+  "t": 37.95,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 38.4,
+  "tap": "interact"
+ },
+ {
+  "t": 38.9,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 39.35,
+  "tap": "interact"
+ },
+ {
+  "t": 39.85,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "collectibles",
+    0,
+    1.15
+   ]
+  }
+ },
+ {
+  "t": 40.3,
+  "tap": "interact"
+ },
+ {
+  "t": 41.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_collect"
+   ]
+  }
+ },
+ {
+  "t": 42.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_group",
+   "args": [
+    "npc",
+    0,
+    1.9
+   ]
+  }
+ },
+ {
+  "t": 42.8,
+  "tap": "interact"
+ },
+ {
+  "t": 44.0,
+  "tap": "interact"
+ },
+ {
+  "t": 45.15,
+  "tap": "interact"
+ },
+ {
+  "t": 46.3,
+  "tap": "interact"
+ },
+ {
+  "t": 47.45,
+  "tap": "interact"
+ },
+ {
+  "t": 48.6,
+  "tap": "interact"
+ },
+ {
+  "t": 49.75,
+  "tap": "interact"
+ },
+ {
+  "t": 50.9,
+  "tap": "interact"
+ },
+ {
+  "t": 52.05,
+  "tap": "interact"
+ },
+ {
+  "t": 53.2,
+  "tap": "interact"
+ },
+ {
+  "t": 54.35,
+  "tap": "interact"
+ },
+ {
+  "t": 55.5,
+  "tap": "interact"
+ },
+ {
+  "t": 56.65,
+  "tap": "interact"
+ },
+ {
+  "t": 57.8,
+  "tap": "interact"
+ },
+ {
+  "t": 58.95,
+  "tap": "interact"
+ },
+ {
+  "t": 60.1,
+  "tap": "interact"
+ },
+ {
+  "t": 61.25,
+  "tap": "interact"
+ },
+ {
+  "t": 62.4,
+  "tap": "interact"
+ },
+ {
+  "t": 63.55,
+  "tap": "interact"
+ },
+ {
+  "t": 64.7,
+  "tap": "interact"
+ },
+ {
+  "t": 65.85,
+  "tap": "interact"
+ },
+ {
+  "t": 68.0,
+  "capture": "i01_after_handin"
+ },
+ {
+  "t": 68.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "after_handin"
+   ]
+  }
+ },
+ {
+  "t": 69.2,
+  "tap": "journal"
+ },
+ {
+  "t": 70.4,
+  "capture": "i02_journal"
+ },
+ {
+  "t": 71.0,
+  "tap": "cancel"
+ },
+ {
+  "t": 71.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "liveness",
+   "args": [
+    "end"
+   ]
+  }
+ },
+ {
+  "t": 72.2,
+  "quit": true
+ }
+]

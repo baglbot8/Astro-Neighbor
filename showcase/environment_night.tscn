@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://b0astro0envnight"]
+
+[ext_resource type="Script" path="res://showcase/environment_showcase.gd" id="1"]
+
+[node name="EnvironmentShowcaseNight" type="Node3D"]
+script = ExtResource("1")
+start_hour = 21.5
+cycle = false
+camera_yaw_deg = 0.0
+moon_count = 2
+has_ring = false
+cloud_density = 0.45

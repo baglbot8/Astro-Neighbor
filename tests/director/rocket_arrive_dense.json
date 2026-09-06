@@ -1,0 +1,124 @@
+[
+ {
+  "t": 0.3,
+  "log": "ROCKET: dense sampling of the ARRIVAL cut (space -> hub), every 0.15 s."
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/Rocket",
+   "method": "launch_to",
+   "args": [
+    "hub"
+   ]
+  }
+ },
+ {
+  "t": 16.2,
+  "capture": "a000"
+ },
+ {
+  "t": 16.35,
+  "capture": "a001"
+ },
+ {
+  "t": 16.5,
+  "capture": "a002"
+ },
+ {
+  "t": 16.65,
+  "capture": "a003"
+ },
+ {
+  "t": 16.8,
+  "capture": "a004"
+ },
+ {
+  "t": 16.95,
+  "capture": "a005"
+ },
+ {
+  "t": 17.1,
+  "capture": "a006"
+ },
+ {
+  "t": 17.25,
+  "capture": "a007"
+ },
+ {
+  "t": 17.4,
+  "capture": "a008"
+ },
+ {
+  "t": 17.55,
+  "capture": "a009"
+ },
+ {
+  "t": 17.7,
+  "capture": "a010"
+ },
+ {
+  "t": 17.85,
+  "capture": "a011"
+ },
+ {
+  "t": 18.0,
+  "capture": "a012"
+ },
+ {
+  "t": 18.15,
+  "capture": "a013"
+ },
+ {
+  "t": 18.3,
+  "capture": "a014"
+ },
+ {
+  "t": 18.45,
+  "capture": "a015"
+ },
+ {
+  "t": 18.6,
+  "capture": "a016"
+ },
+ {
+  "t": 18.75,
+  "capture": "a017"
+ },
+ {
+  "t": 18.9,
+  "capture": "a018"
+ },
+ {
+  "t": 19.05,
+  "capture": "a019"
+ },
+ {
+  "t": 19.2,
+  "capture": "a020"
+ },
+ {
+  "t": 19.35,
+  "capture": "a021"
+ },
+ {
+  "t": 19.5,
+  "capture": "a022"
+ },
+ {
+  "t": 19.65,
+  "capture": "a023"
+ },
+ {
+  "t": 19.8,
+  "capture": "a024"
+ },
+ {
+  "t": 26.0,
+  "capture": "a900_landed"
+ },
+ {
+  "t": 26.6,
+  "quit": true
+ }
+]

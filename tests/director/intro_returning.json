@@ -1,0 +1,27 @@
+[
+  {"t": 0.2, "log": "RETURNING PLAYER. Run the TITLE scene with --skip-title --intro (and NO --new-game) after journal_favour.json, so the save is loaded. Nothing of the intro may replay."},
+  {"t": 1.6, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 2.0, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["loaded"]}},
+  {"t": 3.5, "capture": "01_loaded"},
+  {"t": 5.5, "capture": "02_past_greet_delay_no_radio"},
+  {"t": 6.0, "call": {"node": "/root/World/IntegProbe", "method": "liveness", "args": ["loaded"]}},
+
+  {"t": 6.5, "log": "walk: the move beat and its hint must stay retired"},
+  {"t": 6.6, "press": "move_forward"},
+  {"t": 9.6, "release": "move_forward"},
+  {"t": 10.5, "capture": "03_walked_no_hints"},
+  {"t": 13.5, "capture": "04_still_no_hints"},
+
+  {"t": 14.5, "tap": "pause"},
+  {"t": 15.5, "capture": "05_pause"},
+  {"t": 15.9, "tap": "move_back"},
+  {"t": 16.5, "tap": "interact"},
+  {"t": 17.7, "capture": "06_journal_survived_save_load"},
+  {"t": 19.0, "tap": "cancel"},
+  {"t": 20.0, "capture": "07_back_in_pause"},
+  {"t": 20.4, "tap": "cancel"},
+  {"t": 21.2, "capture": "08_resumed"},
+  {"t": 21.6, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["end"]}},
+  {"t": 22.0, "call": {"node": "/root/World/IntegProbe", "method": "liveness", "args": ["end"]}},
+  {"t": 22.6, "quit": true}
+]

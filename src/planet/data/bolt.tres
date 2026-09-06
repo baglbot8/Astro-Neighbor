@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="PlanetData" load_steps=2 format=3 uid="uid://cplanetdatabolt0"]
+
+[ext_resource type="Script" path="res://src/planet/planet_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bolt"
+display_name = "Bolt's Chrome Yard"
+radius = 10.5
+biome = "chrome"
+seed = 37
+hill_amplitude = 0.36923
+hill_frequency = 0.95
+detail_amplitude = 0.01846
+crater_count = 3
+ground_ao = 0.10
+water_level = -0.60000
+mesh_subdivisions = 6
+terrace_step = 0.32000
+terrace_band = 0.14
+plateau_count = 3
+plateau_height = 0.95
+plateau_radius = 4.06154
+ground_shadow_color = Color(0.3312, 0.4009, 0.5175, 1)
+bank_color = Color(0.4105, 0.4754, 0.5865, 1)
+foliage_shadow_color = Color(0.2822, 0.3600, 0.3503, 1)
+ground_color_a = Color(0.5412, 0.6980, 0.8706, 1)
+ground_color_b = Color(0.4824, 0.6275, 0.8078, 1)
+ground_color_low = Color(0.2275, 0.2588, 0.3294, 1)
+rock_color = Color(0.5948, 0.6527, 0.7300, 1)
+surface_color = Color(0.5412, 0.6980, 0.8706, 1)
+water_color = Color(0.2510, 0.2824, 0.3765, 1)
+water_deep_color = Color(0.2000, 0.2235, 0.3059, 1)
+foliage_color_a = Color(0.4760, 0.6800, 0.6630, 1)
+foliage_color_b = Color(0.8000, 0.5556, 0.3360, 1)
+trunk_color = Color(0.3256, 0.3652, 0.4400, 1)
+flower_colors = PackedColorArray(0.8667, 0.5176, 0.2039, 1, 0.3725, 0.7020, 0.6745, 1)
+sky_top_color = Color(0.1216, 0.3725, 0.6196, 1)
+sky_horizon_color = Color(1, 0.6039, 0.3608, 1)
+ground_horizon_color = Color(0.2902, 0.3373, 0.4118, 1)
+sun_color = Color(1, 0.8196, 0.6314, 1)
+ambient_color = Color(0.6235, 0.7373, 0.8784, 1)
+fog_color = Color(1, 0.6588, 0.4706, 1)
+has_ring = true
+ring_color = Color(1, 0.8118, 0.5412, 1)
+moon_count = 1
+cloud_density = 0.25
+spawn_dir = Vector3(0, 1, 0)
+pad_dir = Vector3(0.6631, 0.618, 0.4224)
+npcs = PackedStringArray("bolt")
+buildings = PackedStringArray()
+music_track = "chrome"
+tree_count = 16
+rock_count = 21
+flower_patch_count = 11
+collectible_count = 8
+collectible_kind = "gear_bit"

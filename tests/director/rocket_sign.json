@@ -1,0 +1,9 @@
+[
+  {"t": 0.8, "press": "move_forward"},
+  {"t": 1.7, "release": "move_forward"},
+  {"t": 4.2, "capture": "01_sign_face_on"},
+  {"t": 4.4, "press": "move_forward"},
+  {"t": 5.6, "release": "move_forward"},
+  {"t": 6.2, "capture": "02_pad_gameplay_shot"},
+  {"t": 6.8, "quit": true}
+]

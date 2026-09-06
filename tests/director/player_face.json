@@ -1,0 +1,9 @@
+[
+  {"t": 0.4, "log": "player_face: turn the astronaut to face the camera"},
+  {"t": 0.6, "press": "move_back"},
+  {"t": 1.8, "release": "move_back"},
+  {"t": 2.6, "capture": "player_face_idle"},
+  {"t": 2.7, "tap": "emote"},
+  {"t": 3.4, "capture": "player_face_wave"},
+  {"t": 4.2, "quit": true}
+]

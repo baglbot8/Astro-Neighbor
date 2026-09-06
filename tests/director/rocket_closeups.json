@@ -1,0 +1,12 @@
+[
+  {"t": 0.8, "press": "move_forward"},
+  {"t": 2.6, "release": "move_forward"},
+  {"t": 3.2, "capture": "01_rocket_close"},
+  {"t": 3.4, "press": "camera_left"},
+  {"t": 3.8, "release": "camera_left"},
+  {"t": 4.4, "capture": "02_rocket_three_quarter"},
+  {"t": 4.6, "press": "zoom_in"},
+  {"t": 4.7, "release": "zoom_in"},
+  {"t": 5.4, "capture": "03_rivets_at_close_range"},
+  {"t": 6.0, "quit": true}
+]

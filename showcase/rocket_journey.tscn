@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://b0astro0showrjourney"]
+
+[ext_resource type="Script" path="res://src/rocket/rocket_showcase.gd" id="1"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1")
+planet_id = "home"
+hour = 10.5
+start_offset_m = 0.0
+launch_dest = "zorp"
+launch_delay = 0.6

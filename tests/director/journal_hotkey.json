@@ -1,0 +1,13 @@
+[
+  {"t": 1.0,  "log": "give the player a favour to look at"},
+  {"t": 1.2,  "call": {"node": "/root/World/Onboarding", "method": "set_process", "args": [true]}},
+  {"t": 2.5,  "log": "press J"},
+  {"t": 2.7,  "tap": "journal"},
+  {"t": 3.8,  "capture": "01_journal_via_J"},
+  {"t": 4.4,  "tap": "cancel"},
+  {"t": 5.4,  "capture": "02_closed"},
+  {"t": 5.8,  "press": "move_forward"},
+  {"t": 6.8,  "release": "move_forward"},
+  {"t": 7.2,  "capture": "03_still_walks"},
+  {"t": 7.8,  "quit": true}
+]

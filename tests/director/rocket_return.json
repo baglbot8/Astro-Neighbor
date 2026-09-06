@@ -1,0 +1,13 @@
+[
+  {"t": 1.0, "log": "solar map, docked at Zorp; Esc returns to the planet and plays the landing"},
+  {"t": 1.2, "capture": "01_map_docked"},
+  {"t": 1.8, "tap": "cancel"},
+  {"t": 3.4, "capture": "02_banner_up_rocket_still_high"},
+  {"t": 5.4, "capture": "03_descending"},
+  {"t": 7.4, "capture": "04_touchdown_dust"},
+  {"t": 8.0, "capture": "05_dust_settling"},
+  {"t": 8.8, "capture": "06_hatch_open"},
+  {"t": 9.8, "capture": "07_back_on_the_ground"},
+  {"t": 11.0, "capture": "08_smoke_all_gone"},
+  {"t": 11.8, "quit": true}
+]

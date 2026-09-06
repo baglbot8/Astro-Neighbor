@@ -1,0 +1,7 @@
+[
+  {"t": 1.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/quad_probe.tscn", "QuadProbe"]}},
+  {"t": 1.6, "call": {"node": "/root/World/QuadProbe", "method": "dump_particles", "args": []}},
+  {"t": 2.0, "call": {"node": "/root/World/QuadProbe", "method": "dump_airborne", "args": []}},
+  {"t": 2.6, "capture": "q0"},
+  {"t": 3.2, "quit": true}
+]

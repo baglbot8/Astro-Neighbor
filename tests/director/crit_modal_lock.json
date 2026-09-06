@@ -1,0 +1,16 @@
+[
+  {"t": 1.0, "press": "camera_right"},
+  {"t": 2.05, "release": "camera_right"},
+  {"t": 2.3, "press": "move_forward"},
+  {"t": 4.9, "release": "move_forward"},
+  {"t": 5.4, "tap": "interact"},
+  {"t": 10.6, "tap": "inventory"},
+  {"t": 11.2, "capture": "01_bag_open_pre_change"},
+  {"t": 14.5, "capture": "02_space_with_stale_modal"},
+  {"t": 15.0, "tap": "move_right"},
+  {"t": 15.6, "tap": "move_right"},
+  {"t": 16.4, "capture": "03_did_cycling_work"},
+  {"t": 17.0, "tap": "cancel"},
+  {"t": 18.4, "capture": "04_did_cancel_work"},
+  {"t": 19.5, "quit": true}
+]

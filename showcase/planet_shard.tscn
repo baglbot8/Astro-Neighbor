@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0showcaseplanetshard"]
+
+[ext_resource type="Script" path="res://src/planet/showcase/planet_showcase.gd" id="1"]
+
+[node name="PlanetShowcase" type="Node3D"]
+script = ExtResource("1")
+planet_ids = PackedStringArray("home")
+orbit_mode = true
+orbit_seconds = 12.0
+hold_close = true
+focus = "collectible:0"
+cam_distance = 2.6
+look_height = 0.45
+hour = 12.0

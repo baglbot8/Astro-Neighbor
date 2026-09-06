@@ -1,0 +1,22 @@
+[
+  {"t": 1.4, "capture": "bag_empty"},
+  {"t": 1.8, "tap": "interact"},
+  {"t": 2.2, "tap": "rotate_right"},
+  {"t": 2.6, "capture": "bag_empty_tab"},
+  {"t": 5.0, "tap": "ui_right"},
+  {"t": 5.4, "tap": "interact"},
+  {"t": 5.8, "tap": "interact"},
+  {"t": 6.4, "capture": "sell_confirm"},
+  {"t": 6.6, "tap": "interact"},
+  {"t": 7.4, "capture": "sell_done"},
+  {"t": 11.4, "capture": "dialogue_long"},
+  {"t": 11.6, "tap": "interact"},
+  {"t": 13.0, "tap": "interact"},
+  {"t": 14.4, "tap": "interact"},
+  {"t": 15.4, "tap": "interact"},
+  {"t": 17.2, "tap": "ui_up"},
+  {"t": 17.6, "capture": "choice_four"},
+  {"t": 17.9, "tap": "cancel"},
+  {"t": 18.6, "capture": "after_cancel"},
+  {"t": 19.0, "quit": true}
+]

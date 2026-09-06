@@ -1,0 +1,127 @@
+[
+ {
+  "t": 0.3,
+  "log": "ui: HUD pills held out during the arrival descent"
+ },
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.8,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_pad",
+   "args": [
+    2.2
+   ]
+  }
+ },
+ {
+  "t": 1.8,
+  "capture": "a00_at_pad_chrome_up"
+ },
+ {
+  "t": 2.2,
+  "tap": "interact"
+ },
+ {
+  "t": 3.6,
+  "tap": "interact"
+ },
+ {
+  "t": 23.0,
+  "capture": "a01_t0230"
+ },
+ {
+  "t": 23.4,
+  "capture": "a02_t0234"
+ },
+ {
+  "t": 23.8,
+  "capture": "a03_t0237"
+ },
+ {
+  "t": 24.2,
+  "capture": "a04_t0241"
+ },
+ {
+  "t": 24.6,
+  "capture": "a05_t0245"
+ },
+ {
+  "t": 25.0,
+  "capture": "a06_t0249"
+ },
+ {
+  "t": 25.4,
+  "capture": "a07_t0253"
+ },
+ {
+  "t": 25.8,
+  "capture": "a08_t0257"
+ },
+ {
+  "t": 26.2,
+  "capture": "a09_t0261"
+ },
+ {
+  "t": 26.6,
+  "capture": "a10_t0265"
+ },
+ {
+  "t": 27.0,
+  "capture": "a11_t0269"
+ },
+ {
+  "t": 27.4,
+  "capture": "a12_t0273"
+ },
+ {
+  "t": 27.8,
+  "capture": "a13_t0277"
+ },
+ {
+  "t": 28.2,
+  "capture": "a14_t0281"
+ },
+ {
+  "t": 28.6,
+  "capture": "a15_t0285"
+ },
+ {
+  "t": 29.0,
+  "capture": "a16_t0289"
+ },
+ {
+  "t": 29.4,
+  "capture": "a17_t0293"
+ },
+ {
+  "t": 29.8,
+  "capture": "a18_t0297"
+ },
+ {
+  "t": 30.2,
+  "capture": "a19_t0301"
+ },
+ {
+  "t": 30.6,
+  "capture": "a20_t0305"
+ },
+ {
+  "t": 31.0,
+  "capture": "a21_t0309"
+ },
+ {
+  "t": 32.0,
+  "quit": true
+ }
+]

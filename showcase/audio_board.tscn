@@ -1,0 +1,99 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://showcase/audio_board.gd" id="1_board"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(1, 0.972549, 0.882353, 1)
+border_width_left = 6
+border_width_top = 6
+border_width_right = 6
+border_width_bottom = 6
+border_color = Color(0.937255, 0.878431, 0.709804, 1)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0.2, 0.15, 0.35, 0.25)
+shadow_size = 18
+shadow_offset = Vector2(0, 8)
+
+[sub_resource type="SystemFont" id="SystemFont_round"]
+font_names = PackedStringArray("Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue")
+
+[node name="AudioBoard" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_board")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -440.0
+offset_top = -300.0
+offset_right = 440.0
+offset_bottom = 300.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Title" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 22.0
+offset_right = 848.0
+offset_bottom = 66.0
+theme_override_colors/font_color = Color(0.419608, 0.321569, 0.196078, 1)
+theme_override_fonts/font = SubResource("SystemFont_round")
+theme_override_font_sizes/font_size = 30
+text = "Audio Board"
+
+[node name="Status" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 66.0
+offset_right = 848.0
+offset_bottom = 92.0
+theme_override_colors/font_color = Color(0.6, 0.5, 0.35, 1)
+theme_override_fonts/font = SubResource("SystemFont_round")
+theme_override_font_sizes/font_size = 16
+text = "..."
+
+[node name="Now" type="Label" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 104.0
+offset_right = 848.0
+offset_bottom = 144.0
+theme_override_colors/font_color = Color(0.298039, 0.435294, 1, 1)
+theme_override_fonts/font = SubResource("SystemFont_round")
+theme_override_font_sizes/font_size = 26
+text = "starting…"
+
+[node name="Wave" type="Control" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 152.0
+offset_right = 848.0
+offset_bottom = 262.0
+
+[node name="List" type="RichTextLabel" parent="Panel"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 276.0
+offset_right = 848.0
+offset_bottom = 580.0
+theme_override_fonts/normal_font = SubResource("SystemFont_round")
+theme_override_fonts/bold_font = SubResource("SystemFont_round")
+theme_override_font_sizes/normal_font_size = 15
+theme_override_font_sizes/bold_font_size = 15
+bbcode_enabled = true
+text = ""
+scroll_active = false

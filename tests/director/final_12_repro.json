@@ -1,0 +1,12 @@
+[
+  {"t": 0.6, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 1.0, "call": {"node": "/root/World/IntegProbe", "method": "give", "args": ["deco_moon_lamp", 2]}},
+  {"t": 1.4, "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_moon_lamp", [0.0, 1.0, 0.0], 0.0]}},
+  {"t": 1.8, "call": {"node": "/root/World/Decorations", "method": "place", "args": ["deco_star_flag", [0.2, 0.96, 0.2], 0.5]}},
+  {"t": 2.4, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["before_save"]}},
+  {"t": 2.8, "call": {"node": "/root/World/IntegProbe", "method": "save_now", "args": []}},
+  {"t": 3.4, "call": {"node": "/root/SceneRouter", "method": "go_to_title", "args": []}},
+  {"t": 8.0, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+  {"t": 8.6, "call": {"node": "/root/World/IntegProbe", "method": "dump", "args": ["after_load"]}},
+  {"t": 9.2, "quit": true}
+]

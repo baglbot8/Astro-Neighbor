@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/common/key_glyph.gd" id="1"]
+[ext_resource type="Theme" path="res://src/ui/theme/astro_theme.tres" id="2"]
+
+[node name="KeyGlyph" type="Control"]
+custom_minimum_size = Vector2(28, 31)
+mouse_filter = 2
+theme = ExtResource("2")
+script = ExtResource("1")

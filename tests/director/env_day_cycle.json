@@ -1,0 +1,12 @@
+[
+  {"t": 0.5, "log": "environment day cycle: dawn / day / dusk / night"},
+  {"t": 1.0, "call": {"node": "/root/World/Environment", "method": "set_time", "args": [6.1]}},
+  {"t": 1.6, "capture": "env_dawn"},
+  {"t": 2.0, "call": {"node": "/root/World/Environment", "method": "set_time", "args": [12.0]}},
+  {"t": 2.6, "capture": "env_noon"},
+  {"t": 3.0, "call": {"node": "/root/World/Environment", "method": "set_time", "args": [18.7]}},
+  {"t": 3.6, "capture": "env_dusk"},
+  {"t": 4.0, "call": {"node": "/root/World/Environment", "method": "set_time", "args": [22.0]}},
+  {"t": 5.5, "capture": "env_night"},
+  {"t": 6.0, "quit": true}
+]

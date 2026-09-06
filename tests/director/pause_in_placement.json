@@ -1,0 +1,13 @@
+[
+  {"t": 1.0,  "log": "open bag on decorations tab"},
+  {"t": 1.2,  "tap": "decorate"},
+  {"t": 2.2,  "tap": "interact"},
+  {"t": 2.9,  "tap": "interact"},
+  {"t": 4.0,  "capture": "01_placing"},
+  {"t": 4.4,  "log": "pause DURING placement - must open"},
+  {"t": 4.6,  "tap": "pause"},
+  {"t": 5.6,  "capture": "02_paused_during_placement"},
+  {"t": 6.2,  "tap": "cancel"},
+  {"t": 7.0,  "capture": "03_resumed_still_placing"},
+  {"t": 7.6,  "quit": true}
+]

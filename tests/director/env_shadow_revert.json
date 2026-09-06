@@ -1,0 +1,122 @@
+[
+ {
+  "t": 0.4,
+  "log": "revert test (home): astronaut helmet shell casts shadows again - look for stipple"
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/env_shadow_revert_probe.tscn",
+    "ShadowRevert"
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 1.28,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 1.36,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 1.44,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 1.52,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 1.6,
+  "tap": "zoom_in"
+ },
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/World/ShadowRevert",
+   "method": "revert_all"
+  }
+ },
+ {
+  "t": 2.4,
+  "call": {
+   "node": "/root/World/Environment",
+   "method": "set_time",
+   "args": [
+    12.0
+   ]
+  }
+ },
+ {
+  "t": 2.8,
+  "capture": "r12_noon"
+ },
+ {
+  "t": 3.0,
+  "call": {
+   "node": "/root/World/Environment",
+   "method": "set_time",
+   "args": [
+    14.5
+   ]
+  }
+ },
+ {
+  "t": 3.4,
+  "capture": "r14_afternoon"
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/World/Environment",
+   "method": "set_time",
+   "args": [
+    16.5
+   ]
+  }
+ },
+ {
+  "t": 4.0,
+  "capture": "r16_low"
+ },
+ {
+  "t": 4.2,
+  "call": {
+   "node": "/root/World/Environment",
+   "method": "set_time",
+   "args": [
+    17.6
+   ]
+  }
+ },
+ {
+  "t": 4.6,
+  "capture": "r17_grazing"
+ },
+ {
+  "t": 4.8,
+  "call": {
+   "node": "/root/World/Environment",
+   "method": "set_time",
+   "args": [
+    18.6
+   ]
+  }
+ },
+ {
+  "t": 5.2,
+  "capture": "r18_dusk"
+ },
+ {
+  "t": 5.6,
+  "quit": true
+ }
+]

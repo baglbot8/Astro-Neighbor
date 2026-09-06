@@ -1,0 +1,10 @@
+[
+  {"t": 1.0, "press": "camera_right"},
+  {"t": 2.05, "release": "camera_right"},
+  {"t": 3.2, "capture": "01_waypoint_marker_from_afar"},
+  {"t": 3.4, "press": "move_forward"},
+  {"t": 4.4, "capture": "02_closer"},
+  {"t": 5.0, "release": "move_forward"},
+  {"t": 6.0, "capture": "03_marker_should_be_gone"},
+  {"t": 6.6, "quit": true}
+]

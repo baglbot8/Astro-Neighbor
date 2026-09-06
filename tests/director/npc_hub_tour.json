@@ -1,0 +1,102 @@
+[
+ {
+  "t": 0.4,
+  "log": "hub tour: visit every shopkeeper and watch them wander"
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     -0.533,
+     0.468,
+     0.704
+    ]
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "capture": "hub_deco_store"
+ },
+ {
+  "t": 4.5,
+  "capture": "hub_deco_store_wander_a"
+ },
+ {
+  "t": 7.5,
+  "capture": "hub_deco_store_wander_b"
+ },
+ {
+  "t": 9.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.533,
+     0.468,
+     0.704
+    ]
+   ]
+  }
+ },
+ {
+  "t": 10.2,
+  "capture": "hub_clothes_store"
+ },
+ {
+  "t": 10.5,
+  "capture": "hub_clothes_store_b"
+ },
+ {
+  "t": 12.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.0,
+     1.0,
+     0.0
+    ]
+   ]
+  }
+ },
+ {
+  "t": 13.2,
+  "capture": "hub_town_hall"
+ },
+ {
+  "t": 13.5,
+  "capture": "hub_town_hall_b"
+ },
+ {
+  "t": 15.0,
+  "call": {
+   "node": "/root/World/Player",
+   "method": "teleport_to_dir",
+   "args": [
+    [
+     0.0,
+     0.258,
+     0.967
+    ]
+   ]
+  }
+ },
+ {
+  "t": 16.2,
+  "capture": "hub_event_space"
+ },
+ {
+  "t": 17.0,
+  "capture": "hub_event_space_b"
+ },
+ {
+  "t": 17.6,
+  "quit": true
+ }
+]

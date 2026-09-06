@@ -1,0 +1,14 @@
+[
+  {"t": 0.4, "log": "player_face_carry: hand the player an item and walk with it"},
+  {"t": 0.6, "press": "move_back"},
+  {"t": 1.6, "release": "move_back"},
+  {"t": 1.8, "call": {"node": "/root/World/Player", "method": "set_carry_item", "args": ["stardust_shard"]}},
+  {"t": 3.0, "capture": "player_carry_idle"},
+  {"t": 3.2, "press": "move_left"},
+  {"t": 4.4, "capture": "player_carry_walk"},
+  {"t": 4.6, "release": "move_left"},
+  {"t": 5.2, "press": "move_forward"},
+  {"t": 6.4, "capture": "player_carry_away"},
+  {"t": 6.6, "release": "move_forward"},
+  {"t": 7.0, "quit": true}
+]

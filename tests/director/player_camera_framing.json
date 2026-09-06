@@ -1,0 +1,30 @@
+[
+  {"t": 0.4, "log": "player_camera_framing: R2.10 framing evidence. Run on the hub at each of the four target resolutions (--ui=desktop 1280x720 / 1920x1080, --ui=mobile 2340x1080 / 2556x1179). Add --fade-debug to print the near-geometry fade set."},
+  {"t": 0.4, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/integ_probe.tscn", "IntegProbe"]}},
+
+  {"t": 2.0, "call": {"node": "/root/World/CameraRig", "method": "debug_report", "args": []}},
+  {"t": 2.2, "capture": "01_plaza_arrival"},
+
+  {"t": 2.6, "log": "--- walk the lamp-post row: the mockup's occlusion case, at the new distance"},
+  {"t": 2.8, "press": "move_forward"},
+  {"t": 3.6, "capture": "02_walk_lamps_1"},
+  {"t": 4.4, "capture": "03_walk_lamps_2"},
+  {"t": 5.2, "capture": "04_walk_lamps_3"},
+  {"t": 5.6, "release": "move_forward"},
+
+  {"t": 6.0, "log": "--- orbit so a pole has to cross the sight line"},
+  {"t": 6.1, "press": "camera_right"},
+  {"t": 6.7, "capture": "05_orbit_60"},
+  {"t": 7.3, "capture": "06_orbit_130"},
+  {"t": 7.9, "capture": "07_orbit_200"},
+  {"t": 8.2, "release": "camera_right"},
+
+  {"t": 8.7, "log": "--- a shop door: the spring-arm lift case (back to a wall)"},
+  {"t": 8.8, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "clothes_store/Door", 2.6]}},
+  {"t": 10.0, "capture": "08_shop_door_lift"},
+
+  {"t": 10.4, "call": {"node": "/root/World/IntegProbe", "method": "goto_named", "args": ["interactables", "town_hall/Door", 2.6]}},
+  {"t": 11.6, "capture": "09_town_hall_lift"},
+  {"t": 12.0, "call": {"node": "/root/World/CameraRig", "method": "debug_report", "args": []}},
+  {"t": 12.3, "quit": true}
+]

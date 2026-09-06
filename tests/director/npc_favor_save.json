@@ -1,0 +1,130 @@
+[
+ {
+  "t": 0.45,
+  "log": "favour save test: accept a fetch favour and save"
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/FavorSystem",
+   "method": "force_template",
+   "args": [
+    "fetch"
+   ]
+  }
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/NPCs/zorp",
+   "method": "wander_enabled",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 0.8,
+  "press": "move_forward"
+ },
+ {
+  "t": 0.8,
+  "press": "move_right"
+ },
+ {
+  "t": 2.35,
+  "release": "move_right"
+ },
+ {
+  "t": 2.7,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.4,
+  "tap": "interact"
+ },
+ {
+  "t": 3.75,
+  "tap": "interact"
+ },
+ {
+  "t": 4.1,
+  "tap": "interact"
+ },
+ {
+  "t": 4.45,
+  "tap": "interact"
+ },
+ {
+  "t": 4.8,
+  "tap": "interact"
+ },
+ {
+  "t": 5.15,
+  "tap": "interact"
+ },
+ {
+  "t": 5.5,
+  "tap": "interact"
+ },
+ {
+  "t": 5.85,
+  "tap": "interact"
+ },
+ {
+  "t": 6.2,
+  "tap": "interact"
+ },
+ {
+  "t": 6.55,
+  "tap": "interact"
+ },
+ {
+  "t": 6.9,
+  "tap": "interact"
+ },
+ {
+  "t": 7.25,
+  "tap": "interact"
+ },
+ {
+  "t": 7.6,
+  "tap": "interact"
+ },
+ {
+  "t": 7.95,
+  "tap": "interact"
+ },
+ {
+  "t": 8.3,
+  "tap": "interact"
+ },
+ {
+  "t": 8.65,
+  "tap": "interact"
+ },
+ {
+  "t": 9.0,
+  "tap": "interact"
+ },
+ {
+  "t": 9.75,
+  "capture": "save_accepted"
+ },
+ {
+  "t": 10.15,
+  "call": {
+   "node": "/root/SaveManager",
+   "method": "save_game",
+   "args": []
+  }
+ },
+ {
+  "t": 10.35,
+  "log": "saved"
+ },
+ {
+  "t": 10.65,
+  "quit": true
+ }
+]

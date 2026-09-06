@@ -1,0 +1,287 @@
+[
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.2,
+  "press": "move_forward"
+ },
+ {
+  "t": 2.8,
+  "release": "move_forward"
+ },
+ {
+  "t": 3.2,
+  "tap": "decorate"
+ },
+ {
+  "t": 4.1,
+  "tap": "interact"
+ },
+ {
+  "t": 4.8,
+  "tap": "interact"
+ },
+ {
+  "t": 5.8,
+  "capture": "try0_ghost"
+ },
+ {
+  "t": 6.2,
+  "tap": "interact"
+ },
+ {
+  "t": 7.0,
+  "capture": "try0_after"
+ },
+ {
+  "t": 7.4,
+  "tap": "cancel"
+ },
+ {
+  "t": 8.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "try0"
+   ]
+  }
+ },
+ {
+  "t": 8.4,
+  "press": "camera_left"
+ },
+ {
+  "t": 9.0,
+  "release": "camera_left"
+ },
+ {
+  "t": 9.6,
+  "press": "move_forward"
+ },
+ {
+  "t": 11.2,
+  "release": "move_forward"
+ },
+ {
+  "t": 11.6,
+  "tap": "decorate"
+ },
+ {
+  "t": 12.5,
+  "tap": "interact"
+ },
+ {
+  "t": 13.2,
+  "tap": "interact"
+ },
+ {
+  "t": 14.2,
+  "capture": "try1_ghost"
+ },
+ {
+  "t": 14.6,
+  "tap": "interact"
+ },
+ {
+  "t": 15.4,
+  "capture": "try1_after"
+ },
+ {
+  "t": 15.8,
+  "tap": "cancel"
+ },
+ {
+  "t": 16.4,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "try1"
+   ]
+  }
+ },
+ {
+  "t": 16.8,
+  "press": "camera_left"
+ },
+ {
+  "t": 17.4,
+  "release": "camera_left"
+ },
+ {
+  "t": 18.0,
+  "press": "move_forward"
+ },
+ {
+  "t": 19.6,
+  "release": "move_forward"
+ },
+ {
+  "t": 20.0,
+  "tap": "decorate"
+ },
+ {
+  "t": 20.9,
+  "tap": "interact"
+ },
+ {
+  "t": 21.6,
+  "tap": "interact"
+ },
+ {
+  "t": 22.6,
+  "capture": "try2_ghost"
+ },
+ {
+  "t": 23.0,
+  "tap": "interact"
+ },
+ {
+  "t": 23.8,
+  "capture": "try2_after"
+ },
+ {
+  "t": 24.2,
+  "tap": "cancel"
+ },
+ {
+  "t": 24.8,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "try2"
+   ]
+  }
+ },
+ {
+  "t": 25.2,
+  "press": "camera_left"
+ },
+ {
+  "t": 25.8,
+  "release": "camera_left"
+ },
+ {
+  "t": 26.4,
+  "press": "move_forward"
+ },
+ {
+  "t": 28.0,
+  "release": "move_forward"
+ },
+ {
+  "t": 28.4,
+  "tap": "decorate"
+ },
+ {
+  "t": 29.3,
+  "tap": "interact"
+ },
+ {
+  "t": 30.0,
+  "tap": "interact"
+ },
+ {
+  "t": 31.0,
+  "capture": "try3_ghost"
+ },
+ {
+  "t": 31.4,
+  "tap": "interact"
+ },
+ {
+  "t": 32.2,
+  "capture": "try3_after"
+ },
+ {
+  "t": 32.6,
+  "tap": "cancel"
+ },
+ {
+  "t": 33.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "try3"
+   ]
+  }
+ },
+ {
+  "t": 33.6,
+  "press": "camera_left"
+ },
+ {
+  "t": 34.2,
+  "release": "camera_left"
+ },
+ {
+  "t": 34.8,
+  "press": "move_forward"
+ },
+ {
+  "t": 36.4,
+  "release": "move_forward"
+ },
+ {
+  "t": 36.8,
+  "tap": "decorate"
+ },
+ {
+  "t": 37.7,
+  "tap": "interact"
+ },
+ {
+  "t": 38.4,
+  "tap": "interact"
+ },
+ {
+  "t": 39.4,
+  "capture": "try4_ghost"
+ },
+ {
+  "t": 39.8,
+  "tap": "interact"
+ },
+ {
+  "t": 40.6,
+  "capture": "try4_after"
+ },
+ {
+  "t": 41.0,
+  "tap": "cancel"
+ },
+ {
+  "t": 41.6,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "dump",
+   "args": [
+    "try4"
+   ]
+  }
+ },
+ {
+  "t": 42.0,
+  "press": "camera_left"
+ },
+ {
+  "t": 42.6,
+  "release": "camera_left"
+ },
+ {
+  "t": 43.2,
+  "quit": true
+ }
+]
