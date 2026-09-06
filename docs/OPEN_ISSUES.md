@@ -191,3 +191,11 @@ The camera builder updated their own three showcases to reference `CameraRig.DIS
 
 ## 30. OPEN — wide flat decorations can hide the player from the camera fade
 The camera fade is physics-based, so it only sees a prop's collider. `deco_star_flag` has `collide_radius = 0.28` around its pole while the banner reaches ~0.9 m sideways, so the banner can cover the astronaut and never fade. Same shape problem on the holo sign and the nebula rug. Pre-existing, not caused by the camera change. Fix in `src/decorations/items/`: give the visual extent a collider, or mark the banner non-blocking but present on layer 4.
+
+## 31. OPEN — the web export renders incorrectly, because WebGL forces the Compatibility renderer
+Tested by actually building and running the HTML5 export, not assumed.
+**What works:** the export builds clean (49 MB, largest file 37 MB, inside GitHub's limits), loads in a browser, and the title screen renders correctly — planet, stars, orbiting rocket, menu.
+**What does not:** the browser must use **Compatibility (WebGL 2)**; Forward+ is unavailable there. Reproduced on desktop with `--rendering-driver opengl3`, which is the fast way to test this without a browser: the world renders, but **grass tufts render as solid black silhouettes** and **tree canopies show black and tan patches**. Frame: `~/.astro_captures/compatchk/compat.png`.
+**Ruled out by direct test:** custom `light()` functions are *not* the problem — a minimal shader with a custom `light()` renders correctly under `gl_compatibility` (scratch test, sphere centre `(1,163,36)` rather than black). The fault is narrower and is most likely in the MultiMesh grass and the foliage shader.
+**Also found and fixed while testing:** pointer lock throws `WrongDocumentError: The root document of this element is not valid for pointer lock` in a browser. `CameraRig` now refuses to grab the cursor when `OS.has_feature("web")` or `Platform.is_mobile()`. `project.godot` was also missing `renderer/rendering_method` entirely — set explicitly now.
+**The important consequence for platform choice:** Android does **not** have this problem. It uses the Mobile renderer, which supports the same shader features as Forward+. So an APK would look correct today, while the web build needs the foliage and grass shaders ported to Compatibility first.

@@ -339,7 +339,15 @@ func _ready() -> void:
 	_fade_off = argv.has("--fade-off")
 	_mouse_test = argv.has("--mouse-look-test")
 	_mouse_blocked = argv.has("--no-mouse-look") or (Director.is_active() and not _mouse_test)
-	_grab_cursor = not _mouse_blocked and not Director.is_active() and DisplayServer.get_name() != "headless"
+	# Never grab the cursor on the web or on a touch device. Pointer lock throws
+	# `WrongDocumentError: The root document of this element is not valid for pointer lock`
+	# in a browser (found by actually running the HTML5 build), and on mobile there is no
+	# cursor to capture - grabbing it there also fights the touch controls' own fallback.
+	_grab_cursor = (not _mouse_blocked
+		and not Director.is_active()
+		and DisplayServer.get_name() != "headless"
+		and not OS.has_feature("web")
+		and not Platform.is_mobile())
 	EventBus.ui_modal_opened.connect(_on_modal_changed)
 	EventBus.ui_modal_closed.connect(_on_modal_changed)
 	set_process_priority(10)
