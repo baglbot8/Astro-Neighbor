@@ -36,6 +36,23 @@ func _ready() -> void:
 	# Printed on every start. On the web build this is the only way to confirm from outside the
 	# game which control scheme a real phone actually got — see the browser note in _detect().
 	print("[Platform] ui mode: ", mode_name(), " (forced: ", _forced, ")")
+	_apply_renderer_parity()
+
+
+## Compatibility is the renderer WITHOUT a RenderingDevice. True for the web export (forced onto
+## WebGL2) and for a desktop run started with `--rendering-driver opengl3`, which is how this
+## path is reviewed.
+func is_compatibility_renderer() -> bool:
+	return RenderingServer.get_rendering_device() == null
+
+
+## Drives the `astro_compat` global shader uniform. See docs/OPEN_ISSUES.md 32: the two
+## renderers do not land the albedo multiply in the same place, so the ground shaders correct
+## for it themselves. 0.0 on desktop and mobile, where this is a literal no-op.
+func _apply_renderer_parity() -> void:
+	var compat := is_compatibility_renderer()
+	RenderingServer.global_shader_parameter_set(&"astro_compat", 1.0 if compat else 0.0)
+	print("[Platform] renderer: ", "Compatibility (parity correction ON)" if compat else "Forward+")
 
 
 func _detect() -> Mode:

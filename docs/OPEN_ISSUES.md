@@ -233,66 +233,60 @@ so the key parsed as garbage and `renderer/rendering_method` was never actually 
 only because `forward_plus` is the default. Repaired with real `;` comment lines.
 
 
-## 32. OPEN — the browser build renders one power of albedo too bright — OWNER: needs a dedicated shading pass
-**Root cause found and proven. The naive fix was tried, measured, and REVERTED because it ruined the
-art — read this whole entry before attempting it again.**
 
-### The finding
-**Forward+ multiplies the final `DIFFUSE_LIGHT` by `ALBEDO` after `light()` returns. The
-Compatibility (WebGL2) renderer does not.** The web export is forced onto Compatibility, and every
-colour in this game is authored against the Forward+ behaviour, so the browser renders the world one
-power of albedo too bright — which is lighter *and* less saturated, because `albedo^1` sits closer to
-white than `albedo^2`.
+## 32. PARTLY FIXED 2026-09-06 — the browser build's ground was pale and washed out
+The ground is fixed. One gap remains (foliage, below), and it is left open **deliberately**: the
+obvious correction for it was built, measured, looked at, and reverted because it blew the trees out
+to white. Read the "do not do this" section before touching it.
 
-Reproducible probe (run it before trusting any of this): set `ALBEDO = vec3(0.25)` in
-`grass_planet.gdshader`'s `fragment()` and replace its `light()` body with
-`DIFFUSE_LIGHT = vec3(1.0); SPECULAR_LIGHT = vec3(0.0);`, then capture the same frame under
-`--rendering-driver vulkan` and `--rendering-driver opengl3`. Measured ground pixel:
-**Forward+ `(182,182,183)`, Compatibility `(87,92,105)`.**
+### What was wrong
+Under the Compatibility (WebGL2) renderer that the web export is forced onto, the ground rendered far
+too pale and desaturated. Measured on the home ground crop `(250,470)-(1050,640)`:
+Forward+ **V 0.609 / S 0.519**, Compatibility **V 0.772 / S 0.307** — failing R2.6's saturation gate
+of 0.40-0.52. The same cast showed on Zorp's violet ground.
 
-Measured on the home-planet ground crop `(250,470)-(1050,640)`:
+### What it actually was — two independent differences
+1. **The albedo multiply does not land in the same place.** Proven with a probe: `ALBEDO = vec3(0.25)`
+   in `fragment()` and `DIFFUSE_LIGHT = vec3(1.0)` in `light()` renders `(182,182,183)` under
+   Forward+ and `(87,92,105)` under Compatibility. Critically the direction is **not the same for
+   every shader**: measured against Forward+, `grass_planet` carries one albedo too FEW (too bright)
+   while `planet_foliage` carries one too MANY (too dark, canopy V 0.309 vs 0.513). That opposition is
+   why the single global `pc_diffuse_out()` correction tried earlier could never have worked.
+2. **Ambient reaches the surface far more strongly.** Turning `ambient_light_energy` to 0 drops the
+   ground's value mean by 0.129 under Forward+ but by 0.212 under Compatibility.
 
-| | value mean | saturation mean |
-|---|---|---|
-| Forward+ (desktop, correct) | 0.609 | 0.519 |
-| Compatibility, as shipped | 0.772 | **0.307** — fails the R2.6 gate of 0.40-0.52 |
-| Compatibility, with the albedo multiply put back | 0.674 | 0.587 |
+### The fix that shipped
+* `grass_planet.gdshader` applies the albedo once more, gated on the new `astro_compat` global shader
+  uniform (`src/autoload/platform.gd` sets it to 1.0 only when `RenderingServer.get_rendering_device()`
+  is null, i.e. Compatibility). A `compat_gain` uniform is there as a trim; it currently sits at 1.0.
+* `src/world/environment.gd` scales ambient by `COMPAT_AMBIENT_SCALE = 0.75`, again only under
+  Compatibility.
 
-The same pale cast is visible on Zorp's violet ground and Bolt's chrome.
+Result on the ground: **V 0.772 -> 0.680** and **S 0.307 -> 0.569** against a Forward+ target of
+0.609 / 0.519. Verified on home, Zorp, Bolt and the hub, and **Forward+ is untouched** — a pixel diff
+of before against after confines every changed pixel to the bounding box `(584,362)-(693,512)`, which
+is the astronaut's idle-animation phase.
 
-### What was tried and reverted
-A global fix: `global uniform float astro_compat` (1.0 only under Compatibility, set by the `Platform`
-autoload via `RenderingServer.get_rendering_device() == null`), a `pc_diffuse_out(diffuse, albedo)`
-helper in `planet_common.gdshaderinc` returning `diffuse * mix(vec3(1.0), albedo, astro_compat)`, and
-all 12 `DIFFUSE_LIGHT +=` sites across the 8 custom-`light()` shaders wrapped in it.
+### DO NOT do this to the foliage (it was tried twice)
+The canopy is still too dark and too saturated in the browser (V 0.293 / S 0.614 against 0.513 /
+0.343). The arithmetically "correct" correction — divide `planet_foliage`'s light by ALBEDO under
+Compatibility, mirroring the ground — **moves the numbers the right way and ruins the picture**: it
+took the canopy to V 0.678 / S 0.325, which looks like a match on paper, while the trees, bushes and
+grass tufts rendered **white and pink**. Dividing by a dark canopy albedo is a large multiplier that
+drives the colour into the ACES shoulder, where chroma collapses; the giveaway was that the result
+barely responded to `compat_gain` at all, because it was already clipping.
 
-It compiled, it was a verified no-op on Forward+, and it moved the ground's numbers most of the way
-home (see the table). **It was still reverted**, because the rendered frame got *worse*: grass tufts
-went black again, tree canopies went dark with black patches, and the pink flowers turned red. The
-per-shader constants (`planet_foliage`'s `light_gain 0.36`, `shade_floor 0.70`, `ambient_damp 0.24`,
-and the equivalents in `toon_soft` and `metal_plates`) were each hand-derived around the Forward+
-albedo multiply, so restoring the multiply globally double-applies whatever compensation an
-individual shader already makes for it. `planet_foliage` in particular already routes its light
-through `pc_light_term`, which divides the albedo back out.
-
-This is the same trap as the palette work: **the metric improved while the art got worse.**
-
-### What the real fix looks like
-One shader at a time, not one global switch. For each of the 8 custom-`light()` shaders: put the
-albedo multiply back under Compatibility, then re-derive that shader's own brightness constants
-against a captured frame, and check the frame — not just the numbers — under **both** renderers
-before moving to the next shader. This is the same shape of job as item 19 (the double-albedo fix
-plus palette re-author) and should probably be done in the same pass, since both are about where the
-albedo multiply lands.
+This is the third time in this project that a palette metric improved while the art got worse. The
+canopy needs its own brightness constants re-derived (`light_gain 0.36`, `shade_floor 0.70`,
+`ambient_damp 0.24`) against a captured frame under both renderers, not a corrective multiply — the
+same job as item 19.
 
 ### Ruled out, so nobody repeats the work
-SSAO (disabling it under Forward+ changes the ground's numbers by 0.000), tonemap mode (LINEAR moves
-Forward+ to 0.530/0.480 — the wrong direction), sky ambient (`AMBIENT_SOURCE_COLOR` moves
-Compatibility only 0.772 -> 0.778), `pc_detail_lod`'s `dFdx`/`dFdy` derivatives (clump-band LOD mean
-0.870 Forward+ vs 0.854 Compatibility), and the `sd_fbm` noise itself. Dividing by albedo instead of
-multiplying makes it worse (saturation 0.307 -> 0.166), which is what fixed the direction of the
-diagnosis.
+SSAO (identical to three decimal places with it off), tonemap mode (LINEAR moves Forward+ the wrong
+way), sky-vs-colour ambient source (moves Compatibility 0.772 -> 0.778), the `AO` channel (forcing
+`AO = 1.0` moves Forward+ 0.609 -> 0.616 and Compatibility 0.772 -> 0.776, so neither renderer leans
+on it), `pc_detail_lod`'s `dFdx`/`dFdy` derivatives, and the `sd_fbm` noise itself.
 
-### Cosmetic, same cause family
+### Cosmetic, separate cause
 The atmosphere's warm limb haze is dimmer in the browser. That is the glow difference — Compatibility
-supports fewer glow modes — and is separate from the albedo issue.
+supports fewer glow modes — and is unrelated to the albedo and ambient issues above.

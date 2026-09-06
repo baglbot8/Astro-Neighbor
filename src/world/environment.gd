@@ -80,6 +80,11 @@ const SKY_ZENITH_HEIGHT := 0.45
 const BODY_AZ_LOCK_SEC := 1.5
 ## Name of the global shader parameter that carries the night factor to every shader.
 const NIGHT_PARAM := &"astro_night"
+## Ambient multiplier applied ONLY under the Compatibility (WebGL2) renderer; 1.0 everywhere
+## else, so desktop and mobile are untouched. Set in _ready() from Platform. See the note beside
+## its use below, and re-measure BOTH renderers if you change it.
+const COMPAT_AMBIENT_SCALE := 0.75
+var _ambient_scale: float = 1.0
 ## Colour grade LUT (see _grade_lut). Sampled per channel, so each stop shapes R, G and B separately.
 const GRADE_OFFSETS := [0.0, 0.25, 0.6, 1.0]
 ## The top stop is deliberately BELOW 1.0. R2.6: "no near-clipping whites - cap ~0.92". The grade
@@ -154,6 +159,7 @@ var _ring: PlanetRing
 var _sky_bodies: SkyBodies
 
 func _ready() -> void:
+	_ambient_scale = COMPAT_AMBIENT_SCALE if Platform.is_compatibility_renderer() else 1.0
 	planet_data = data_override if data_override != null else _find_planet_data()
 	planet_radius = planet_data.radius
 	palette.build(planet_data)
@@ -640,7 +646,11 @@ func _apply(hour: float) -> void:
 
 	# --- environment
 	_env.ambient_light_color = palette.ambient.sample(t)
-	_env.ambient_light_energy = palette.ambient_energy.sample_baked(t)
+	# WEB PARITY (docs/OPEN_ISSUES.md 32). Ambient reaches the surface much more strongly under the
+	# Compatibility (WebGL2) renderer than under Forward+: measured on the home ground, ambient
+	# lifts the value mean by +0.129 on Forward+ and by +0.212 on Compatibility. That extra white
+	# fill is what made the browser build look pale and washed out. Scaled back only there.
+	_env.ambient_light_energy = palette.ambient_energy.sample_baked(t) * _ambient_scale
 	_env.fog_light_color = fog_col
 	# What little haze there is belongs to the surface; by the time the rocket is in space there
 	# is nothing left to scatter.

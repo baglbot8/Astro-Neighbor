@@ -230,3 +230,7 @@ astro_night={
 "type": "float",
 "value": 1.0
 }
+astro_compat={
+"type": "float",
+"value": 0.0
+}

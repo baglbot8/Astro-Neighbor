@@ -43,6 +43,14 @@ const float SD_ROCKC_HZ = 7.4;
 const float SD_ROCKF_K = 0.62;
 const float SD_ROCKF_HZ = 28.5;
 
+// WEB PARITY (docs/OPEN_ISSUES.md 32). Under the Compatibility (WebGL2) renderer that the web
+// export is forced onto, this ground renders too pale and washed out. `astro_compat` is 1.0
+// ONLY there, set once by the Platform autoload, so this is a no-op on desktop and mobile.
+// NOTE the direction: the ground needs the albedo applied ONCE MORE, while planet_foliage
+// needs it applied once LESS. That opposition is why a single global correction cannot work.
+global uniform float astro_compat;
+uniform float compat_gain : hint_range(0.4, 1.5) = 1.0;
+
 uniform vec4 color_a : source_color = vec4(0.361, 0.706, 0.373, 1.0);   // base grass  #5cb45f
 uniform vec4 color_b : source_color = vec4(0.247, 0.541, 0.290, 1.0);   // darker triangles #3f8a4a
 uniform vec4 color_c : source_color = vec4(0.435, 0.769, 0.443, 1.0);   // lighter triangles
@@ -303,7 +311,8 @@ void light() {
 	// R2.9: carry the surface detail's slope into the saturated part of the toon ramp (see the
 	// `detail_light` uniform). Clamped hard on both sides so it can never blow out or punch a hole.
 	diffuse *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.80, 1.22);
-	DIFFUSE_LIGHT += pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
+	vec3 lit_rgb = pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
+	DIFFUSE_LIGHT += mix(lit_rgb, lit_rgb * ALBEDO * compat_gain, astro_compat);
 	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, shadow_fill_color.rgb, shadow_fill) * LIGHT_COLOR / PI;
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
