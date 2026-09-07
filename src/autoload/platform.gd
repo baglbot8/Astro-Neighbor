@@ -62,7 +62,7 @@ func _apply_quality_profile() -> void:
 	# fraction of quality 4's cost.
 	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
 	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
-	print("[Platform] low-power profile applied (no MSAA, hard shadows)")
+	print("[Platform] low-power profile applied (no MSAA, soft-low shadows)")
 
 
 ## Compatibility is the renderer WITHOUT a RenderingDevice. True for the web export (forced onto

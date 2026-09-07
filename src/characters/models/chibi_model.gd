@@ -159,6 +159,9 @@ var _eye_flat: Array[Node3D] = []
 var _brows: Array[Node3D] = []
 ## How far the muzzle patch stands proud of the head shell (0 when the character has no muzzle).
 var _muzzle_lift: float = 0.0
+## How far the mouth has to open before the closed-mouth smile arc is hidden outright. Below
+## this the arc flattens toward nothing, so the two never overlap as separate mouths.
+const SMILE_HIDE_AT := 0.34
 var _mouth_smile: Node3D
 var _mouth_open: Node3D
 var _built := false
@@ -560,7 +563,14 @@ func _apply_face(p: PackedFloat32Array) -> void:
 		if _mouth_open.visible:
 			_mouth_open.scale = Vector3(mouth_w * fs * (0.62 + 0.38 * mo), maxf(0.0012, mouth_h * fs * mo), mouth_d)
 		if _mouth_smile:
-			_mouth_smile.scale = Vector3(1.0, maxf(0.05, 1.0 - mo * 0.9), 1.0)
+			# TWO MOUTHS BUG. The smile arc IS the closed mouth; the ellipse below is the open one.
+			# This used to squash the arc to 5-10% of its height and leave it VISIBLE, so a talking
+			# neighbour showed the open mouth with a thin line still drawn across it — reported as
+			# "two mouths, one thin one that talks and another big open one". The arc now closes
+			# out completely before the ellipse is wide enough to read as a mouth of its own.
+			_mouth_smile.visible = mo < SMILE_HIDE_AT
+			if _mouth_smile.visible:
+				_mouth_smile.scale = Vector3(1.0, maxf(0.05, 1.0 - mo / SMILE_HIDE_AT), 1.0)
 
 
 static func _crossed(a: float, b: float, mark: float) -> bool:

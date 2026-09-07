@@ -8,11 +8,7 @@ const S := preload("res://src/ui/theme/ui_style.gd")
 
 func _init() -> void:
 	var theme := Theme.new()
-	var font := SystemFont.new()
-	font.font_names = S.FONT_NAMES
-	font.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
-	font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
-	font.hinting = TextServer.HINTING_LIGHT
+	var font := S.ui_font()
 	theme.default_font = font
 	theme.default_font_size = S.SIZE_BODY
 	_labels(theme)

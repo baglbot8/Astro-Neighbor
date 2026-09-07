@@ -6,42 +6,67 @@ extends RefCounted
 ##   godot --headless --path . -s res://src/ui/theme/build_theme.gd
 
 const THEME_PATH := "res://src/ui/theme/astro_theme.tres"
+## Baloo 2 (SIL Open Font License 1.1, licence bundled beside it). Chosen over the old system
+## stack because a SystemFont resolves through the host, and in a browser export "Arial
+## Rounded MT Bold" is simply not there — the web build fell back to a plain sans and lost
+## the rounded character the whole UI is built on. A bundled file renders identically on
+## desktop, phone and web.
+const FONT_PATH := "res://assets/fonts/Baloo2.ttf"
+## Fallback only, for the (impossible) case where the bundled file fails to load.
 const FONT_NAMES: PackedStringArray = ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue"]
 
 # ----------------------------------------------------------------------------- palette (STYLE_GUIDE.md)
-## Panel creams are capped at HSV value 0.92. At V 0.99 the HUD alone put 7-9% of every
-## gameplay frame over the blown-highlight threshold (R2.6 gate is < 5%), because the panels
-## cover 7-9% of the screen. Hue and saturation are unchanged.
-const CREAM := Color("#ebe4cf")
-const CREAM_EDGE := Color("#e8d9a8")
-const CREAM_DEEP := Color("#ebdfb7")
-## Inset wells (the item grid, the details column). Pulled down with CARD_FILL so a card still reads
-## as a raised white tile against it — the pair keeps the same ~0.08 luma step it always had.
-const CREAM_INSET := Color("#e2d8ba")
-const WHITE := Color("#fffdf5")
+## MOONSTONE. The UI used to be cream panels with brown text, which read as a direct lift of the
+## reference game. This palette keeps every shape, radius and outline weight the same and changes
+## only the colour: pale cool stone, dark slate text, one amber accent.
+##
+## WHY GREY. The UI has to sit on four very different worlds — green home, violet Zorp, chrome Bolt,
+## sand hub — and grey is the only hue that cannot clash with any of them, so ONE palette covers
+## them all and any planet added later. It also keeps the decorations the most colourful thing on
+## screen, which matters in a game about decorating.
+##
+## The names below are historical (CREAM, TEXT_BROWN) and are left alone on purpose: they are read
+## from dozens of call sites, and renaming them would be a large diff that changes no behaviour.
+## Read them as "panel fill" and "body text".
+##
+## Panel fills stay capped at HSV value 0.92. At V 0.99 the HUD alone put 7-9% of every gameplay
+## frame over the blown-highlight threshold (R2.6 gate is < 5%), because the panels cover 7-9% of
+## the screen.
+const CREAM := Color("#e9eaf1")
+const CREAM_EDGE := Color("#9295ac")
+const CREAM_DEEP := Color("#dcdee9")
+## Inset wells (the item grid, the details column). Pulled down from CARD_FILL so a card still reads
+## as a raised tile against it — the pair keeps the same ~0.08 luma step it always had.
+const CREAM_INSET := Color("#d5d8e4")
+const WHITE := Color("#fbfcff")
 ## Fill of an item CARD and of a text input. `WHITE` measures luma 0.99, and a stocked shop is
 ## mostly cards, which is why a shop frame measured 12-18% blown (R2.6: "no near-clipping whites -
-## cap ~0.92", luma p95 <= 0.93). CARD_FILL measures 0.91. WHITE is kept for TEXT and outlines,
-## where the area is a few hundred pixels and the contrast is the whole point.
-const CARD_FILL := Color("#ece8dc")
-const TEXT_BROWN := Color("#6b5232")
-const TEXT_SOFT := Color("#a3865f")
-const NAME_BLUE := Color("#4c6fff")
-const NAME_BLUE_EDGE := Color("#3a56d6")
-const YELLOW := Color("#ffcc33")
-const YELLOW_EDGE := Color("#e0a83a")
-const ORANGE := Color("#ff7a59")
-const ORANGE_EDGE := Color("#d95f42")
-const NAVY := Color("#1a1440")
+## cap ~0.92"). CARD_FILL measures 0.91. WHITE is kept for TEXT and outlines, where the area is a
+## few hundred pixels and the contrast is the whole point.
+const CARD_FILL := Color("#eef0f6")
+## Body text. Dark slate, not black: it has the same softness brown had, without the warmth that
+## made the old UI read as the reference game.
+const TEXT_BROWN := Color("#2c2f42")
+const TEXT_SOFT := Color("#6d7288")
+const NAME_BLUE := Color("#4c5b8c")
+const NAME_BLUE_EDGE := Color("#39456e")
+## THE one accent, used for the confirm action and nothing else. Amber reads as warm and
+## unmistakable against cool grey, and it is the only saturated colour the chrome is allowed.
+const YELLOW := Color("#f0a64a")
+const YELLOW_EDGE := Color("#c9822f")
+const ORANGE := Color("#ef7f52")
+const ORANGE_EDGE := Color("#c9613a")
+const NAVY := Color("#1b1f33")
+## Stardust stays gold. It is the currency, not chrome, and it is what the accent points at.
 const STARDUST := Color("#ffe27a")
 const STARDUST_EDGE := Color("#e0a83a")
 const STARDUST_SPARKLE := Color("#fff6c8")
-const GREEN := Color("#7ed957")
-const GREEN_EDGE := Color("#5cc44a")
-const RED := Color("#ff6b6b")
-const BACKDROP := Color(0.10, 0.08, 0.24, 0.42)
-## Focus ring colour for warm / yellow fills, where the default yellow ring would be invisible.
-const FOCUS_ON_WARM := Color("#5a4222")
+const GREEN := Color("#6fc47f")
+const GREEN_EDGE := Color("#4fa663")
+const RED := Color("#e8646f")
+const BACKDROP := Color(0.07, 0.08, 0.16, 0.46)
+## Focus ring colour for warm / amber fills, where the default ring would be invisible.
+const FOCUS_ON_WARM := Color("#4a2a08")
 
 const RARITY_COLORS := {
 	"common": Color("#8fbf8f"),
@@ -76,14 +101,30 @@ static func theme() -> Theme:
 	push_error("UIStyle: theme missing at %s (run build_theme.gd)" % THEME_PATH)
 	return Theme.new()
 
+## The rounded UI font. Prefers the BUNDLED Baloo 2 file — a SystemFont resolves through the
+## host, and in a browser export the old "Arial Rounded MT Bold" simply is not present, so
+## the web build silently fell back to a plain sans and lost the rounded character the whole
+## UI is built on. Falls back to the system stack only if the file is missing.
+static func ui_font() -> Font:
+	if ResourceLoader.exists(FONT_PATH):
+		var ff := load(FONT_PATH) as FontFile
+		if ff != null:
+			ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
+			ff.hinting = TextServer.HINTING_LIGHT
+			return ff
+	var sf := SystemFont.new()
+	sf.font_names = FONT_NAMES
+	sf.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+	return sf
+
+
 ## The rounded UI font used everywhere.
 static func font() -> Font:
 	var t := theme()
 	if t.default_font != null:
 		return t.default_font
-	var f := SystemFont.new()
-	f.font_names = FONT_NAMES
-	return f
+	return ui_font()
 
 # ----------------------------------------------------------------------------- style boxes
 ## A rounded cream panel with a soft drop shadow and a slightly darker border.
