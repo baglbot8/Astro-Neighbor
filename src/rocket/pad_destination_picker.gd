@@ -60,6 +60,8 @@ var _card: PanelContainer
 var _scrim: ColorRect
 var _desc_label: Label
 var _hint: PanelContainer
+## Mobile-only way out. There is no Esc key on a phone, and the hint said to press one.
+var _stay_btn: Button
 var _armed := false
 var _arm_timer := 0.0
 var _closing := false
@@ -109,7 +111,11 @@ func _ready() -> void:
 	column.alignment = BoxContainer.ALIGNMENT_END
 	column.add_theme_constant_override("separation", 12)
 	column.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	column.offset_top = -470.0
+	# The column is a fixed-height strip anchored to the bottom. Mobile adds a 'Stay here' button
+	# below the hint, which pushed the stack past 470 px and clipped the button off the bottom of
+	# the screen. Give the touch build the headroom it needs. (The viewport is a virtual 720 high
+	# on every device — canvas_items stretch — so this is the same on any phone.)
+	column.offset_top = -570.0 if MobileUI.is_mobile() else -470.0
 	column.offset_bottom = -EDGE
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(column)
@@ -155,9 +161,22 @@ func _ready() -> void:
 	_hint.theme_type_variation = "HudPillSoft"
 	_hint.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hint.add_child(UIStyle.make_label("◀ ▶ choose  ·  E launch  ·  Esc stay here", "Hint",
-		HORIZONTAL_ALIGNMENT_CENTER))
+	# The hint has to describe the controls the player actually HAS. On a phone there is no Esc
+	# key and no arrow keys, and this card told them to press Esc to back out — reported from a
+	# real iPhone as "no escape button". Tiles are already tappable, so mobile only needs a way out.
+	var mobile := MobileUI.is_mobile()
+	_hint.add_child(UIStyle.make_label(
+		"tap a planet to fly" if mobile else "◀ ▶ choose  ·  E launch  ·  Esc stay here",
+		"Hint", HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(_hint)
+
+	# Built in BOTH modes and hidden on desktop, so a runtime Controls switch has one to show —
+	# the same rule ItemGridPanel follows for its header close button.
+	_stay_btn = UIStyle.make_button("Stay here", "Pill")
+	_stay_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_stay_btn.pressed.connect(_cancel)
+	column.add_child(_stay_btn)
+	_apply_mobile_exit()
 
 	_refresh()
 	UIStyle.pop_in(_card, 0.32)
@@ -209,7 +228,9 @@ func _make_tile(id: String, index: int) -> PanelContainer:
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pill.add_theme_stylebox_override("panel",
 		UIStyle.make_pill_style(UIStyle.YELLOW, UIStyle.YELLOW_EDGE, 3, 4, 16.0, 5.0))
-	var pill_label := UIStyle.make_label("E  Launch", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
+	# No "E" on a phone — there is no keyboard. The tile itself is the tap target there.
+	var pill_label := UIStyle.make_label(
+		"Launch" if MobileUI.is_mobile() else "E  Launch", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
 	pill_label.add_theme_color_override("font_color", UIStyle.FOCUS_ON_WARM)
 	pill.add_child(pill_label)
 	inner.add_child(pill)
@@ -237,9 +258,7 @@ func _process(delta: float) -> void:
 			_armed = true
 			_refresh_pills()
 	if Input.is_action_just_pressed("cancel"):
-		_close()
-		cancelled.emit()
-		UIStyle.play_cancel()
+		_cancel()
 		return
 	if Input.is_action_just_pressed("interact"):
 		_confirm()
@@ -307,6 +326,24 @@ func _refresh_pills() -> void:
 		# Faded, never hidden: `visible = false` takes the pill out of the VBox and the tiles then
 		# centre their contents differently, which slides the unselected globes down half a row.
 		_launch_pills[i].modulate.a = (1.0 if _armed else 0.3) if on else 0.0
+
+
+## The single way out, shared by the `cancel` action and the mobile "Stay here" button.
+func _cancel() -> void:
+	if _closing:
+		return
+	_close()
+	cancelled.emit()
+	UIStyle.play_cancel()
+
+
+## Sized for a thumb on mobile (R2.10 MIN_TOUCH), hidden entirely on desktop.
+func _apply_mobile_exit() -> void:
+	if _stay_btn == null:
+		return
+	var mobile := MobileUI.is_mobile()
+	_stay_btn.visible = mobile
+	_stay_btn.custom_minimum_size = Vector2(MobileUI.MIN_TOUCH * 2.4, MobileUI.MIN_TOUCH) if mobile else Vector2.ZERO
 
 
 func _close() -> void:

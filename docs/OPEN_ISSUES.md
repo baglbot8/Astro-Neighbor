@@ -290,3 +290,65 @@ on it), `pc_detail_lod`'s `dFdx`/`dFdy` derivatives, and the `sd_fbm` noise itse
 ### Cosmetic, separate cause
 The atmosphere's warm limb haze is dimmer in the browser. That is the glow difference — Compatibility
 supports fewer glow modes — and is unrelated to the albedo and ambient issues above.
+
+
+## 33. [MOSTLY FIXED 2026-09-06] Seven faults found by playing the web build on a real iPhone
+Playtested in Chrome on iPhone (which is WebKit, like every iOS browser). Six of the seven are fixed;
+the seventh is a judgement call recorded below.
+
+**1 + 5 — laggy, and the phone heated up.** The project ships desktop quality and a phone GPU paid
+for all of it: highest soft-shadow filter, 4x MSAA, 16x anisotropic, and a seven-level ADDITIVE glow.
+`Platform._apply_quality_profile()` now applies a low-power profile when the renderer is
+Compatibility or the UI is mobile — MSAA off (FXAA instead), hard shadows — and `environment.gd`
+turns glow and SSAO off on the same condition. Desktop is untouched.
+
+**2 — the camera swung wildly on every button press.** A phone emits an EMULATED mouse event for
+each finger, with a `relative` that jumps from the previous position to the new touch point.
+`CameraRig` had mouse look armed regardless of platform and `_unhandled_input` accumulated those, so
+tapping Jump or Fly threw the camera across the sky. Mouse look is now off when `Platform.is_mobile()`
+— on a phone the camera belongs to `TouchControls`, which drives it through `add_look_px()`.
+
+**3 — everything washed out and "blurred with whites".** That was the glow, see 1.
+
+**4 — the sky was black instead of navy.** `sky.gdshader` authors its palette DISPLAY-REFERRED and
+pushes it back through the inverse ACES curve so the tonemapper returns it unchanged. That round trip
+does not close under Compatibility: measured over the upper sky, Forward+ renders `(29,28,57)` and
+Compatibility rendered `(8,5,31)` — flat black on a phone. A gated `compat_sky_gain` (1.35) lifts the
+colour BEFORE the inverse curve, where it is steep, so darks recover while the stars, moons and sun
+disc — added afterwards — are untouched. Sky now measures within ~15% of Forward+.
+
+**6 — the rocket card said "press Esc" and a phone has no Esc key.** `PadDestinationPicker` now
+builds a "Stay here" button (hidden on desktop, the same rule `ItemGridPanel` uses), says "tap a
+planet to fly" instead of the keyboard hints, drops the "E" from the Launch pill, and its column is
+570 px tall on mobile instead of 470 so the new button is not clipped off the bottom.
+
+**7 — after landing, the joystick only panned the camera.** `TouchControls._on_planet_loaded` cleared
+its cached rig but not its pointer state, so a finger held across the flight (or any pointer that
+survived the scene swap) left `_stick.active` true. `_pointer_down` refuses the stick while it is
+active, so every later touch fell through to the camera zone. It now calls `_release_everything()`
+and re-runs `_layout()` on every planet load.
+
+### The foliage gap from item 32 is now fixed too — with the OPPOSITE approach
+Item 32 records two failed attempts to correct `planet_foliage` by dividing its light by ALBEDO. Both
+rendered the trees white and pink. The reason is arithmetic: a leaf's albedo is dark, so dividing is a
+~14x multiply that clips into the ACES shoulder where chroma collapses — which is why the result also
+barely responded to a gain. Re-tested with glow off, in case glow was the amplifier. It was not; it
+blew out exactly the same way.
+
+What works is a straight LIFT of the shader's own `light_gain` under Compatibility
+(`compat_light_boost = 3.6`), which is bounded and cannot explode. Canopy value mean went
+**0.293 -> 0.468** against a Forward+ target of 0.513. Saturation is still higher than Forward+
+(0.588 vs 0.343), so the browser canopy reads a little richer than the desktop one — that is the
+remaining gap, and it is a far better place to be than either black or white.
+
+### Verification
+Desktop (Forward+) is untouched by all of it: with every change in, a pixel diff against the same
+frame without them differs by **0.23%**, confined to the bounding box `(590,363)-(692,511)`, which is
+the astronaut's idle-animation phase — below the **0.32%** run-to-run noise floor measured by running
+identical code twice.
+
+**Process note.** One desktop capture in this session differed from its baseline by 97.6% and looked
+like a serious regression. Re-running the same code twice produced 12.3% and 12.4%, and an
+apples-to-apples comparison in the same directory gave 0.38%. It was a one-off bad run. **Confirm a
+regression is repeatable before chasing it**, and compare within one working copy — a capture from a
+different directory carries its own RNG and import cache and is not a valid baseline.

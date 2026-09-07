@@ -23,6 +23,15 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
+// WEB PARITY (docs/OPEN_ISSUES.md 32). Under the Compatibility (WebGL2) renderer the canopy
+// comes out far too dark: measured V 0.293 against a Forward+ target of 0.513. The correction
+// is a straight LIFT of this shader's own light gain, NOT a corrective albedo divide — that
+// was tried twice and rendered the trees white and pink both times, because dividing by a dark
+// leaf albedo is a ~14x multiply that clips into the ACES shoulder where chroma collapses.
+// `astro_compat` is 1.0 only under Compatibility, so this is a no-op on desktop and mobile.
+global uniform float astro_compat;
+uniform float compat_light_boost : hint_range(1.0, 6.0) = 3.6;
+
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float sway_amount = 0.05;
 uniform float sway_speed = 1.6;
@@ -212,7 +221,7 @@ void light() {
 		shade *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * surface_light, 0.82, 1.14);
 		vec3 shaded = pc_pastel(ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength), shade_s_max, shade_desat);
 		vec3 col = mix(shaded, ALBEDO, lit) * shade;
-		vec3 composed = pc_pastel(col * LIGHT_COLOR / PI, light_s_max, 0.0) * light_gain;
+		vec3 composed = pc_pastel(col * LIGHT_COLOR / PI, light_s_max, 0.0) * (light_gain * mix(1.0, compat_light_boost, astro_compat));
 		DIFFUSE_LIGHT += pc_light_term(composed, ALBEDO);
 		// R2.9: a hint of subsurface warmth where the sun passes through a leaf. Strongest looking
 		// INTO the sun through the shaded side of the canopy, which is when you really see it.

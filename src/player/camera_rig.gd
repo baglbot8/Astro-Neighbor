@@ -648,7 +648,15 @@ func _gameplay_active() -> bool:
 ## Recomputes whether the mouse owns the camera, and mirrors it onto the OS cursor. Cheap; called
 ## every frame as well as on the modal signals, because a cutscene freezes the player without one.
 func _update_mouse_capture() -> void:
-	var want := not _mouse_blocked and not _mouse_freed_by_player and not EventBus.is_modal_open() and _gameplay_active()
+	# NOT ON MOBILE. A phone (and a touch browser) emits an EMULATED mouse event for every finger,
+	# with a `relative` that jumps from wherever the last one was to the new touch point. With
+	# mouse look armed, `_unhandled_input` accumulated those, so tapping Jump or Fly threw the
+	# camera across the sky — reported from a real iPhone. On mobile the camera belongs to
+	# TouchControls, which drives it through add_look_px(). This is checked every frame, so the
+	# pause menu's Controls setting switches it live.
+	var want := (not _mouse_blocked and not _mouse_freed_by_player
+		and not EventBus.is_modal_open() and _gameplay_active()
+		and not Platform.is_mobile())
 	if want == _mouse_look:
 		return
 	_mouse_look = want

@@ -85,6 +85,8 @@ const NIGHT_PARAM := &"astro_night"
 ## its use below, and re-measure BOTH renderers if you change it.
 const COMPAT_AMBIENT_SCALE := 0.75
 var _ambient_scale: float = 1.0
+## True on a phone or in the browser: see _apply_quality_profile in the Platform autoload.
+var _low_power := false
 ## Colour grade LUT (see _grade_lut). Sampled per channel, so each stop shapes R, G and B separately.
 const GRADE_OFFSETS := [0.0, 0.25, 0.6, 1.0]
 ## The top stop is deliberately BELOW 1.0. R2.6: "no near-clipping whites - cap ~0.92". The grade
@@ -159,6 +161,7 @@ var _ring: PlanetRing
 var _sky_bodies: SkyBodies
 
 func _ready() -> void:
+	_low_power = Platform.is_compatibility_renderer() or Platform.is_mobile()
 	_ambient_scale = COMPAT_AMBIENT_SCALE if Platform.is_compatibility_renderer() else 1.0
 	planet_data = data_override if data_override != null else _find_planet_data()
 	planet_radius = planet_data.radius
@@ -437,7 +440,11 @@ func _build_environment() -> void:
 	# Bloom is deliberately gentle (style guide: strength ~0.6, threshold ~1.0). The threshold sits
 	# just above the painted sky's HDR value so only the sun, moons and real emissives glow, and the
 	# luminance cap stops a lamp core from smearing a white disc over half the screen.
-	_env.glow_enabled = true
+	# GLOW OFF ON MOBILE / IN THE BROWSER. Seven glow levels with additive blending is a large
+	# fill-rate cost, and on a real iPhone it also bloomed the whole picture into white — the
+	# player's report was that everything looked bright and 'blurred with whites'. Compatibility
+	# supports fewer glow modes than Forward+ anyway, so this is not the look it is on desktop.
+	_env.glow_enabled = not _low_power
 	_env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	_env.glow_hdr_threshold = GLOW_THRESHOLD
 	_env.glow_hdr_scale = 1.0
@@ -451,7 +458,10 @@ func _build_environment() -> void:
 	_env.set_glow_level(4, 0.25)
 	_env.set_glow_level(5, 0.1)
 	_env.set_glow_level(6, 0.0)
-	_env.ssao_enabled = true
+	# SSAO is UNSUPPORTED under Compatibility — asking for it there only costs setup and misleads
+	# anyone reading this. Measured: disabling it changes a Forward+ frame by 0.000, because the
+	# ground and foliage shaders drive their own AO channel.
+	_env.ssao_enabled = not _low_power
 	_env.ssao_radius = 0.8
 	_env.ssao_intensity = 1.1
 	_env.ssao_power = 1.5

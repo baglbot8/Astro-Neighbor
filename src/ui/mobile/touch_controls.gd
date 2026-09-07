@@ -291,6 +291,13 @@ func _on_placement_changed(active: bool) -> void:
 
 func _on_planet_loaded(_id: String) -> void:
 	_rig = null
+	# LET GO OF EVERYTHING. A finger that was down when the rocket left — or any pointer state
+	# that survived the scene swap — left `_stick.active` true, and `_pointer_down` refuses the
+	# stick while it is active. Every later touch on the stick then fell through to the camera,
+	# so after landing the joystick only panned the view and the astronaut would not move.
+	# Reported from a real iPhone after the first flight.
+	_release_everything()
+	_layout()
 
 
 # ----------------------------------------------------------------------------- pointer routing

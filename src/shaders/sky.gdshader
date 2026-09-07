@@ -80,6 +80,17 @@ uniform vec3 milky_way_color : source_color = vec3(0.34, 0.33, 0.56);
 // ---- display-referred output ---------------------------------------------------------------
 uniform float tonemap_white = 6.0;
 uniform float display_cap : hint_range(0.3, 1.0) = 0.85;
+// WEB PARITY (docs/OPEN_ISSUES.md 32). This sky is authored in DISPLAY-REFERRED colour and
+// pushed back through the inverse ACES curve so the renderer's tonemapper returns the palette
+// unchanged. That round trip does not close under the Compatibility (WebGL2) renderer, which
+// the web export is forced onto: measured over the upper sky, Forward+ renders (29,28,57) —
+// the intended navy — and Compatibility renders (8,5,31), which reads as flat black on a
+// phone. Reported from a real iPhone as 'the sky is black instead of navy'.
+// The lift is applied BEFORE the inverse curve, so it moves the authored colour rather than
+// scaling the result: the curve is steep down there, so darks recover far more than the sun
+// and stars, which are added afterwards and are untouched.
+global uniform float astro_compat;
+uniform float compat_sky_gain : hint_range(1.0, 4.0) = 1.35;
 
 const float WISP_PERIOD = 9.0;
 // Stars are clamped just under Environment.glow_hdr_threshold so they stay crisp pinpoints
@@ -280,7 +291,7 @@ void sky() {
 		}
 
 		// ---- to HDR ----------------------------------------------------------------------
-		col = aces_inverse(cap_display(col, display_cap), tonemap_white);
+		col = aces_inverse(cap_display(col * mix(1.0, compat_sky_gain, astro_compat), display_cap), tonemap_white);
 
 		// ---- stars: always present, dimmer by day ---------------------------------------
 		// Suppressed inside the bright limb band (the only place there is enough dust to

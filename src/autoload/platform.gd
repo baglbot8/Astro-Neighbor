@@ -37,6 +37,29 @@ func _ready() -> void:
 	# game which control scheme a real phone actually got — see the browser note in _detect().
 	print("[Platform] ui mode: ", mode_name(), " (forced: ", _forced, ")")
 	_apply_renderer_parity()
+	_apply_quality_profile()
+
+
+## LOW-POWER PROFILE for phones and the browser build. Reported from a real iPhone: heavy lag,
+## the whole picture blurring into white, and the phone heating up. The project ships desktop
+## quality — highest soft-shadow filter, 4x MSAA, 16x anisotropic, and a seven-level additive
+## glow — and a phone GPU pays for all of it every frame at full screen resolution. This is
+## applied ONLY when the renderer is Compatibility or the UI is mobile, so the desktop build
+## the player likes is untouched.
+func _apply_quality_profile() -> void:
+	if not (is_compatibility_renderer() or is_mobile()):
+		return
+	var vp := get_viewport()
+	if vp != null:
+		# MSAA is a per-pixel cost across the whole frame and is the single most expensive
+		# setting here on mobile hardware.
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+	# Soft shadows at filter quality 4 take many taps per pixel. Hard shadows keep the shape
+	# (which is what reads on a small screen) at a fraction of the cost.
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
+	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
+	print("[Platform] low-power profile applied (no MSAA, hard shadows)")
 
 
 ## Compatibility is the renderer WITHOUT a RenderingDevice. True for the web export (forced onto
