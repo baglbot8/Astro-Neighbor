@@ -42,7 +42,7 @@ global uniform float astro_night;
 // `planet_common.gdshaderinc` already has the correct helper: `pc_light_term` + `pc_albedo_floor`.
 // ---------------------------------------------------------------------------------------------
 
-uniform int surface_kind : hint_range(0, 6) = 0;
+uniform int surface_kind : hint_range(0, 7) = 0;
 /// hint_range is advisory in Godot, not clamping. Values above 2 are legitimate: a near-white
 /// surface sits on the ACES shoulder, so a boulder needed 3.2 to move its albedo at all.
 uniform float surface_strength : hint_range(0.0, 4.0) = 1.0;
@@ -56,6 +56,9 @@ uniform float surface_scale : hint_range(0.05, 8.0) = 1.0;
 uniform float surface_macro : hint_range(0.0, 0.6) = 0.0;
 uniform float surface_macro_cycles : hint_range(0.2, 12.0) = 2.6;
 /// Weights knots against rings for wood. 0.55 reads as marbling; 0.15-0.25 gives combed lines.
+uniform float surface_spot_amount : hint_range(0.0, 2.0) = 1.0;
+uniform float surface_scale_amount : hint_range(0.0, 2.0) = 1.0;
+uniform float surface_spot_radius : hint_range(0.05, 0.60) = 0.34;
 uniform float surface_knot : hint_range(0.0, 1.0) = 0.55;
 
 varying float v_sheen;
@@ -74,7 +77,6 @@ varying float v_detail;
 void vertex() {
 	v_objpos = VERTEX;
 	v_objnorm = NORMAL;
-	v_flat_nrm = NORMAL;
 }
 
 uniform vec4 albedo : source_color = vec4(1.0);
@@ -107,6 +109,15 @@ void fragment() {
 	ALBEDO = base;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
+	// SPACE BUG, fixed. This used to be assigned in vertex(), where NORMAL is in MODEL space,
+	// while light() compares it against fragment's VIEW-space NORMAL:
+	//     dot(normalize(NORMAL) - normalize(v_flat_nrm), LIGHT) * 2.4
+	// The difference of two unit vectors in DIFFERENT spaces has magnitude up to 2, so that term
+	// was garbage that swung with the camera rather than with the surface detail — and it stayed
+	// hidden only because no character had surface_kind > 0. grass_planet.gdshader and
+	// planet_foliage.gdshader both already capture it here, in fragment, before NORMAL is bent by
+	// the detail bump below. Same thing now.
+	v_flat_nrm = NORMAL;
 	v_sheen = 0.0;
 	if (surface_kind > 0) {
 		float lod = sd_lod(VERTEX, surface_lod_near, surface_lod_far);
@@ -118,6 +129,8 @@ void fragment() {
 		else if (surface_kind == 3) { sd = sd_wood(wpos, surface_grain_dir, lod, surface_strength, surface_scale, surface_knot); }
 		else if (surface_kind == 4) { sd = sd_rock(wpos, onrm, lod, surface_strength, surface_scale); }
 		else if (surface_kind == 6) { sd = sd_rubber(wpos, onrm, lod, surface_strength, surface_scale); }
+		else if (surface_kind == 7) { sd = sd_skin(wpos, onrm, lod, surface_strength, surface_scale,
+			surface_spot_amount, surface_scale_amount, surface_spot_radius); }
 		else { sd = sd_foliage(wpos, onrm, lod, surface_strength, surface_scale); }
 		// The macro band uses its own generous fade: it is the term that must survive the distance.
 		v_detail = sd.height;

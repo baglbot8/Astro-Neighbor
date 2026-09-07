@@ -38,6 +38,14 @@ var _t: float = 0.0
 
 func _init() -> void:
 	super()
+	# R3.2 — HIS OWN HEAD. He shared one cached mesh with Zorp and the twins, which is exactly what
+	# the user meant by "it still looks like it's just a reused head of the old zorp or mayor".
+	# Wider, notably shallower, and flatter across the front so his goggles and plates sit on a plane
+	# instead of curving away. Exponent held at 3.2 for the same faceting reason as the others.
+	head_semi = Vector3(0.3520, 0.2780, 0.3250)
+	head_n = 3.2
+	# Holds the chin where it was (0.945 - 0.3258 = 0.6192).
+	head_y = 0.8972
 	anim_time_scale = 0.62
 	# R2.3 ("smaller and less glossy eyes relative to the head"): scaled with the base class's
 	# own 19 % reduction so the robots keep their slightly chunkier screen features without going
@@ -92,11 +100,13 @@ func _build_geometry() -> void:
 		_orient_on_head(rv, -28.0 + 28.0 * float(i), EYE_PITCH + 40.0, 0.004)
 		_mi(cylinder(0.013, 0.013, 0.010, 8), m_bronze, rv, Vector3(0.0, 0.0, -0.012), "Head").rotation.x = PI * 0.5
 	var chin := _node("ChinPlate", _face, Vector3.ZERO)
-	_orient_on_head(chin, 0.0, -56.0, 0.008)
+	# Raised with the shell. At the old -56 on this flatter head the plate's surface normal
+	# tilts to ~80 degrees below horizontal and it drops off the front silhouette.
+	_orient_on_head(chin, 0.0, -46.0, 0.008)
 	_mi(rounded_box(Vector3(0.290, 0.088, 0.030), 0.020, 14), m_dark, chin, Vector3(0.0, 0.0, -0.006), "Plate")
 	# side plates instead of ears
 	for sx2: float in [-1.0, 1.0]:
-		var cap := _mi(cylinder(0.062, 0.062, 0.042, 14), m_dark, _head, Vector3(0.336 * sx2, -0.03, 0.02), "SidePlate")
+		var cap := _mi(cylinder(0.062, 0.062, 0.042, 14), m_dark, _head, Vector3((head_semi.x - 0.006) * sx2, -0.03, 0.02), "SidePlate")
 		cap.rotation.z = PI * 0.5
 		var bolt := _mi(cylinder(0.024, 0.024, 0.050, 8), m_bronze, _head, Vector3(0.348 * sx2, -0.03, 0.02), "Bolt")
 		bolt.rotation.z = PI * 0.5
@@ -109,7 +119,7 @@ func _build_geometry() -> void:
 		wing.rotation.z = PI * 0.5 * float(i)
 	_mi(rounded_box(Vector3(0.120, 0.070, 0.018), 0.014, 10), m_dark, _torso, Vector3(0.0, TORSO_Y - 0.075, TORSO_RZ * 0.92), "Hallmark")
 	_mi(sphere(0.018, 10, 5), m_gold, _torso, Vector3(0.0, TORSO_Y - 0.075, TORSO_RZ * 0.96), "Seal")
-	_mi(rounded_box(Vector3(0.230, 0.030, 0.026), 0.012, 10), m_dark, _head, Vector3(0.0, -0.02, HEAD_R * 0.86), "BackSeam")
+	_mi(rounded_box(Vector3(0.230, 0.030, 0.026), 0.012, 10), m_dark, _head, Vector3(0.0, -0.02, head_semi.z - 0.008), "BackSeam")
 
 	_build_face(m_dark, m_gold)
 	_build_top_hat(m_hat, m_bronze)
@@ -141,7 +151,7 @@ func _build_face(_m_frame: Material, m_gold: Material) -> void:
 	for sx2: float in [-1.0, 1.0]:
 		var strap := _node("Strap", _head, Vector3(0.0, 0.02, 0.0))
 		strap.rotation.y = 1.05 * sx2
-		var seg := _mi(rounded_box(Vector3(0.150, 0.048, 0.030), 0.010, 12), _toon(BRONZE, _matte({})), strap, Vector3(0.0, 0.0, -0.335), "Seg")
+		var seg := _mi(rounded_box(Vector3(0.150, 0.048, 0.030), 0.010, 12), _toon(BRONZE, _matte({})), strap, Vector3(0.0, 0.0, -(head_semi.z + 0.062)), "Seg")
 		seg.rotation.y = 0.30 * sx2
 
 	# R2.3: no blush on the robots. He is a brass automaton; two rouge patches read as a doll.
@@ -161,7 +171,7 @@ func _build_face(_m_frame: Material, m_gold: Material) -> void:
 		# ANGLE IS EVERYTHING HERE. Raked out near horizontal they read as EARS, which is the exact
 		# thing this change exists to remove. They have to rise: set high on the crown with only a
 		# modest outward roll, so the silhouette goes UP and back.
-		var horn := _node("Horn", _head, Vector3(HEAD_SEMI.x * 0.62 * sxh, HEAD_SEMI.y * 0.68, 0.010))
+		var horn := _node("Horn", _head, Vector3(head_semi.x * 0.62 * sxh, head_semi.y * 0.68, 0.010))
 		horn.rotation = Vector3(-0.34, 0.0, -0.40 * sxh)
 		_mi(superellipsoid(Vector3(0.042, 0.132, 0.042), 2.6, 10, 6), _toon(BRASS, _matte({"rim": 0.02})),
 			horn, Vector3.ZERO, "Horn")
@@ -181,14 +191,15 @@ func _build_face(_m_frame: Material, m_gold: Material) -> void:
 	# cream spheres sitting directly under the mouth, which read as a set of teeth; it is now a
 	# single tapered plate in muted bone, dropped 6 deg lower and clear of the smile.
 	var beard := _node("Beard", _face, Vector3.ZERO)
-	_orient_on_head(beard, 0.0, -43.0, 0.004)
+	# Raised with the shell, same reason as the chin plate above.
+	_orient_on_head(beard, 0.0, -36.0, 0.004)
 	var m_white := _toon(WHITE, {"spec": 0.02, "rim": 0.02, "shade": 0.20})
 	_mi(superellipsoid(Vector3(0.104, 0.036, 0.022), 2.7, 12, 7), m_white, beard, Vector3(0.0, 0.006, -0.004), "Plate")
 	_mi(superellipsoid(Vector3(0.052, 0.034, 0.019), 2.6, 8, 5), m_white, beard, Vector3(0.0, -0.028, -0.002), "Tip")
 
 
 func _build_top_hat(m_hat: Material, m_band: Material) -> void:
-	var hat := _node("TopHat", _head, Vector3(0.0, HEAD_R * 0.83, 0.015))
+	var hat := _node("TopHat", _head, Vector3(0.0, head_semi.y - 0.006, 0.015))
 	hat.rotation.x = -0.10
 	hat.rotation.z = 0.09
 	_mi(cylinder(0.158, 0.174, 0.022, 18), m_hat, hat, Vector3.ZERO, "Brim")

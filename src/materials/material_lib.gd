@@ -17,7 +17,7 @@ const STAR_SHADER := preload("res://src/shaders/star.gdshader")
 static var _cache: Dictionary = {}
 
 ## R2.9 surface kinds, matching the `surface_kind` uniform in toon_soft.gdshader.
-const SURFACE_KINDS := {"none": 0, "cloth": 1, "metal": 2, "wood": 3, "rock": 4, "foliage": 5, "rubber": 6}
+const SURFACE_KINDS := {"none": 0, "cloth": 1, "metal": 2, "wood": 3, "rock": 4, "foliage": 5, "rubber": 6, "skin": 7}
 
 static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 	var key := "toon|%s|%s" % [color.to_html(), str(opts)]
@@ -64,6 +64,10 @@ static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 		m.set_shader_parameter("surface_macro", opts.get("surface_macro", 0.0))
 		m.set_shader_parameter("surface_macro_cycles", opts.get("surface_macro_cycles", 2.6))
 		m.set_shader_parameter("surface_knot", opts.get("surface_knot", 0.55))
+		# "skin" only: spot vs scale-edge weighting and the spot size.
+		m.set_shader_parameter("surface_spot_amount", opts.get("surface_spot", 1.0))
+		m.set_shader_parameter("surface_scale_amount", opts.get("surface_scales", 1.0))
+		m.set_shader_parameter("surface_spot_radius", opts.get("surface_spot_radius", 0.34))
 	if opts.has("texture"):
 		m.set_shader_parameter("albedo_texture", opts["texture"])
 		m.set_shader_parameter("use_texture", true)

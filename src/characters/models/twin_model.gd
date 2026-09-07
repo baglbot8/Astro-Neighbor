@@ -26,6 +26,17 @@ const BULB := Color("#b8ff8a")
 const SCLERA := Color("#f2f4e6")     ## pale eyeball; the face's dark oval becomes the pupil
 const GRIN := Color("#3a2118")
 const TOOTH := Color("#f4efe2")
+## R3.2 skin texture — the cellular `skin` kind, same as Zorp. See alien_model.gd for why `rock` was
+## rejected. Slightly finer and weaker than his, so the twins read as smoother-skinned than he does.
+const SURF_HEAD := {"surface": "skin", "surface_scale": 1.9, "surface_strength": 0.95,
+	"surface_spot": 1.2, "surface_scales": 0.25, "surface_spot_radius": 0.34,
+	"surface_near": 9.0, "surface_far": 26.0, "surface_macro": 0.07}
+## MUCH weaker than the head, and with the cell EDGES nearly off. An arm is a small, strongly curved
+## capsule, so the same settings that read as skin on a 680 mm head render as cauliflower on a 90 mm
+## limb — the ridge term is what does it. Spots only here.
+const SURF_LIMB := {"surface": "skin", "surface_scale": 6.5, "surface_strength": 0.75,
+	"surface_spot": 0.9, "surface_scales": 0.12, "surface_spot_radius": 0.30,
+	"surface_near": 7.0, "surface_far": 20.0}
 
 ## Body colour (Pip: leaf green, Pop: yellow-green).
 ## Which eyestalk silhouette this twin wears. "tall" gives one long stalk and one short one, an
@@ -53,14 +64,23 @@ func _init() -> void:
 	# face_scale that keeps the smile inside the mandated 16-25 % of head width.
 	body_scale = 0.80
 	face_scale = 1.08
+	# R3.2 — THEIR OWN HEAD. Wider and much flatter than the shared chibi dome, which they used to
+	# share as a literal cached mesh with Zorp and the Mayor. Exponent held at 3.2 rather than the
+	# 3.6 first proposed: two reviewers built the higher value and rendered a faceted box, because
+	# superellipsoid() samples uniform angular directions and a high exponent packs all the curvature
+	# into a narrow chamfer band.
+	head_semi = Vector3(0.3420, 0.2320, 0.2760)
+	head_n = 3.2
+	# Holds the chin exactly where it rendered before (0.945 - 0.3258 * 0.88 = 0.6583).
+	head_y = 0.8903
 
 
 func _build_geometry() -> void:
 	var dark := skin.darkened(0.18)
 	_add_torso_bean(skin)
-	_add_arms(skin, skin, 0)
-	_add_legs(dark, skin.darkened(0.34))
-	_add_head_shell(skin)
+	_add_arms(skin, skin, 0, SURF_LIMB, SURF_LIMB)
+	_add_legs(dark, skin.darkened(0.34), SURF_LIMB)
+	_add_head_shell(skin, SURF_HEAD)
 
 	# R3 — LESS ANIMAL. The ears, the muzzle, the nose and the blush are all gone: those four are
 	# what made the twins read as green teddy bears rather than as creatures. Against the reference
@@ -72,33 +92,33 @@ func _build_geometry() -> void:
 	_brows.clear()
 	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
 	if mouth_node != null:
-		_orient_on_head(mouth_node, 0.0, -29.0, 0.004)
-		mouth_node.scale = Vector3(1.48, 1.34, 1.0)
+		_orient_on_head(mouth_node, 0.0, -17.0, 0.004)
+		mouth_node.scale = Vector3(1.75, 1.50, 1.0)
 		_add_wide_grin(mouth_node, GRIN, TOOTH, Vector3(0.078, 0.030, 0.019),
 			[[-0.038, 0.018], [0.004, 0.021], [0.040, 0.015]])
-	var by := HEAD_SEMI.y * 0.70
+	var by := head_semi.y * 0.70
 	var specs: Array = []
 	if stalk_style == "closeset":
 		# Two short stalks close together and slightly splayed — the wide-eyed one of the pair.
 		specs = [
-			{"base": Vector3(-0.052, by, -0.040), "tip": Vector3(-0.086, 0.408, -0.052), "r": 0.026, "splay": -0.12},
-			{"base": Vector3(0.052, by, -0.040), "tip": Vector3(0.092, 0.396, -0.052), "r": 0.026, "splay": 0.12},
+			{"base": Vector3(-0.046, by, -0.035), "tip": Vector3(-0.076, 0.359, -0.046), "r": 0.023, "splay": -0.12},
+			{"base": Vector3(0.046, by, -0.035), "tip": Vector3(0.081, 0.349, -0.046), "r": 0.023, "splay": 0.12},
 		]
 	else:
 		# One long stalk and one short — deliberately lopsided, which no animal is.
 		specs = [
-			{"base": Vector3(-0.098, by, -0.040), "tip": Vector3(-0.150, 0.560, -0.056), "r": 0.027, "splay": -0.22},
-			{"base": Vector3(0.096, by, -0.040), "tip": Vector3(0.132, 0.404, -0.050), "r": 0.027, "splay": 0.18},
+			{"base": Vector3(-0.086, by, -0.035), "tip": Vector3(-0.132, 0.493, -0.049), "r": 0.024, "splay": -0.22},
+			{"base": Vector3(0.084, by, -0.035), "tip": Vector3(0.116, 0.356, -0.044), "r": 0.024, "splay": 0.18},
 		]
-	_add_eyestalks(specs, skin, SCLERA, 0.055)
-	# A modest head keeps the weight up on the stalks, the way the reference creatures carry it.
-	_head.scale = Vector3(0.88, 0.88, 0.88)
+	_add_eyestalks(specs, skin, SCLERA, 0.048)
 	_build_apron()
 
 	for i in maxi(antenna_count, 1):
-		var sx2 := 0.0 if antenna_count == 1 else (-0.062 if i == 0 else 0.062)
+		# +/-0.085, not +/-0.062: Pop's two antennae used to clear his eyestalks by about a
+		# millimetre, and the lower crown would have pushed the bulbs straight through the stems.
+		var sx2 := 0.0 if antenna_count == 1 else (-0.085 if i == 0 else 0.085)
 		var tilt := 0.0 if antenna_count == 1 else (0.38 if i == 0 else -0.38)
-		var a := _add_antenna(_head, Vector3(sx2, HEAD_R * 0.92, 0.01), tilt, skin.darkened(0.28), BULB, 0.15, 0.036)
+		var a := _add_antenna(_head, Vector3(sx2, head_semi.y - 0.004, -0.030), tilt, skin.darkened(0.28), BULB, 0.15, 0.036)
 		_antennae.append(a)
 		_bulb_mats.append(a.get_meta("bulb_mat") as ShaderMaterial)
 

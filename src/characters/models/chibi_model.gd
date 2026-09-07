@@ -105,6 +105,27 @@ enum P {
 ## stay put). Small neighbours raise it so their eyes and mouth still read at 6.5 m — scaling the
 ## whole model down is what made Pip & Pop faceless at gameplay distance.
 @export var face_scale: float = 1.0
+
+## HEAD SHAPE, PER SPECIES. Set these in a subclass `_init()`, which runs before `_build_geometry()`.
+##
+## Why they are vars and not consts: GDScript will not let a subclass redeclare a parent const —
+## it is a hard parse error ("The member HEAD_R already exists in parent class"), so every organic
+## neighbour was stuck with one shape. Worse, `superellipsoid()` caches on its arguments, so Zorp,
+## Pip, Pop and Mayor Orbit were literally sharing ONE ArrayMesh. "It still looks like it's just a
+## reused head" was true at the mesh level.
+##
+## `_head.scale` was the only lever before this, and it is uniform-only: it shrinks the eyestalks,
+## the antenna, the grin and every face feature along with the dome. These let a species change the
+## PROPORTIONS of its head while the face-placement maths in `_orient_on_head` follows automatically.
+##
+## Bolt and DJ Nova ignore all of this — they build their own `rounded_box` heads and never call
+## `_add_head_shell` or `_orient_on_head`.
+var head_semi: Vector3 = HEAD_SEMI
+var head_n: float = HEAD_N
+var head_y: float = HEAD_Y
+## Shell tessellation. Raising `head_n` concentrates the curvature into a narrow chamfer band, so a
+## higher exponent needs MORE segments, never fewer, or the head renders as a faceted box.
+var head_segs: Vector2i = Vector2i(44, 22)
 ## REVERTED 2026-09-05. docs/OPEN_ISSUES.md issue 1 is RESOLVED: the "golf-ball" stipple was Godot's
 ## PCSS blocker search, fixed by `light_angular_distance = 0` on the sun, so the head no longer has
 ## to give up its shadow. Default is now false — every neighbour casts a complete ground shadow
@@ -204,7 +225,7 @@ func rebuild() -> void:
 	_body = _node("Body", _root, Vector3.ZERO)
 	_torso_pivot = _node("TorsoPivot", _body, Vector3(0.0, HIP_Y, 0.0))
 	_torso = _node("Torso", _torso_pivot, Vector3(0.0, -HIP_Y, 0.0))
-	_head = _node("Head", _torso, Vector3(0.0, HEAD_Y, 0.0))
+	_head = _node("Head", _torso, Vector3(0.0, head_y, 0.0))
 	_arm_l = _node("ArmL", _torso, Vector3(-SHOULDER.x, SHOULDER.y, SHOULDER.z))
 	_arm_r = _node("ArmR", _torso, Vector3(SHOULDER.x, SHOULDER.y, SHOULDER.z))
 	_leg_l = _node("LegL", _root, Vector3(-HIP_X, HIP_Y, 0.0))
@@ -582,11 +603,16 @@ static func _crossed(a: float, b: float, mark: float) -> bool:
 ## chamfered corners. `_orient_on_head` uses the same surface, so the face lands on it exactly.
 ## Adds a chamfer seam around the crown so the top plane reads as a plane. Returns the shell mesh.
 func _add_head_shell(color: Color, opts: Dictionary = {}) -> MeshInstance3D:
-	var mi := _mi(superellipsoid(HEAD_SEMI, HEAD_N, 44, 22), _toon(color, _matte(opts)), _head, Vector3.ZERO, "HeadShell")
+	var mi := _mi(superellipsoid(head_semi, head_n, head_segs.x, head_segs.y), _toon(color, _matte(opts)), _head, Vector3.ZERO, "HeadShell")
 	if bool(opts.get("crown_seam", true)):
 		var seam_col: Color = opts.get("seam_color", color.darkened(0.16))
-		var seam := _mi(superellipsoid(Vector3(HEAD_SEMI.x * 0.795, HEAD_SEMI.y * 0.10, HEAD_SEMI.z * 0.795), 2.8, 18, 6),
-			_toon(seam_col, _matte({"rim": 0.02})), _head, Vector3(0.0, HEAD_SEMI.y * 0.735, 0.012), "CrownSeam")
+		# The seam disc's own edge sits at 0.795 of the head's x semi-axis, so the height that puts
+		# that edge exactly ON the shell is (1 - 0.795^n)^(1/n) — which is 0.7351 at the default
+		# n = 2.6, i.e. the 0.735 literal this replaces. Deriving it keeps the seam welded to the
+		# shell for any species that changes `head_n`.
+		var seam_frac := pow(1.0 - pow(0.795, head_n), 1.0 / head_n)
+		var seam := _mi(superellipsoid(Vector3(head_semi.x * 0.795, head_semi.y * 0.10, head_semi.z * 0.795), 2.8, 18, 6),
+			_toon(seam_col, _matte({"rim": 0.02})), _head, Vector3(0.0, head_semi.y * seam_frac, 0.012), "CrownSeam")
 		seam.rotation.x = -0.06
 	return mi
 
@@ -622,10 +648,14 @@ func _add_muzzle(color: Color, pitch_deg: float = -14.5, size3: Vector3 = Vector
 ## Short stub arms ending in mitten hands. The shoulder is a bevelled cap and the mitt is a
 ## superellipsoid (R2.3), so the arm is a tapered form with a knuckle plane rather than three balls.
 ## `fingers` draws 3 little bumps (Zorp's hands).
-func _add_arms(sleeve: Color, hand_color: Color, fingers: int = 0) -> void:
-	var m_sleeve := _toon(sleeve, _matte({}))
-	var m_cuff := _toon(sleeve.darkened(0.16), _matte({}))
-	var m_hand := _toon(hand_color, _matte({}))
+## `hand_opts` / `sleeve_opts` exist so a species can put SKIN TEXTURE on its bare parts. Spots that
+## stop at the jaw look like a mask, so whatever the head wears the hands and arms need too. They are
+## separate dicts because a sleeve is often cloth while the hand is bare.
+func _add_arms(sleeve: Color, hand_color: Color, fingers: int = 0, hand_opts: Dictionary = {},
+		sleeve_opts: Dictionary = {}) -> void:
+	var m_sleeve := _toon(sleeve, _matte(sleeve_opts))
+	var m_cuff := _toon(sleeve.darkened(0.16), _matte(sleeve_opts))
+	var m_hand := _toon(hand_color, _matte(hand_opts))
 	var sides: Array = [[-1.0, _arm_l], [1.0, _arm_r]]
 	for side: Array in sides:
 		var sx: float = side[0]
@@ -649,8 +679,10 @@ func _add_arms(sleeve: Color, hand_color: Color, fingers: int = 0) -> void:
 
 ## Stubby legs with chunky boots: a superellipsoid shoe with a genuinely FLAT sole and a flat top
 ## plane, plus a thin sole plate and a toe cap so the foot reads as a shoe and not a squashed ball.
-func _add_legs(leg_color: Color, foot_color: Color) -> void:
-	var m_leg := _toon(leg_color, _matte({}))
+## `leg_opts` carries skin texture onto a bare leg. The BOOT materials below are deliberately left
+## alone — a boot is not skin.
+func _add_legs(leg_color: Color, foot_color: Color, leg_opts: Dictionary = {}) -> void:
+	var m_leg := _toon(leg_color, _matte(leg_opts))
 	var m_foot := _toon(foot_color, _matte({"spec": 0.06}))
 	var m_sole := _toon(foot_color.darkened(0.30), _matte({"spec": 0.0}))
 	for leg: Node3D in [_leg_l, _leg_r]:
@@ -1020,8 +1052,8 @@ func _orient_on_head(node: Node3D, yaw_deg: float, pitch_deg: float, inset: floa
 	var yaw := deg_to_rad(yaw_deg)
 	var pitch := deg_to_rad(pitch_deg)
 	var d := Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
-	var p := se_point(d, HEAD_SEMI, HEAD_N)
-	var outward := se_normal(p, HEAD_SEMI, HEAD_N)
+	var p := se_point(d, head_semi, head_n)
+	var outward := se_normal(p, head_semi, head_n)
 	node.position = p - outward * inset
 	node.basis = Basis.looking_at(outward, Vector3.UP)
 

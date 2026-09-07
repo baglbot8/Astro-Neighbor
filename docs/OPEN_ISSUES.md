@@ -403,3 +403,79 @@ scene itself rather than post-processing, and the long pause when approaching a 
 generation (`Planet.prebuild` already caches geometry; the props are rebuilt per visit). The next
 lever is cutting MultiMesh instance counts on mobile — thousands of 16 cm grass blades per planet —
 which is a visual change and must be measured, not guessed.
+
+
+## 35. [2026-09-07] Every organic neighbour shared ONE head mesh — fixed, plus alien skin
+Found by a 13-agent design pass. The user's words were "it still looks like it's just a reused head
+of the old zorp or mayor", and that was **literally true at the mesh level**: `_add_head_shell` calls
+`superellipsoid(HEAD_SEMI, HEAD_N, 44, 22)` and `superellipsoid()` caches on its arguments, so Zorp,
+Pip, Pop and Mayor Orbit all held the same `ArrayMesh`. Bolt and DJ Nova escaped only because they
+build their own `rounded_box` heads.
+
+**Why nobody had fixed it:** a subclass cannot redeclare a parent `const` — it is a hard parse error
+("The member HEAD_R already exists in parent class"). `_head.scale` was the only lever and it is
+uniform-only, so it shrank the eyestalks, antenna, grin and every face feature along with the dome.
+
+**Fix.** `head_semi` / `head_n` / `head_y` / `head_segs` are instance vars on ChibiModel, defaulting to
+the consts, read by `_add_head_shell` and `_orient_on_head`. The crown seam's height is now derived,
+`(1 - 0.795^n)^(1/n)`, which returns 0.7351 at the default n = 2.6 — i.e. the 0.735 literal it
+replaces — so it stays welded to the shell at any exponent. Zorp, the twins and the Mayor each set
+their own shape and the two `_head.scale` hacks are gone.
+
+**EXPONENT — the trap.** The design pass proposed n = 3.6-4.0. Two reviewers independently BUILT it
+and rendered it, and at that exponent every head becomes a hard-edged faceted BOX: `superellipsoid()`
+samples a UV sphere's uniform angular directions, so a high exponent packs nearly all the curvature
+into a narrow chamfer band that a fixed segment count cannot resolve. Shipped at **3.2** with
+`head_segs` held at (44, 22). **Raising `head_n` requires raising `head_segs` too.**
+
+### A real shader bug found on the way: v_flat_nrm was in the wrong space
+`toon_soft.gdshader` assigned `v_flat_nrm = NORMAL` in **vertex()**, where NORMAL is MODEL space,
+while `light()` compares it against fragment's VIEW-space NORMAL:
+`dot(normalize(NORMAL) - normalize(v_flat_nrm), LIGHT) * 2.4`. The difference of two unit vectors in
+different spaces has magnitude up to 2, so that term was garbage that swung with the camera instead
+of with the surface. It stayed hidden for one reason only: `surface_kind` was 0 on every character,
+so the branch never ran. `grass_planet.gdshader` and `planet_foliage.gdshader` both already capture
+it in fragment; toon_soft now does the same. **This had to be fixed before any character skin.**
+
+### sd_skin — a cellular pattern, because rock is the wrong shape
+`sd_rock` was tried first and rejected: it is fbm, so it produces MOTTLING, and its tint amplitude
+tops out near 6% — invisible at gameplay distance. Spots and scales are CELLULAR. `sd_skin` runs one
+3x3x3 cellular pass and reads two things from it: distance to the nearest feature point gives round
+spots, and the gap to the second nearest gives the ridge between cells, which is what reads as
+scales. Only some cells get a spot, so the skin is blotchy rather than a regular polka dot.
+`tint` and `height` deliberately share one signed term — a first version where they disagreed made
+the lighting fight the albedo, which is why every other sd_* in that file pairs them.
+
+**AMPLITUDE IS A PALETTE COST, and it is measured.** An A/B on one identical frame (strength 0.0 vs
+on) moved Zorp's head-crop saturation mean by **+0.099**. The tint multiplies the albedo, and
+darkening a colour RAISES its HSV saturation, so a strong pattern pushes straight at the R2.6 gate.
+Shipped amplitude is about 30% lower than the first pass, at **+0.073**. **Re-measure in
+`src/world/world.tscn`, not a showcase, before raising it** — the showcase's own lighting reads
+about +0.10 higher than the documented world figure, so a showcase number cannot be compared against
+the gate at all.
+
+**Limbs need their own preset.** The head setting rendered the twins' arms as cauliflower: an arm is
+a small, strongly curved capsule, and the cell-EDGE term is what does it. Limbs run finer, weaker,
+and with the edges nearly off — spots only. `_add_arms` / `_add_legs` take `hand_opts` /
+`sleeve_opts` / `leg_opts` for this; the boot materials are deliberately excluded.
+
+### Deliberately NOT shipped
+* **Nostrils.** The user asked for "big nostrils". Both reviewers built the proposed asymmetric raked
+  slits and reported that in a real render they read as exactly what the spec said they must not — a
+  NOSE, because two dark marks above a wide mouth is the universal nostril glyph. It also contradicts
+  `reference/Alien References.webp`, where no creature has one. Raised with the user rather than
+  decided here.
+* **A 2.05x grin.** Proposed, built, and rendered as a black gaping hole with the teeth stretched
+  into fangs. Shipped at 1.85 x 1.55 with four uneven blunt teeth instead of three.
+* **Mayor Orbit's cheek bars.** Geometrically fine, but a reviewer's capture showed the 150 mm bar
+  sitting on the cheek's silhouette edge, reading as a brown stick glued to his face.
+
+### Still open
+Mayor Orbit is **6130 triangles against a 6000 budget** — pre-existing, not caused by this change
+(the baseline was already 6130), but it should be paid down; his top hat is four cylinders at
+seg 18/16/16/14. Stella is 8176, also pre-existing and far over. And `docs/STYLE_GUIDE.md:216`'s
+"mouth = 16-25% of head width" gate is written for a face with eyes ON it; the stalk-eyed neighbours
+ship well over it deliberately, and that exemption should be written into the style guide the way the
+eye-spacing one was rather than left implicit.
+
+See `docs/NEXT_WORLDS.md` for the measured build spec for the two new worlds, which is not built yet.

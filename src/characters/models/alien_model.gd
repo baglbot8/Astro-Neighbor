@@ -44,32 +44,58 @@ const FOOT := Color("#665c93")
 const HOVER := 0.05
 ## Eyestalks. Base on the head's upper slope, tip well clear of the shell so the silhouette reads as
 ## "eyes on stems" from any angle — that outline is the whole point of the redesign.
-const STALK_BASE_X := 0.112
+const STALK_BASE_X := 0.104
 const STALK_BASE_Y := 0.70          ## multiplied by HEAD_SEMI.y
-const STALK_TIP_X := 0.196
-const STALK_TIP_Y := 0.630
+const STALK_TIP_X := 0.188
+## Absolute head-local. HEAD_SHRINK used to scale this down to 0.529 on screen; it is now
+## authored directly so the stems keep the length they actually rendered at.
+const STALK_TIP_Y := 0.512
 const STALK_Z := -0.045
-const STALK_R := 0.030
+const STALK_R := 0.026
+## R3.2 SKIN TEXTURE — "add some scales or spots ... to give it more texture".
+## This needs NO new shader code: toon_soft already carries the whole R2.9 surface-detail chain and
+## `surface_kind` is simply 0 on every neighbour, which is why alien skin has always read as flat
+## plastic. Turning on the existing `rock` kind gives a pebbled, scaly grain.
+##
+## Two presets because one frequency cannot serve both. sd_rock runs at ~46 cycles per unit at
+## scale 1.0, so on the 640 mm head scale 0.26 puts about 7 scale-cells across the face — readable at
+## the 7.4 m gameplay camera. The limbs are far smaller (a mitten is ~150 mm), so the same setting
+## would put barely one cell on a hand; they get their own finer scale instead.
+## `rock` was tried first and rejected: it is fbm, so it produces MOTTLING, and its tint amplitude
+## tops out around 6% — invisible at gameplay distance. `skin` is cellular, which is what actually
+## reads as spots and scales.
+##
+## AMPLITUDE IS A PALETTE COST, measured not guessed. An A/B on one identical frame (skin strength
+## 0.0 vs on) moved the head crop's saturation mean by +0.099 — the tint multiplies the albedo, and
+## darkening a colour RAISES its HSV saturation, so a strong pattern pushes straight at the R2.6
+## gate. Strength and the cell-edge weight are both held down for that reason; re-measure in
+## src/world/world.tscn (NOT a showcase) if you raise either.
+##
+## Frequency: sd_skin runs at 7 cycles per unit at scale 1.0, so scale 1.6 puts about 7 cells across
+## the 640 mm head — big blotches, not noise. The limbs are far smaller (a mitten is ~150 mm), so the
+## same setting would put barely one cell on a hand; they get their own finer scale.
+const SURF_HEAD := {"surface": "skin", "surface_scale": 1.6, "surface_strength": 1.05,
+	"surface_spot": 1.25, "surface_scales": 0.28, "surface_spot_radius": 0.36,
+	"surface_near": 9.0, "surface_far": 26.0, "surface_macro": 0.08}
+const SURF_LIMB := {"surface": "skin", "surface_scale": 6.0, "surface_strength": 0.85,
+	"surface_spot": 1.0, "surface_scales": 0.15, "surface_spot_radius": 0.32,
+	"surface_near": 7.0, "surface_far": 20.0}
 const SCLERA := Color("#efe7f7")    ## pale eyeball, so the existing dark oval becomes a pupil
 ## With the eyes up on stalks the face is nearly empty, so the mouth carries it alone and sits
 ## lower than the chibi default (-20). At the default it floated in the middle of a blank head and
 ## read as a nose.
-const MOUTH_PITCH_ALIEN := -31.0
+const MOUTH_PITCH_ALIEN := -18.0
 ## How much wider and taller Zorp's mouth is than the chibi default. With the eyes up on stalks the
 ## head is a large blank dome, and a chibi-sized smile left it reading as an EYELESS monster rather
 ## than a creature whose eyes happen to be somewhere else. Every alien on the reference sheet that
 ## has eyestalks also has a mouth spanning most of its face — that big grin is what makes the blank
 ## area read as a face. Applied to the parent Mouth node, NOT to the smile arc: `_apply_face`
 ## rewrites the arc's own scale every frame to drive the open/closed blend.
-const MOUTH_SPREAD := Vector3(1.62, 1.42, 1.0)
+## 1.85 x 1.55, not the 2.05 x 1.85 the design pass proposed: a reviewer built that and it
+## rendered as a black gaping hole across the lower face with the teeth stretched into fangs.
+const MOUTH_SPREAD := Vector3(1.85, 1.55, 1.0)
 const GRIN := Color("#3b1d33")       ## mouth cavity
 const TOOTH := Color("#f3ecf6")
-## The head is shrunk after it is built. Every eyestalk alien on the reference sheet has a MODEST
-## body-blob and LONG stalks; Zorp had the opposite, a chibi dome with short stubs, which is why
-## removing the face left a large blank area that read as an eyeless monster. Scaling the head node
-## takes the stalks and the face with it, so the proportions stay consistent — then the stalks are
-## lengthened to put the visual weight back up on the eyes where the reference has it.
-const HEAD_SHRINK := 0.84
 
 var _antenna: Node3D
 var _bulb_mat: ShaderMaterial
@@ -89,6 +115,24 @@ func _init() -> void:
 	# but a notably wider one — which is what fills the space the muzzle used to occupy.
 	mouth_w = 0.074
 	mouth_h = 0.052
+	# R3.2 — HIS OWN HEAD, low and flat. Until now every organic neighbour shared ONE cached head
+	# mesh, which is exactly why the user said it "still looks like it's just a reused head".
+	#
+	# 640 x 450 x 544 mm, against the shared 749 x 652 x 691. The height is what does the work: the
+	# blank band between the top of the grin and the crown drops by about 40%, and the front surface
+	# stops bulging — measured recession from the apex out to 60% / 80% of half-width falls from
+	# 32 / 79 mm to about 12 / 40 mm. That flattening is the "flatten it out" the user asked for.
+	#
+	# EXPONENT: the design pass proposed n = 4.0, and two independent reviewers each built it and
+	# rendered it — at 4.0 with this tessellation the head reads as a hard-edged faceted BOX, because
+	# superellipsoid() samples a UV sphere's uniform angular directions while a high exponent packs
+	# all the curvature into a narrow chamfer band. 3.2 keeps most of the flattening and still reads
+	# as a blob. Do not raise it without also raising head_segs.
+	head_semi = Vector3(0.3200, 0.2250, 0.2720)
+	head_n = 3.2
+	# Holds the chin exactly where it rendered before (0.945 - 0.3258 * 0.84 = 0.6713), so the scarf,
+	# the torso and the hover are all untouched.
+	head_y = 0.8963
 
 
 func _build_geometry() -> void:
@@ -104,9 +148,9 @@ func _build_geometry() -> void:
 		emblem, Vector3.ZERO, "Badge").rotation.z = PI * 0.25
 	_mi(rounded_box(Vector3(0.062, 0.062, 0.022), 0.016, 10), _toon(SHIRT.darkened(0.22), _matte({})),
 		emblem, Vector3(0.0, 0.0, -0.006), "Inlay").rotation.z = PI * 0.25
-	_add_arms(SHIRT, SKIN, 3)
-	_add_legs(SKIN_DARK, FOOT)
-	_add_head_shell(SKIN)
+	_add_arms(SHIRT, SKIN, 3, SURF_LIMB)
+	_add_legs(SKIN_DARK, FOOT, SURF_LIMB)
+	_add_head_shell(SKIN, SURF_HEAD)
 
 	# R3: two fins used to sit here and they read as EARS. The muzzle, the nose and the blush are
 	# gone for the same reason. Eyestalks instead — built AFTER the face, so the eye nodes exist to
@@ -117,11 +161,11 @@ func _build_geometry() -> void:
 	_add_face(EYE, MOUTH, BLUSH, {"mouth_inner": Color("#6e3049"), "nose": false, "blush": false})
 	# Two evenly matched stalks — Zorp is the composed one of the cast.
 	_add_eyestalks([
-		{"base": Vector3(-STALK_BASE_X, HEAD_SEMI.y * STALK_BASE_Y, STALK_Z),
+		{"base": Vector3(-STALK_BASE_X, head_semi.y * STALK_BASE_Y, STALK_Z),
 		 "tip": Vector3(-STALK_TIP_X, STALK_TIP_Y, STALK_Z - 0.012), "r": STALK_R, "splay": -0.20},
-		{"base": Vector3(STALK_BASE_X, HEAD_SEMI.y * STALK_BASE_Y, STALK_Z),
+		{"base": Vector3(STALK_BASE_X, head_semi.y * STALK_BASE_Y, STALK_Z),
 		 "tip": Vector3(STALK_TIP_X, STALK_TIP_Y, STALK_Z - 0.012), "r": STALK_R, "splay": 0.20},
-	], SKIN, SCLERA)
+	], SKIN, SCLERA, 0.055)
 	# BROWS OFF. They are drawn on the head, and with the real eyes lifted onto stalks the two
 	# dark brow bars were the only marks left up there — so they read as a second pair of eyes,
 	# which put the animal face straight back. The reference creatures have no brows at all.
@@ -133,13 +177,12 @@ func _build_geometry() -> void:
 	if mouth_node != null:
 		_orient_on_head(mouth_node, 0.0, MOUTH_PITCH_ALIEN, 0.004)
 		mouth_node.scale = MOUTH_SPREAD
-		_add_wide_grin(mouth_node, GRIN, TOOTH)
-	# Shrink LAST, so everything parented to the head comes with it.
-	_head.scale = Vector3(HEAD_SHRINK, HEAD_SHRINK, HEAD_SHRINK)
+		_add_wide_grin(mouth_node, GRIN, TOOTH, Vector3(0.086, 0.034, 0.020),
+			[[-0.058, 0.030], [-0.016, 0.034], [0.028, 0.030], [0.064, 0.022]])
 
 	_build_scarf()
 
-	_antenna = _add_antenna(_head, Vector3(0.045, HEAD_R * 0.88, 0.015), -0.20, SKIN_DARK, BULB, 0.085, 0.052)
+	_antenna = _add_antenna(_head, Vector3(0.045, head_semi.y - 0.010, 0.015), -0.20, SKIN_DARK, BULB, 0.085, 0.052)
 	_bulb_mat = _antenna.get_meta("bulb_mat") as ShaderMaterial
 
 	_build_glow_ring()

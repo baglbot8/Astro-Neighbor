@@ -223,6 +223,61 @@ SdSurface sd_rock(vec3 wpos, vec3 n, float lod, float strength, float scale) {
 	return s;
 }
 
+// ---------------------------------------------------------------------------- alien skin
+// A vec3 hash. `sd_hash` returns a float, and a cellular pass needs a jittered POINT per cell, so
+// three floats per cell. This is the same Dave Hoskins "hash without sine" construction sd_hash uses.
+vec3 sd_hash3(vec3 p) {
+	p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+	p += dot(p, p.yxz + 33.33);
+	return fract((p.xxy + p.yzz) * p.zyx);
+}
+
+// ALIEN SKIN — round spots sitting on a scaly cell ground.
+//
+// Why this is not sd_rock: rock is fbm, which is MOTTLING. Spots and scales are CELLULAR, so this
+// runs one 3x3x3 cellular pass and reads two things out of it — distance to the nearest feature
+// point (f1) gives round spots, and the gap to the second nearest (f2 - f1) gives the ridge between
+// neighbouring cells, which is what reads as scales.
+//
+// Only some cells get a spot (`pick`), so the skin is blotchy like the reference sheet's creatures
+// rather than a regular polka dot.
+//
+// `tint` and `height` deliberately share the same signed `d` — every other sd_* function in this
+// file pairs them that way, and a version where they disagreed made the lighting fight the albedo.
+SdSurface sd_skin(vec3 objpos, vec3 n, float lod, float strength, float scale,
+		float spot_amount, float scale_amount, float spot_radius) {
+	SdSurface s = sd_none();
+	if (lod <= 0.001) { return s; }
+	vec3 p = objpos * (7.0 * scale);
+	vec3 ip = floor(p);
+	vec3 fp = p - ip;
+	float f1 = 8.0;
+	float f2 = 8.0;
+	float id = 0.0;
+	for (int k = -1; k <= 1; k++) {
+		for (int j = -1; j <= 1; j++) {
+			for (int i = -1; i <= 1; i++) {
+				vec3 g = vec3(float(i), float(j), float(k));
+				vec3 h = sd_hash3(ip + g);
+				float dd = length(g + h - fp);
+				if (dd < f1) { f2 = f1; f1 = dd; id = h.x; }
+				else if (dd < f2) { f2 = dd; }
+			}
+		}
+	}
+	float pick = step(0.52, id);
+	float spot = (1.0 - smoothstep(spot_radius * 0.5, spot_radius, f1)) * pick;
+	float edge = 1.0 - smoothstep(0.03, 0.16, f2 - f1);
+	// Centred on roughly zero so the skin is textured without being tinted: the spot term averages
+	// about 0.22 of its amplitude at the shipping radius and the edge term about 0.30 of its own.
+	float d = (spot - 0.22) * spot_amount * 0.6 - (edge - 0.30) * scale_amount * 0.4;
+	s.tint = vec3(1.0 + d * 0.42 * strength * lod);
+	s.height = d * strength * lod;
+	s.rough = edge * 0.18 * strength * lod;
+	s.bump = vec3(d) * 0.10 * strength * lod;
+	return s;
+}
+
 // FOLIAGE / GRASS — plump softness: fine tuft detail and a hint of subsurface warmth where the sun
 // passes through a leaf. Keep `warm` low; this is a suggestion of translucency, not a glow.
 SdSurface sd_foliage(vec3 wpos, vec3 n, float lod, float strength, float scale) {
