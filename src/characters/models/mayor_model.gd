@@ -149,6 +149,25 @@ func _build_face(_m_frame: Material, m_gold: Material) -> void:
 		"nose": false, "blush": false, "mouth_inner": Color("#6f3529"),
 		"eye_inset": -0.006, "brow_color": WHITE.darkened(0.10),
 	})
+	# R3 — LESS ANIMAL. He already had no nose and no blush; what still read as a woodland creature
+	# was the chibi head with nothing on it but a beard. Two short blunt HORNS fix that in one
+	# stroke: no animal in this cast has them, they sit clear of the goggles and the hat brim, and on
+	# an elder statesman they read as authority rather than as a monster. Swept back and out, with a
+	# darker tip, so the silhouette still reads at gameplay distance.
+	for sxh: float in [-1.0, 1.0]:
+		# Set WIDE and low on the temples, and raked well out, so they clear the hat brim — the first
+		# pass tucked them under it and they were invisible from the front, which is the only angle
+		# that matters for reading a character.
+		# ANGLE IS EVERYTHING HERE. Raked out near horizontal they read as EARS, which is the exact
+		# thing this change exists to remove. They have to rise: set high on the crown with only a
+		# modest outward roll, so the silhouette goes UP and back.
+		var horn := _node("Horn", _head, Vector3(HEAD_SEMI.x * 0.62 * sxh, HEAD_SEMI.y * 0.68, 0.010))
+		horn.rotation = Vector3(-0.34, 0.0, -0.40 * sxh)
+		_mi(superellipsoid(Vector3(0.042, 0.132, 0.042), 2.6, 10, 6), _toon(BRASS, _matte({"rim": 0.02})),
+			horn, Vector3.ZERO, "Horn")
+		_mi(superellipsoid(Vector3(0.024, 0.062, 0.024), 2.5, 8, 5), _toon(BRASS_DARK, _matte({})),
+			horn, Vector3(0.0, 0.116, 0.0), "Tip")
+
 	# elder brow ridges above the rims: thinner (tube 0.014 -> 0.0085), narrower and a muted bone
 	# rather than pure cream, so they read as a heavy brow instead of two clown eyebrows
 	for sx3: float in [-1.0, 1.0]:

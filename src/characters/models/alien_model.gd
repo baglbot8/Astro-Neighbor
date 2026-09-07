@@ -46,8 +46,8 @@ const HOVER := 0.05
 ## "eyes on stems" from any angle — that outline is the whole point of the redesign.
 const STALK_BASE_X := 0.112
 const STALK_BASE_Y := 0.70          ## multiplied by HEAD_SEMI.y
-const STALK_TIP_X := 0.176
-const STALK_TIP_Y := 0.505
+const STALK_TIP_X := 0.196
+const STALK_TIP_Y := 0.630
 const STALK_Z := -0.045
 const STALK_R := 0.030
 const SCLERA := Color("#efe7f7")    ## pale eyeball, so the existing dark oval becomes a pupil
@@ -55,6 +55,21 @@ const SCLERA := Color("#efe7f7")    ## pale eyeball, so the existing dark oval b
 ## lower than the chibi default (-20). At the default it floated in the middle of a blank head and
 ## read as a nose.
 const MOUTH_PITCH_ALIEN := -31.0
+## How much wider and taller Zorp's mouth is than the chibi default. With the eyes up on stalks the
+## head is a large blank dome, and a chibi-sized smile left it reading as an EYELESS monster rather
+## than a creature whose eyes happen to be somewhere else. Every alien on the reference sheet that
+## has eyestalks also has a mouth spanning most of its face — that big grin is what makes the blank
+## area read as a face. Applied to the parent Mouth node, NOT to the smile arc: `_apply_face`
+## rewrites the arc's own scale every frame to drive the open/closed blend.
+const MOUTH_SPREAD := Vector3(1.62, 1.42, 1.0)
+const GRIN := Color("#3b1d33")       ## mouth cavity
+const TOOTH := Color("#f3ecf6")
+## The head is shrunk after it is built. Every eyestalk alien on the reference sheet has a MODEST
+## body-blob and LONG stalks; Zorp had the opposite, a chibi dome with short stubs, which is why
+## removing the face left a large blank area that read as an eyeless monster. Scaling the head node
+## takes the stalks and the face with it, so the proportions stay consistent — then the stalks are
+## lengthened to put the visual weight back up on the eyes where the reference has it.
+const HEAD_SHRINK := 0.84
 
 var _antenna: Node3D
 var _bulb_mat: ShaderMaterial
@@ -100,7 +115,13 @@ func _build_geometry() -> void:
 	# transparent blush colour instead does NOT work — the toon material is opaque, so an alpha-0
 	# colour renders as two BLACK ovals on the cheeks, which is what the first attempt did.
 	_add_face(EYE, MOUTH, BLUSH, {"mouth_inner": Color("#6e3049"), "nose": false, "blush": false})
-	_build_eyestalks()
+	# Two evenly matched stalks — Zorp is the composed one of the cast.
+	_add_eyestalks([
+		{"base": Vector3(-STALK_BASE_X, HEAD_SEMI.y * STALK_BASE_Y, STALK_Z),
+		 "tip": Vector3(-STALK_TIP_X, STALK_TIP_Y, STALK_Z - 0.012), "r": STALK_R, "splay": -0.20},
+		{"base": Vector3(STALK_BASE_X, HEAD_SEMI.y * STALK_BASE_Y, STALK_Z),
+		 "tip": Vector3(STALK_TIP_X, STALK_TIP_Y, STALK_Z - 0.012), "r": STALK_R, "splay": 0.20},
+	], SKIN, SCLERA)
 	# BROWS OFF. They are drawn on the head, and with the real eyes lifted onto stalks the two
 	# dark brow bars were the only marks left up there — so they read as a second pair of eyes,
 	# which put the animal face straight back. The reference creatures have no brows at all.
@@ -111,6 +132,10 @@ func _build_geometry() -> void:
 	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
 	if mouth_node != null:
 		_orient_on_head(mouth_node, 0.0, MOUTH_PITCH_ALIEN, 0.004)
+		mouth_node.scale = MOUTH_SPREAD
+		_add_wide_grin(mouth_node, GRIN, TOOTH)
+	# Shrink LAST, so everything parented to the head comes with it.
+	_head.scale = Vector3(HEAD_SHRINK, HEAD_SHRINK, HEAD_SHRINK)
 
 	_build_scarf()
 
@@ -118,35 +143,6 @@ func _build_geometry() -> void:
 	_bulb_mat = _antenna.get_meta("bulb_mat") as ShaderMaterial
 
 	_build_glow_ring()
-
-
-## Two soft stalks off the head's upper slope, each carrying one of the face's existing eye nodes at
-## its tip. The eyes are MOVED, not rebuilt: `_eyes[i]` keeps all of its children (oval, glint, happy
-## arc, round surprise, flat squint) so `_apply_face` drives them exactly as it always did.
-func _build_eyestalks() -> void:
-	var m_stalk := _toon(SKIN, _matte({"spec": 0.05}))
-	var m_sclera := _toon(SCLERA, _matte({"spec": 0.04, "rim": 0.02}))
-	for i in _eyes.size():
-		var sx := -1.0 if i == 0 else 1.0
-		var base := Vector3(STALK_BASE_X * sx, HEAD_SEMI.y * STALK_BASE_Y, STALK_Z)
-		var tip := Vector3(STALK_TIP_X * sx, STALK_TIP_Y, STALK_Z - 0.012)
-		var span := tip - base
-		var length := span.length()
-		# A capsule runs along its own +Y, so build a basis whose Y follows the stalk.
-		var yv := span.normalized()
-		var xv := Vector3.RIGHT if absf(yv.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
-		var zv := xv.cross(yv).normalized()
-		xv = yv.cross(zv).normalized()
-		var stalk := _node("EyeStalk%d" % i, _head, base + span * 0.5)
-		stalk.basis = Basis(xv, yv, zv)
-		_mi(capsule(STALK_R, maxf(0.02, length - STALK_R * 2.0), 8, 2), m_stalk, stalk, Vector3.ZERO, "Stem")
-		# A pale ball at the tip; the face's dark oval sits proud of it and becomes the pupil.
-		_mi(sphere(0.062, 14, 8), m_sclera, _head, tip, "Eyeball%d" % i)
-		# Aim each eye forward but splayed a little outward and down — two stalks staring dead ahead
-		# in parallel look like a toy rather than a creature.
-		var eye: Node3D = _eyes[i]
-		eye.basis = Basis.looking_at(Vector3(0.20 * sx, -0.14, -1.0).normalized(), Vector3.UP)
-		eye.position = tip + eye.basis.z * -0.052
 
 
 ## Striped space-scarf where a neck would be (there is none — it sits on the shoulders).

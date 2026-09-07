@@ -23,8 +23,15 @@ const NOSE := Color("#2b1d16")
 const MUZZLE := Color("#bcc499")
 const BLUSH := Color("#b2898a")
 const BULB := Color("#b8ff8a")
+const SCLERA := Color("#f2f4e6")     ## pale eyeball; the face's dark oval becomes the pupil
+const GRIN := Color("#3a2118")
+const TOOTH := Color("#f4efe2")
 
 ## Body colour (Pip: leaf green, Pop: yellow-green).
+## Which eyestalk silhouette this twin wears. "tall" gives one long stalk and one short one, an
+## asymmetric pair straight off the reference sheet; "closeset" gives two short stalks side by side.
+## The pair must not share a silhouette — half the point of twins is telling them apart at a glance.
+@export var stalk_style: String = "tall"
 @export var skin: Color = Color("#93c169")
 ## 1 for Pip, 2 for Pop.
 @export var antenna_count: int = 1
@@ -55,20 +62,37 @@ func _build_geometry() -> void:
 	_add_legs(dark, skin.darkened(0.34))
 	_add_head_shell(skin)
 
-	# R2.3: the ears were two spheres at the top corners of a ball, which is a teddy bear. They are
-	# now smaller tapered wedges with a flat inner facet, raked back so the silhouette reads as a
-	# little shopkeeper rather than a plush toy — and the inner facet is a muted skin shade instead
-	# of the bubblegum pink the first pass used.
-	for sx: float in [-1.0, 1.0]:
-		var ear := _node("Ear", _head, Vector3(HEAD_SEMI.x * 0.72 * sx, HEAD_SEMI.y * 0.72, 0.052))
-		ear.rotation = Vector3(0.22, -0.30 * sx, -0.34 * sx)
-		_mi(superellipsoid(Vector3(0.030, 0.070, 0.058), 2.7, 10, 6), _toon(skin, _matte({})), ear, Vector3.ZERO, "Ear")
-		_mi(superellipsoid(Vector3(0.013, 0.046, 0.036), 2.6, 8, 5), _toon(dark.lerp(Color("#d8c0b6"), 0.45), _matte({"rim": 0.02})),
-			ear, Vector3(-0.019 * sx, -0.002, 0.006), "Inner")
-
-	_add_muzzle(MUZZLE, -14.5, Vector3(0.096, 0.070, 0.019))
-
-	_add_face(EYE, MOUTH, BLUSH, {"nose_color": NOSE, "mouth_inner": Color("#7a3941")})
+	# R3 — LESS ANIMAL. The ears, the muzzle, the nose and the blush are all gone: those four are
+	# what made the twins read as green teddy bears rather than as creatures. Against the reference
+	# sheet the eyes go up on stalks and the mouth becomes a wide toothy grin, and the two of them
+	# take DIFFERENT stalk silhouettes so they are still tellable apart at a glance.
+	_add_face(EYE, MOUTH, BLUSH, {"mouth_inner": Color("#7a3941"), "nose": false, "blush": false})
+	for b: Node3D in _brows:
+		b.queue_free()
+	_brows.clear()
+	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
+	if mouth_node != null:
+		_orient_on_head(mouth_node, 0.0, -29.0, 0.004)
+		mouth_node.scale = Vector3(1.48, 1.34, 1.0)
+		_add_wide_grin(mouth_node, GRIN, TOOTH, Vector3(0.078, 0.030, 0.019),
+			[[-0.038, 0.018], [0.004, 0.021], [0.040, 0.015]])
+	var by := HEAD_SEMI.y * 0.70
+	var specs: Array = []
+	if stalk_style == "closeset":
+		# Two short stalks close together and slightly splayed — the wide-eyed one of the pair.
+		specs = [
+			{"base": Vector3(-0.052, by, -0.040), "tip": Vector3(-0.086, 0.408, -0.052), "r": 0.026, "splay": -0.12},
+			{"base": Vector3(0.052, by, -0.040), "tip": Vector3(0.092, 0.396, -0.052), "r": 0.026, "splay": 0.12},
+		]
+	else:
+		# One long stalk and one short — deliberately lopsided, which no animal is.
+		specs = [
+			{"base": Vector3(-0.098, by, -0.040), "tip": Vector3(-0.150, 0.560, -0.056), "r": 0.027, "splay": -0.22},
+			{"base": Vector3(0.096, by, -0.040), "tip": Vector3(0.132, 0.404, -0.050), "r": 0.027, "splay": 0.18},
+		]
+	_add_eyestalks(specs, skin, SCLERA, 0.055)
+	# A modest head keeps the weight up on the stalks, the way the reference creatures carry it.
+	_head.scale = Vector3(0.88, 0.88, 0.88)
 	_build_apron()
 
 	for i in maxi(antenna_count, 1):

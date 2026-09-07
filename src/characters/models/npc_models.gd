@@ -15,12 +15,14 @@ static func make(npc_id: String) -> CharacterModel:
 			var pip := TwinModel.new()
 			pip.skin = Color("#93c169")
 			pip.antenna_count = 1
+			pip.stalk_style = "tall"
 			pip.bounce_phase = 0.0
 			return pip
 		"pop":
 			var pop := TwinModel.new()
 			pop.skin = Color("#c1ca70")
 			pop.antenna_count = 2
+			pop.stalk_style = "closeset"
 			pop.bounce_phase = 0.85
 			return pop
 		"stella":

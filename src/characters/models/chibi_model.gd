@@ -867,6 +867,68 @@ static func lit_material(base: Color, strength: float = 1.4, emit: Color = Color
 
 ## A single antenna: stalk + glowing bulb. Returns the pivot (rotate it to droop) and stores the
 ## bulb material in meta "bulb_mat" so subclasses can pulse it.
+## ---------------------------------------------------------------------------- alien features
+## EYESTALKS. Shared by every non-robot neighbour (see reference/'Alien References.webp'): the one
+## trait that most separates those creatures from animals is that their eyes are not on their face.
+##
+## Each spec is `{"base": Vector3, "tip": Vector3, "r": float}` in HEAD-LOCAL space, and specs are
+## matched to `_eyes` in order. The eye nodes are only REPOSITIONED, never rebuilt, so every blink,
+## squint, happy-arc and surprise state keeps animating exactly as it does on a normal face. Do not
+## supply more specs than there are eyes: an eye that cannot blink beside two that can reads as a
+## bug, not as an extra eye.
+func _add_eyestalks(specs: Array, stalk_color: Color, sclera_color: Color, eyeball_r: float = 0.062) -> void:
+	var m_stalk := _toon(stalk_color, _matte({"spec": 0.05}))
+	var m_sclera := _toon(sclera_color, _matte({"spec": 0.04, "rim": 0.02}))
+	for i in mini(specs.size(), _eyes.size()):
+		var spec: Dictionary = specs[i]
+		var base: Vector3 = spec["base"]
+		var tip: Vector3 = spec["tip"]
+		var r: float = float(spec.get("r", 0.030))
+		var span := tip - base
+		var length := span.length()
+		# A capsule runs along its own +Y, so build a basis whose Y follows the stalk.
+		var yv := span.normalized()
+		var xv := Vector3.RIGHT if absf(yv.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
+		var zv := xv.cross(yv).normalized()
+		xv = yv.cross(zv).normalized()
+		var stalk := _node("EyeStalk%d" % i, _head, base + span * 0.5)
+		stalk.basis = Basis(xv, yv, zv)
+		_mi(capsule(r, maxf(0.02, length - r * 2.0), 8, 2), m_stalk, stalk, Vector3.ZERO, "Stem")
+		# A pale ball at the tip; the face's dark oval sits proud of it and becomes the pupil.
+		_mi(sphere(eyeball_r, 14, 8), m_sclera, _head, tip, "Eyeball%d" % i)
+		# Splay each eye outward and down. Two stalks staring dead ahead in parallel look like a toy.
+		var splay: float = float(spec.get("splay", 0.20 if tip.x >= 0.0 else -0.20))
+		var eye: Node3D = _eyes[i]
+		eye.basis = Basis.looking_at(Vector3(splay, -0.14, -1.0).normalized(), Vector3.UP)
+		eye.position = tip + eye.basis.z * -(eyeball_r * 0.84)
+
+
+## A WIDE OPEN GRIN with blunt teeth, replacing the hairline smile arc.
+##
+## With the eyes lifted onto stalks the head becomes a large blank dome, and a thin curve at the
+## bottom of it reads as an EYELESS monster rather than a creature. Every alien on the reference
+## sheet that wears its eyes on stalks also wears a mouth across most of its face; the grin is what
+## makes the blank area read as a face at all.
+##
+## `_mouth_smile` is freed and nulled. `_apply_face` guards every use of it, so the open-mouth blend
+## that drives talking still runs and now animates INSIDE this grin instead of fighting a second
+## line drawn across it.
+func _add_wide_grin(mouth_node: Node3D, grin_color: Color, tooth_color: Color,
+		size3: Vector3 = Vector3(0.086, 0.034, 0.020), teeth: Array = []) -> void:
+	if _mouth_smile != null and is_instance_valid(_mouth_smile):
+		_mouth_smile.queue_free()
+	_mouth_smile = null
+	var m_grin := _toon(grin_color, {"spec": 0.0, "rim": 0.0, "shade": 0.05})
+	var m_tooth := _toon(tooth_color, {"spec": 0.02, "rim": 0.02, "shade": 0.04})
+	var grin := _node("Grin", mouth_node, Vector3(0.0, 0.0, -0.004))
+	_mi(superellipsoid(size3, 2.4, 20, 10), m_grin, grin, Vector3.ZERO, "Cavity")
+	# Odd count and uneven widths on purpose: a neat even row reads as a cartoon animal's smile.
+	var rows: Array = teeth if not teeth.is_empty() else [[-0.045, 0.019], [0.002, 0.023], [0.046, 0.016]]
+	for t: Array in rows:
+		_mi(rounded_box(Vector3(float(t[1]), size3.y * 0.62, 0.016), 0.005, 8), m_tooth, grin,
+			Vector3(float(t[0]), size3.y * 0.56, -0.006), "Tooth")
+
+
 func _add_antenna(parent: Node3D, offset: Vector3, tilt: float, stalk_color: Color, bulb_color: Color, length: float = 0.20, bulb_r: float = 0.045) -> Node3D:
 	var pivot := _node("Antenna", parent, offset)
 	pivot.rotation.z = tilt
