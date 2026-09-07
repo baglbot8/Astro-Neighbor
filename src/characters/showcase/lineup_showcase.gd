@@ -39,10 +39,15 @@ const SPACING_M := 1.45
 ## Mid-morning, so every capture has the same daylight unless --time= says otherwise.
 const DEFAULT_HOUR := 10.5
 
-const ORDER: Array[String] = ["zorp", "bolt", "pip", "pop", "stella", "mayor_orbit", "dj_nova"]
+## The lineup walks THIS list, not NpcData, so a new neighbour is invisible to the triangle-budget
+## check, the face-metric gate and the silhouette pass until it is added here. Registering the id
+## in NpcModels.make() is necessary but not sufficient.
+const ORDER: Array[String] = ["zorp", "bolt", "pip", "pop", "stella", "mayor_orbit", "dj_nova",
+	"fen", "grig"]
 const LABELS := {
 	"zorp": "Zorp", "bolt": "Bolt", "pip": "Pip", "pop": "Pop",
 	"stella": "Stella", "mayor_orbit": "Mayor Orbit", "dj_nova": "DJ Nova",
+	"fen": "Fen", "grig": "Grig",
 }
 
 var _models: Array[CharacterModel] = []

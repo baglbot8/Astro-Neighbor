@@ -31,5 +31,11 @@ static func make(npc_id: String) -> CharacterModel:
 			return MayorModel.new()
 		"dj_nova":
 			return DJModel.new()
+		"fen":
+			return FenModel.new()
+		"grig":
+			return GrigModel.new()
 		_:
+			# NOTE: an unregistered id lands here silently, so a typo in an npc id or a new
+			# neighbour whose case was never added ships as a generic alien with no error.
 			return AlienModel.new()

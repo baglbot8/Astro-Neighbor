@@ -257,3 +257,169 @@ Verdict: All three are strong on codebase archaeology and weak on cross-checking
   *Fix:* Either park the companion nearer (e.g. 160 m, radius 52 m) or raise the camera far plane alongside it, and verify the occlusion on a real frame rather than by analogy to sky_bodies.
 * **[low] geology → "npc.gd::_surface_for_biome() -> 'tide': return 'sand' if that footstep set exists, else 'grass' (verify against AudioManager)"** — It does not exist. audio_manager.gd:27 is `const FOOTSTEP_SURFACES: PackedStringArray = ["grass", "stone", "metal"]` and :276 silently coerces anything else to grass; assets/audio/sfx/ holds only footstep_grass_0/1, footstep_stone_0/1 and footstep_metal_0/1. Adding a sand set means new wavs plus .import files. Worth noting separately that `Player.FOOTSTEP_CANDIDATES` (player.gd:126) is grass-only regardless of biome, so all three proposals' `_surface_for_biome` edits change the NPC's footsteps and never the player's — the player walks on grass on Grig's chalk steps and on Fen's salt pan.  
   *Fix:* Drop the sand branch (use "stone" for tide flats), and if the player's footsteps matter on a stone or salt world, say so — that is a player.gd change nobody scoped.
+
+### PLANET grig — Grig's Chalk Steps (from the `geology` proposal)
+
+**Vibe.** A tiny bone-white ball cut into seven concentric stairs, with a razor-thin ring edge-on overhead and one enormous moon.
+
+**What makes it not a reskin.** IT IS A STAIRCASE. terrace_step is barely used in the shipped game: home, zorp and hub have exactly TWO ground levels and bolt has four, and terrace_band has literally never been varied off 0.12/0.12/0.14/0.12. Grig runs terrace_step 0.47 against hill_amplitude 1.55 for roughly SEVEN concentric shelves of 0.28 m, with terrace_band 0.055 — less than half the crispest value ever shipped — so every riser is a hard 30-degree cut face instead of a soft roll. hill_frequency 0.30 (shipped range 0.70-0.95) puts only ~1.9 noise cycles around the whole world, which is what turns terracing into concentric contour rings rather than a rumpled staircase. It is also: the only world with crater_count 0 and plateau_count 0 (both are 3 and 2-4 everywhere else) because either would punch a hole through the rings; the only genuinely DRY world (water_level -99, which also zeroes the survey's water and shore columns and is what buys the placement budget back); the smallest world in the game at r 9.5 (shipped 10.5 / 12 / 21); the only one at mesh_subdivisions 5; the only one at pastel_max 0.30 (deliberately near-monochrome, which the codebase forbids by convention rather than by need); the only one with sun_patch above 1.72 (2.10, a raking sun that draws every riser as a shadow line); the only one with limb_darken near 0.9; the first with a non-navy, non-blue BIOME_DEEP (near-black rust); and the second world with a ring — but a TIGHT NEAR-EDGE-ON band (inner 1.22R, outer 1.52R, tilt 86) against Bolt's wide 1.7R/2.9R hoop at 42, which is the same system reading as a completely different object.
+
+**Terrain.** radius 9.5 (the smallest world in the game) -> _vscale 0.59375, area_scale 0.3525. seed 89 (fresh; the geometry cache key needs it).
+
+All values authored at REFERENCE_RADIUS 16, real values in brackets:
+  hill_amplitude   = 1.55    [0.920 m, sigma ~0.276 m — 4.2x Bolt's 0.242 m, deliberately the tallest relief in the game]
+  hill_frequency   = 0.30    [wavelength 9.5/0.30 = 31.7 m against a 59.7 m circumference -> ~1.9 cycles: ONE massif, ONE basin, which is what makes the terracing concentric]
+  detail_amplitude = 0.010   [0.006 m — the lowest in the game. The treads must be dead flat or DecorationManager's deviation test (0.09 + 0.09/m tolerance over a 0.6 m rim) refuses them]
+  terrace_step     = 0.47    [0.279 m riser — a real knee-high ACNH step, not a kerb]
+  terrace_band     = 0.055   [shipped range is 0.12-0.14. Riser run ~0.11 x tread ~= 0.48 m, so 0.279 m over 0.48 m = 30 degrees: reads as a cut cliff edge, correctly refuses decoration (MAX_SLOPE_DEG 16), stays comfortably walkable]
+  terrace_bank     = 1.00    [NEW FIELD — full bank_color on every riser. This is what makes the wedding cake read; without it the world is a smooth pale dome]
+  plateau_count    = 0       [never used before. A plateau on top of terraces is just another step]
+  plateau_height   = 0.0
+  plateau_radius   = 3.2     [inert at count 0]
+  crater_count     = 0       [never used before. A crater would punch through the contour rings]
+  ground_ao        = 0.70
+  water_level      = -99     [DRY. _build_water() returns early, water_radius() returns -1, is_underwater() is false, and the shader's whole sand/shore/underwater path goes inert]
+  mesh_subdivisions= 5       [the ONLY planet not at 6. ~10k tris instead of ~41k: a deliberately faceted low-poly silhouette that reinforces the cut-stone read AND is cheaper. VERIFY underfoot that the riser edges do not go visibly polygonal; fall back to 6 if they do]
+
+EXPECTED SHAPE: levels ~= 1.8 * 0.920 / 0.279 = 5.9, i.e. 7 shelves spanning +/-0.92 m. Tread width ~= 0.96 * r / (freq * levels) = 0.96*9.5/(0.30*7) = 4.34 m. Total relief 1.84 m on a 9.5 m ball is 19% of the radius — the strongest silhouette deformation in the game (Bolt is 5%), and it is visible as banding on the orbital globe.
+
+SPAWN/PAD: spawn_dir Vector3(-0.28, 0.62, 0.73), pad_dir Vector3(0.66, -0.19, 0.72) — 77 degrees apart. A HAPPY ACCIDENT WORTH KEEPING: with no water, _add_flat clamps each disc's height to [-0.4*_vscale, +0.55*_vscale] = [-0.238, +0.327] m against a terrain that ranges +/-0.92 m, so a spawn landing on the massif gets CUT DOWN and one in the basin gets FILLED UP, and either way the plot ends up as a genuine quarried bench with a visible cut face around it. On this world the existing flattening code reads as architecture rather than as a blemish.
+
+PLACEMENT ESTIMATE (real rules): risers 2*terrace_band = 11%, footprint-deviation band beyond the riser ~17%, reserved discs (spawn+pad+npc at RESERVED_CLEARANCE 3.5 m = pi*3.5^2 x 3 = 115 m^2 of 1134 m^2) 10.1%, props ~7%, water/shore 0% -> ~55% free at fp 0.6. Comparable to Zorp's shipped 57%. If the survey comes in lower, widen terrace_band to 0.075 (costs crispness) or drop hill_frequency to 0.26 (widens treads) before touching hill_amplitude — the step HEIGHT is the identity.
+
+Props/collectibles: tree_count 20, rock_count 26, flower_patch_count 14 (at area_scale 0.3525 these yield ~7 / ~9 / ~5 actual — the counts look high because the world is small), collectible_count 8, collectible_kind "chalk_core,stardust_shard", music_track "chrome" (the most spare existing track; a chalk.wav is the nice-to-have), npcs PackedStringArray("grig"), buildings empty.
+
+**Palette.** biome = "chalk" (new). .tres header uid="uid://cplanetdatagrig0".
+
+ground_color_a      Color(0.7176, 0.7059, 0.6353)  #b7b4a2  S 0.115 V 0.718 — pale chalk tread
+ground_color_b      Color(0.6353, 0.6235, 0.5490)  #a29f8c  S 0.136 V 0.635
+ground_shadow_color Color(0.3843, 0.3922, 0.3608)  #62645c  S 0.080 V 0.392 — a real dark grey macro shade
+bank_color          Color(0.5843, 0.5137, 0.4118)  #958369  S 0.295 V 0.584 — THE RISERS. Warm ochre cut stone against cool chalk treads. With terrace_bank 1.00 this single colour does 90% of the work: it is what draws every contour line, on the ground and on the globe.
+ground_color_low    Color(0.7647, 0.7333, 0.6392)  #c3bba3  — inert (no water) but kept sane
+rock_color          Color(0.6667, 0.6588, 0.6314)  #aaa8a1  — quarry spoil
+surface_color       Color(0.6941, 0.6667, 0.5843)  #b1aa95  S 0.158 V 0.694 — THE ORBIT TONE: a bone-white banded world. Deliberately cooler and ~20% darker than the hub's cream #dfc892 so the two never confuse at map scale.
+water_color         Color(0.4784, 0.4392, 0.3647)  #7a705d  — no water exists, but space_globe reads these for sea_color/sea_deep, so they are set to shadowed stone rather than left blue
+water_deep_color    Color(0.3294, 0.3059, 0.2588)  #544e42
+foliage_color_a     Color(0.5490, 0.6118, 0.4392)  #8c9c70  S 0.282 V 0.612 — lichen sage
+foliage_color_b     Color(0.7098, 0.7451, 0.5451)  #b5be8b
+foliage_shadow_color Color(0.3059, 0.3608, 0.2745) #4e5c46  S 0.239 V 0.361
+trunk_color         Color(0.4941, 0.4549, 0.3765)  #7e7460
+flower_colors       PackedColorArray(#c98f7a terracotta, #d8cba4 bone, #8fa3ad slate-blue, #b7936d clay) — the one place chroma is allowed on this world
+
+SKY:
+  sun_color     Color(1, 0.8863, 0.7412)      #ffe2bd — a low, warm, raking sun. On a terraced world the sun angle IS the subject
+  ambient_color Color(0.6392, 0.6588, 0.7647) #a3a8c3
+  has_ring      true, ring_color Color(0.7608, 0.7255, 0.6353) #c2b9a2
+  moon_count    2
+  cloud_density 0.05  — effectively none (Bolt's 0.25 is the current low)
+
+TWO SIGNATURE SKY CHANGES, both cheap and both currently impossible from data:
+1. THE RING MUST NOT BE BOLT'S. environment.gd::_build_ring() (line 611) hardcodes 1.7R / 2.9R and ring_tilt_deg 42. PlanetRing already accepts inner_radius / outer_radius / tilt_deg / ring_color / opacity, so add three PlanetData fields (ring_inner_scale 1.22, ring_outer_scale 1.52, ring_tilt_deg 86.0, defaulting to 1.7 / 2.9 / 42.0 so Bolt is unchanged). A tight, near-edge-on razor band through the sky is the same system reading as a completely different object.
+2. A HUGE MOON. sky.gdshader's moon_size, moon_color, moon_b_color, sun_disc_size and star_density are NEVER SET by environment.gd::_apply(), so every planet gets the shader defaults. Set moon_size 0.155, moon_color Color("#e6dcc4"), moon_b_color Color("#9aa6bd") for Grig. One big bone moon and one small blue one over a chalk staircase is the whole sky in a single image, and it costs three set_shader_parameter calls.
+
+EnvPalette — REQUIRED or the sky renders as meadow:
+  BIOME_DUST["chalk"] = Color("#d6c9b4") — the brightest, palest dust in the dict; correct for a world that kicks up chalk powder
+  BIOME_DEEP["chalk"] = Color("#2a1f1c") — a near-black RUST-BROWN. The first non-blue deep-space tint in the game.
+
+GROUND MATERIAL — add a "chalk" case in Planet._make_ground_material(). Reuse GRASS_SHADER (it already paints COLOR.g with bank_color, which terrace_bank now fills on every riser):
+  color_c = ground_color_a.lightened(0.06)
+  crater_color = bank_color.lightened(0.10)
+  sand_band = 0.0, path_count = 0
+  sun_patch 2.10 / sun_patch_lo 0.36 / sun_patch_amt 0.85 / sun_patch_tint Color(1.0, 0.94, 0.84) — nobody has been above 1.72; a strong raking dapple is what turns flat chalk into a lit staircase
+  shadow_patch 0.46
+  limb_darken 0.88 — nothing shipped approaches 0.9. On a 9.5 m ball this is what makes the world read as genuinely tiny and far away
+  pastel_max 0.30, pastel_dark 0.34 — shipped values are 0.54 / 0.58 / 0.70. A deliberately near-monochrome world
+  shadow_fill_color Color("#b6bccf"), shadow_fill 0.20
+  detail_rock 3.2, detail_grass 0.6, detail_bump 0.34, detail_light 1.9 — the R2.9 detail uniforms sit at their shader defaults on ALL FOUR shipped planets; on a bare stone world they are the only micro-texture there is, and R2.6 demands 'surfaces need texture, not flat colour'
+  ADD "chalk" to the _collect_paths() early-return at planet_props.gd:57 (alongside chrome and violet). A trodden dirt path across cut stone is wrong, and the tan path smear would cut across the contours.
+
+WATER: none. Do not add a _build_water() case; water_level -99 makes the whole shell early-return.
+
+ORBITAL RENDERERS:
+  space_globe.BIOME_ANCHOR["chalk"] = [Color("#b9b09a"), 0.40]; setup() -> "chalk": _build_ring() (it already knows how) plus _build_moons(2); _apply_biome() -> mode 5, pattern_scale 5.2 (tight concentric banding — the map-scale version of the real terracing), sea_level 0.0, accent #d7b98a, accent_glow 0.0, rim_color #e2d6bd, rim_strength 0.24
+  sky_bodies.BIOME_ANCHOR["chalk"] = [Color("#b9b09a"), 0.40]; BIOME_MODE["chalk"] = 5
+  BOTH globe shaders need a genuinely NEW `else if (mode == 5)` branch (~12 lines, not a reuse): sample a low-frequency fbm, quantise it into 6 steps, draw the step tops in land_a/land_b and a thin band at each step boundary in low_color (the bank tone). That is the only way the contour rings read at a 1.6-unit globe.
+  rocket_pad.TRAIL_COLORS["chalk"] = [Color("#c8bfa8"), Color("#e0a45c")]
+  npc.gd::_surface_for_biome() -> "chalk": return "stone"
+
+ROSTER:
+  space_travel.LAYOUT["grig"] = {"radius": 1.6, "orbit": 42.0, "angle_deg": 262.0, "y": 2.4, "desc": "Grig's chalk steps. All the way up."} and ORDER (radius 1.6 is the smallest globe on the map, which is truthful; orbit 42 sits between bolt's 36.5 and hub's 47, angle 262 between 214 and 318)
+  sky_bodies.SYSTEM_LAYOUT["grig"] = {"r": 1.6, "orbit": 42.0, "angle": 262.0, "y": 2.4} and ORDER
+  pad_destination_picker ORDER + BLURB["grig"] = "Grig's chalk steps. All the way up."
+  GameState.PLANET_IDS + both placed_decorations literals; journey_state.gd:537
+
+**Props.** New biome branch: `"chalk": _chalk()` in PlanetProps.populate(), plus "chalk" added to the _collect_paths() early-return.
+
+NEW MESHES (planet_prop_meshes.gd, from PlanetMeshKit; all flat planes, chamfers, tapers — never spheres):
+  step_monolith(stone, cap, shadow, height, variant) — A STANDING STONE. A 4-sided tapered lathe() (or two stacked rounded_box() blocks with different chamfers) 2.2-3.4 m tall, a flat chamfered cap, one incised groove band. The game has NO monolith, obelisk, pillar, arch or ruin anywhere.
+  chalk_shelf(stone, shadow, span, variant) — a horizontal slab bridging two terrace levels: a flat rounded_box deck on two chamfered piers, ~2.6 m span. These are the only props in the game that span an elevation change, and they are what makes the staircase read as inhabited rather than geological.
+  spindle_tree(trunk, frond, shadow, variant) — a single straight tapered cylinder trunk 2.8-3.6 m with a FLAT horizontal disc of foliage at the top (a 'table tree'). Tall and thin on purpose: it draws a vertical against a world made entirely of horizontals.
+  chalk_core() — the new collectible: a short cylinder(0.055, 0.055, 0.16, 10) with a chamfered top and one incised groove, a drilled plug of step.
+
+REUSED UNCHANGED: pebble_rock() in rock_color as quarry spoil; bush() recoloured as lichen cushions (#7f8f68 / #3f4a38 / #d8cba4); lamp_post(Color("#8a8171"), Color("#6f6759"), 2.4, false); grass_tuft(); flower(). Explicitly NOT reused: nut_rock, gear_pole, gantry, antenna_tower (all read as Bolt), topiary and fountain (both read as the hub).
+
+LAYOUT — THE SIGNATURE COMPOSITION: nine step_monoliths in a RING around the spawn, using the existing _hero_dirs(9, 1.4) (which is already a deterministic ring at 5.5-7 m from spawn), with heights graded around the circle 2.2 -> 3.4 -> 2.2 so it reads as a designed henge rather than scatter. Nothing in the game is scattered in a pattern except the hub's fountain ring, and on a 9.5 m world a nine-stone ring around the landing point is visible in one glance from anywhere.
+  4 x chalk_shelf straddling risers, placed with find_free_dir(rng, 1.4, 64, true) (allow_slope = true, since they are meant to sit on a step edge).
+  _n(data.tree_count, 4) spindle_trees via _spawn_blocking(..., footprint 1.0, col_radius 0.28, col_height 3.0, sink 0.05).
+  _n(data.rock_count, 3) pebble_rocks, allow_slope true.
+  4 x lamp_post at the top of four different risers with _omni(lamp, Vector3(0, 2.45, 0), Color("#ffd0a0"), 0.9, 5.0) — the steps must be readable at night, and only chrome and plaza use point lights today.
+  _bushes(4), _flower_patches(_n(data.flower_patch_count, 3)).
+  _grass_tufts(Color("#9aa88a"), 0.55) — density 0.55 against the shipped 1.0 / 1.2 / 1.4. Sparse lichen on stone, not a lawn. Tinted lighter than the ground, per the Zorp luma lesson.
+
+NEW AMBIENT VFX — _chalk_dust(): 70 GPUParticles3D quads, EMISSION_SHAPE_SPHERE_SURFACE at emission_sphere_radius = planet.radius + 0.4 (a GROUND-HUGGING layer, unlike Zorp's spores at +1.3), gravity ZERO, initial_velocity 0.05-0.18, spread 180, turbulence_noise_strength 0.35, turbulence_noise_scale 2.0, colour ramp transparent -> #ddd2bd -> transparent, QuadMesh 0.07 on sparkle_material. Reads as powder drifting along the terrace floors. Seeded rng only — Planet.prebuild() bakes AO from a throwaway props pass during rocket cruise.
+
+MOBILE: everything carrying the identity here (monoliths, shelves, spindle trees, lamps) is a large prop and survives _scatter_scale()'s 0.35 cut; only the tufts and flowers thin.
+
+### CREATURE grig — Grig, Step-cutter of Grig's Chalk Steps — he has quarried the terraces one riser at a time for longer than he will admit, numbers each one, and has firm views about where you put your feet. (from `geology`)
+
+**Home / NpcData.** grig (Grig's Chalk Steps). NpcData entry: planet "grig", display_name "Grig", voice_profile "elder" (an existing wav set; if it reads too close to Mayor Orbit in play, switch to "alien" — the two registers are different but the blips are not), accent "#c2894f", home_dir Vector3(0.24, -0.86, -0.45), wander_radius_m 7.0. Checked: home_dir is 158 degrees from spawn_dir (-0.28, 0.62, 0.73) and 90 degrees from pad_dir (0.66, -0.19, 0.72), so his 3.2 m reserved disc is nowhere near the spawn or pad reservations — which matters more here than anywhere, because on a 9.5 m world the fixed-size reserved discs already eat ~10% of the surface. wander_radius 7.0 rather than the usual 9.0 for the same reason: on a world with a 59.7 m circumference, a 9 m wander is a seventh of the way round.
+
+**Anatomy.** MODEL: `class_name GrigModel extends ChibiModel`, registered as `"grig": return GrigModel.new()` in NpcModels.make(), scene src/characters/npcs/grig.tscn with uid://b0astronpc0067.
+
+HEAD — TALL AND NARROW, the exact inverse of Squill's and of everything shipped. Set in _init() (which runs before rebuild() -> _build_geometry(), the same slot AlienModel uses for eye_w/mouth_w):
+  head_semi = Vector3(0.2450, 0.4300, 0.2350)   # W 0.490  H 0.860  D 0.470 m
+  head_n    = 3.2                                # flat chamfered side planes
+  head_y    = 1.1010                             # chin lands at 0.671, the same chin line as Zorp and Squill, so the shared shoulder/collar geometry still meets it
+A head nearly twice as tall as it is wide, with flat side planes: a standing stone with a face, which is the entire joke of the character and ties him to his planet. Crown-seam fraction at n=3.2 is 0.8152 (the shipped 0.735 would bury the seam).
+
+ONE EYE, ONE THICK CENTRAL STALK — a cyclops, straight off the reference sheet, and an eye count nobody in the cast has. _add_face() builds two eyes, so in _build_geometry() immediately after it:
+  _eyes[1].queue_free()
+  _eyes.resize(1); _eye_ovals.resize(1); _eye_happy.resize(1); _eye_round.resize(1)
+  for b in _brows: b.queue_free()
+  _brows.clear()
+Resize the four parallel arrays IMMEDIATELY — queue_free is deferred, and _apply_face() iterates those arrays every frame, so a dangling reference would touch a freed node. Then one stalk:
+  _add_eyestalks([{"base": Vector3(0.006, head_semi.y * 0.78, -0.026), "tip": Vector3(0.0, 0.560, -0.048), "r": 0.052, "splay": 0.0}], SKIN, SCLERA, 0.112)
+An eyeball of 0.112 m is nearly twice Zorp's 0.058-0.062, and the stalk radius 0.052 is nearly twice his 0.030 — a thick neck-stalk carrying one huge eye. Set eye_w = 0.088, eye_h = 0.092 in _init() so the dark pupil scales with the ball instead of becoming a dot on it. A single arc_tube LID RIDGE across the top of the eyeball in SKIN_DEEP replaces the two brow bars — that is the 'quiet end of the AC range' cue R2.3 asks for, expressed once instead of twice.
+  MEASURE, DO NOT GUESS: NPC.MARKER_HEIGHT is 1.52 (x body_scale) and Grig's stalk tip lands at head_y + 0.560 = 1.661 m, so the '!' would float below the eye rather than above the head. Either set body_scale 0.92 (tip 1.528) or raise MARKER_HEIGHT for tall models; check it in showcase/characters_lineup.tscn before shipping.
+
+MOUTH — small, low, and square-toothed, because the head is tall. MOUTH_PITCH_GRIG = -46.0, MOUTH_SPREAD = Vector3(1.30, 1.20, 1.0), _add_wide_grin(mouth_node, GRIN, TOOTH, Vector3(0.062, 0.026, 0.018), [[-0.030, 0.020], [0.006, 0.024], [0.038, 0.018]]) — three blunt SQUARE teeth rather than the pointed rows the rest of the cast wears. Rendered width 0.161 m = 33% of the 0.490 m head.
+
+BODY — a tapered column, not a bean:
+  _add_torso_bean(SMOCK, {"size_mul": Vector3(0.88, 1.16, 0.86), "chamfer_color": SMOCK_DARK}) -> semi (0.1954, 0.2726, 0.1634): narrow and tall, the opposite of Squill's mantle.
+  _add_arms(SMOCK, SKIN, 2) — TWO fingers. Zorp has three, the twins none; a two-lobed mitt is a third hand silhouette.
+  _add_legs(SKIN_DEEP, FOOT).
+  SILHOUETTE PROP: a TALLY COLLAR — five flat chamfered chalk slabs on a cord across the shoulders, rounded_box(Vector3(0.050, 0.072, 0.014), 0.008, 10) each, fanned at +/-0.22 rad, one notched per terrace he has cut. Nobody wears stone. Plus a CUTTING WEDGE at the hip: superellipsoid(Vector3(0.036, 0.086, 0.022), 2.2, 8, 5) in grey #8b8578 — deliberately NOT brass, because brass is the Mayor's.
+
+SKIN TEXTURE — strata, not spots, and again with no shader edits:
+  const SURF_SKIN := {"surface": "wood", "surface_scale": 0.30, "surface_strength": 1.8, "surface_near": 8.0, "surface_far": 22.0, "surface_knot": 0.05}
+sd_wood's ring band at 26 x 0.30 = 7.8 cycles/m, with the knot term almost switched off, reads as horizontal STRATA on a stone-grey skin — exactly right for a creature who is essentially walking chalk, and no character uses sd_wood today. If a proper cellular pass is wanted later, that is the `web = 1.0 - smoothstep(0.0, 0.09, f2 - f1)` term of a new sd_skin(), which would be CHEAPER than sd_rock (27 hashes against ~40).
+  PLUS PANEL GROOVES rather than spots: three incised horizontal lines around the head at pitch +26 / +4 / -18 degrees, each an arc_tube(0.230, 0.0055, ...) in SKIN_DEEP placed with _orient_on_head(node, 0.0, pitch, 0.002), ~90 tris each. Horizontal banding on the character mirroring the horizontal banding on his planet is the strongest available statement that the two were designed together.
+
+PALETTE — he must NOT vanish into his own world. The ground is cool grey chalk #b7b4a2 at S 0.115 V 0.718, so Grig separates by hue AND by value:
+  SKIN       #b99a7e  S 0.319 V 0.725 — warm stone-clay, 20 points of saturation above the ground
+  SKIN_DEEP  #8d735c  S 0.348 V 0.553
+  SCLERA     #ece4d4   EYE #241d18   GRIN #3a2b22   TOOTH #efe7d6
+  SMOCK      #64798a  S 0.275 V 0.541 — a slate-blue mason's smock, the one cool note, and the thing that pops him off the ochre risers (#958369)
+  SMOCK_DARK #4c5c6b
+  TALLY      #cabfa6   FOOT #5a4f45   WEDGE #8b8578
+
+ANIMATION: hover_height 0.0, anim_time_scale 0.70 (slow and deliberate — slower than everyone but the Mayor's 0.62). In _animate_extras the single eye TRACKS WITH A LAG: the stalk leans up to 0.14 rad toward pose(P.HEAD_YAW) through a first-order filter, so the eye 'arrives' a beat after the head turns. Nothing in the cast has a lagging feature and on one huge eye it reads instantly as thought. The tally slabs swing with pose(P.TORSO_ROLL) at 0.4x amplitude.
+
+COLLECTIBLE: chalk_core. Catalog.register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of step. Grig numbers them.", "icon_color": "#d8cba4"}), plus a `"chalk_core":` case in Collectible._build_visual() using PlanetPropMeshes.chalk_core() with prop_material() tinted #cec2a6, _base_y 0.22, floating true, sparkle #ece3c8.
+
+**Not a repeat of.** ONE eye. A single oversized eyeball (0.112 m radius, nearly twice Zorp's) on ONE thick central stalk. Every existing neighbour has exactly two eyes: Zorp two matched stalks, Pip one long + one short, Pop two short close-set, Mayor Orbit two on goggle lenses, Bolt and DJ Nova two on a faceplate. A cyclops is an eye count and a silhouette nothing in the cast approaches. Second unshared trait: a TALL NARROW head (0.490 x 0.860 x 0.470 at n 3.2) — the exact geometric inverse of Squill's wide low one, and unrelated to the single cached superellipsoid the four organic heads share today. Third: square blunt teeth instead of the pointed rows everyone else wears, and a two-fingered mitt (Zorp 3, twins 0). Fourth: worn STONE — a tally collar of chalk slabs where the cast wears cloth (Zorp's scarf, the twins' aprons, the Mayor's waistcoat, Stella's suit). Fifth: a lagging eye-track, the only delayed feature in the cast. He is also warm-clay-and-slate where nobody else is; the closest is the Mayor's aged brass, which is deliberately excluded from his palette (no brass anywhere on Grig).
+
+**Voice.** "Mind the riser. It has been there longer than you."
+"Nine hundred steps cut. I have opinions about eight."
+
+(Register: patient, precise, quietly proud, gently bossy about footing; counts things and remembers the count. Slow cadence to match anim_time_scale 0.70. Every line <= 60 characters. Needs the full NpcData set: intro x3, greet low/mid/high, small_talk >= 12 distinct lines, time_lines dawn/day/dusk/night, deco_lines none/few/many, favor with all eight keys. Format rules are load-bearing: fetch and bring each need one line carrying BOTH %d and %s, deliver needs one line with a bare %s and no %d, and any literal percent must be written %% — see Bolt's "Handle with 60%% care." His night lines should use the two moons and the edge-on ring; his deco_lines should be about placement and alignment, which is the one thing he and the player actually share.)

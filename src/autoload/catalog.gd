@@ -30,6 +30,10 @@ func _register_builtin() -> void:
 	register({"id": "moon_flower", "name": "Moon Flower", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A pale bloom that only opens under starlight.", "icon_color": "#cfe4ff"})
 	register({"id": "crystal_chunk", "name": "Crystal Chunk", "kind": "collectible", "category": "material", "rarity": "uncommon", "price": 0, "desc": "Hums faintly when you hold it.", "icon_color": "#b58cff"})
 	register({"id": "gear_bit", "name": "Gear Bit", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A little brass gear. Bolt would love this.", "icon_color": "#ffb05c"})
+	# Fen and Grig. Without these two the ids in fen.tres / grig.tres `collectible_kind` resolve to
+	# an empty catalog entry: the pickup has no name, no icon colour and no journal line.
+	register({"id": "salt_bloom", "name": "Salt Bloom", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A crust flower grown at a pool's edge.", "icon_color": "#e6dcc4"})
+	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of step. Grig numbers them.", "icon_color": "#d8cba4"})
 
 func register(def: Dictionary) -> void:
 	assert(def.has("id") and def.has("name") and def.has("kind"), "Catalog item missing id/name/kind")

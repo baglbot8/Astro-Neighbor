@@ -478,4 +478,104 @@ seg 18/16/16/14. Stella is 8176, also pre-existing and far over. And `docs/STYLE
 ship well over it deliberately, and that exemption should be written into the style guide the way the
 eye-spacing one was rather than left implicit.
 
-See `docs/NEXT_WORLDS.md` for the measured build spec for the two new worlds, which is not built yet.
+See `docs/NEXT_WORLDS.md` for the measured build spec that produced Fen and Grig.
+
+
+## 36. [2026-09-07] Two rules the Fen / Grig build measured, so nobody re-derives them
+
+### Water goes in BOWLS, never on shelves
+`decoration_manager.gd` refuses any spot with `h0 < water_radius + SHORE_MARGIN` (0.18 m) and
+repeats the test on all six rim samples, so the shore skirt is measured in METRES OF GROUND, not in
+metres of water. On a broad flat shelf a 0.18 m margin reaches a long way inland and eats the
+placement budget; in a steep bowl it is a thin ring.
+
+Measured over six candidate worlds at fp 0.6, 4000 Fibonacci samples, against a synthetic home
+baseline of 75.8% free:
+
+    Fen    water 5.6%  shore refusal  2.5%   free 70.5%   <- craters: steep bowls
+    Thrum  water 0.6%  shore refusal 20.5%   free 61.4%   <- flooded terrace shelves
+    Umbo   water 0.5%  shore refusal 23.7%   free 47.8%
+    Squill water 26.5% shore refusal  6.7%   free 45.7%   (own fix -0.44: 46.4%, shore 26.1%)
+
+Squill, Thrum and Umbo all put their waterline on a shelf and all three were cut. Lowering
+`water_level` does not rescue a shelf world: it converts water refusal into shore refusal at
+roughly one for one. This is the same trap `planet.gd`'s own `RIVER_MASK_LO` comment records from
+Zorp's rescue.
+
+### A terrace riser needs ~3-4 icosphere edges across it, and `mesh_subdivisions` is the only lever
+`terrace_bank` is baked PER VERTEX into `COLOR.g` in `_bake_color()` and read in
+`grass_planet.gdshader` as `smoothstep(0.36, 0.52, v_color.g)`. The planet is an icosphere, so
+edge length is `1.0515 * radius / 2^mesh_subdivisions`. Grig at r 9.5 / subdiv 5 gives a 0.312 m
+edge against a riser that measures 0.500 m wide at the shader's own paint threshold: **1.60
+vertices per riser.** Many risers then contain no vertex at all and vanish; the rest render as a
+dashed stipple — precisely the "smooth pale dome" outcome `terrace_bank` exists to prevent.
+
+**Fix it with `mesh_subdivisions`, NOT with `terrace_band`.** `_terrace()` and `_terrace_bank()`
+share the same `w`, so raising `terrace_band` widens the real quantisation ramp and physically
+flattens the staircase. Measured on Grig (24 great circles, 1 cm steps):
+
+    band 0.055 -> riser 0.500 m,  slope 23.0 deg median,  bank coverage  6.37%   <- shipped
+    band 0.103 -> riser 0.920 m,  slope 13.8 deg,         coverage      11.83%
+    band 0.140 -> riser 1.280 m,  slope 10.1 deg,         coverage      16.00%
+
+`DecorationManager.MAX_SLOPE_DEG` is 16, so both wider bands drop the risers BELOW the refusal
+threshold: they stop being cut cliffs, start accepting props, and the world becomes a smooth dome
+with ochre stripes. Grig ships subdiv 6 (0.156 m edge = 3.20 verts per riser, ~82k tris, the same
+as every other world). Note 3.20 does not reach the >= 4 bar the critic set; reaching it would need
+subdiv 7 at ~164k tris. The genuinely correct fix is to compute the band in the shader from world
+position instead of reading `COLOR.g`, which is a `grass_planet.gdshader` edit and out of scope.
+
+
+## 36. [2026-09-07] Two new worlds shipped: Fen's Long Dusk and Grig's Chalk Steps
+Built to the measured spec in `docs/NEXT_WORLDS.md` by seven agents on strictly disjoint files. Four
+worlds became six; seven neighbours became nine.
+
+**Fen's Long Dusk** (id `fen`, biome `flats`, R 13.0) — a near-flat pan of 14 crater pools under a sun
+that peaks at **11 degrees**, so everything throws a long shadow all day. Nothing else in the game is
+flat and nothing else has a low sun. Its water works where three other proposals' did not, and the
+reason is recorded as a rule worth keeping: **water goes in bowls, never on shelves.** `SHORE_MARGIN`
+(0.18 m) punishes any waterline sitting on a broad flat shelf — the three rejected designs either
+drowned the decoration budget or produced no water at all. Fen gets 5.6% coverage for 2.5% shore
+refusal because its water is in steep crater bowls.
+
+**Grig's Chalk Steps** (id `grig`, biome `chalk`, R 9.5) — a small dry world of concentric stepped
+shelves under a near-edge-on razor ring and two moons. The steps only exist because of the one engine
+change below; without it he is a smooth pale dome.
+
+### The engine change both worlds needed: terrace banks
+`bank_color` was only ever painted on crater walls and plateau banks. `PlanetData.terrace_bank`
+(default 0.0, so all four shipped worlds are byte-identical) plus `Planet._terrace_bank()` feeding
+both `bank_weight()` and `_bake_color()` paints the riser between two treads. Measured at 6-9% of
+Grig's surface — a strong read without swamping the world. No shader edit: `grass_planet.gdshader`
+already paints `bank_weight` with `bank_color` and already suppresses it inside the sand band.
+
+### Seven new PlanetData fields, all defaulted to today's hardcoded values
+`sun_peak_elev_deg`, `sun_disc_size`, `moon_size`, `star_density`, `ring_inner_scale`,
+`ring_outer_scale`, `ring_tilt_deg`. The last three replace literals in `environment.gd`, and the
+middle three are uniforms `sky.gdshader` has always declared but `_apply()` has never set for any
+planet — so a per-world sky was four `set_shader_parameter` calls away the whole time.
+
+### Registries: the part that decides whether a world exists at all
+Adding a planet id means teaching **sixteen** hardcoded lists. Some failures are silent — a world
+that builds fine but is unreachable, invisible in the sky, or drawn as the wrong globe — and one is a
+hard crash: `space_travel._build_orbits()` indexes `LAYOUT[id]` with no guard. Both globe shaders had
+to go to `hint_range(0, 5)` with real mode-4 and mode-5 branches, because their `_:` fallback sets
+mode 3 and both new worlds would otherwise draw as the green-and-cream hub everywhere.
+
+`PlanetScore.TRUST_NPCS` went from 2 entries to 4. That **halves the trust component of every
+existing save's home rating** and is a deliberate rebalance, not an oversight.
+
+### Grig was rebuilt once, for the reason the user already gave us
+The first build was 490 x 860 mm — nearly twice as tall as wide — with a small mouth on a large blank
+field. That is exactly the complaint made about Zorp ("a lot of open space ... shrink that open space
+down more"). Rebalanced to 550 x 660 with a grin at 1.95 x 1.70 and four uneven teeth. He is still
+the tallest head in the cast, which is his silhouette; he is no longer a loaf.
+
+### Verified
+Headless boot clean; both worlds load with zero script errors; both creatures build and register
+(`fen` 5834 tris, `grig` 5042, budget 6000). Mayor Orbit remains 6130 and Stella 8176 — both
+pre-existing and untouched by this work.
+
+**A build agent was flagged by a security classifier.** Its diff was reviewed line by line before
+anything was committed: every change is in game source, there are no network calls, no credential
+access, no writes outside the project and no `OS.execute`. The finding appears to be a false positive.

@@ -507,6 +507,196 @@ const DATA := {
 			"gift": ["A DELIVERY! For me! Turn it up!", "Ooh, this one's got weight to it. Nice."],
 		},
 	},
+	# ==========================================================================================
+	"fen": {
+		"planet": "fen",
+		"display_name": "Fen",
+		"voice_profile": "elder",
+		"accent": "#6f8cb8",
+		"home_dir": Vector3(0.6820, 0.6428, -0.3492),
+		"wander_radius_m": 9.0,
+		"intro": [
+			"Sit. The light does this for another six hours.",
+			"I am Fen. I watch the pools. That is the work.",
+			"Nine years of notes. Pool four moved. Twice.",
+		],
+		"greet": {
+			"low": [
+				"Ah. A visitor. Mind the crust near the rim.",
+				"Hello. You are the first thing to move today.",
+				"Welcome to the long dusk. It is always this.",
+				"You cast a good shadow. Seven metres, near.",
+			],
+			"mid": [
+				"You again. The pools noticed. I noticed too.",
+				"Good. Sit. I have the logbook open anyway.",
+				"Ah, my neighbour. The light kept for you.",
+				"Hello, friend. Take the shade of stone three.",
+			],
+			"high": [
+				"There you are. I saved you a page in the book.",
+				"My friend! Sit. The whole evening is ours.",
+				"Ah! I wrote your name beside pool nine.",
+				"You came the long way. I watched you arrive.",
+			],
+		},
+		"small_talk": [
+			"Pool four has moved again. Eleven centimetres.",
+			"Nine years I have watched that water wander.",
+			"The sun has been setting since I was young.",
+			"Shadows here are honest. They tell you the hour.",
+			"I number the pools. Fourteen. Sometimes thirteen.",
+			"Salt grows back overnight. Quietly. Rudely.",
+			"No moon here. Nothing to argue with the sun.",
+			"The dust hangs. It never decides to fall.",
+			"Walk slow. The crust remembers every foot.",
+			"My logbook is heavier than I am. Nearly.",
+			"I have a favourite stone. It is the fourth.",
+			"Mirror pools lie about depth. Never trust one.",
+			"You blink more than I do. I counted.",
+			"Some evenings the whole pan turns copper.",
+		],
+		"time_lines": {
+			"dawn": ["Dawn, in theory. The light barely shifts.", "Early. The pools have not woken up yet."],
+			"day": ["Noon. The sun is a hand off the horizon.", "Midday shade is long enough to nap in."],
+			"dusk": ["Dusk. As ever. It suits me, this hour.", "The pools are pure copper now. Look."],
+			"night": ["Dark at last. No moon to spoil the stars.", "Night. The crust ticks as it cools."],
+		},
+		"deco_lines": {
+			"none": ["Your planet is bare. Bare is a fine start.", "Nothing placed yet? Take your time. I did."],
+			"few": ["A few things placed. I noted them down.", "You have begun. Begin slowly, that is best."],
+			"many": ["Your planet is full of care. It shows.", "So many pieces. I would need a new page."],
+		},
+		"favor": {
+			"fetch": [
+				"A small thing, if your legs are willing.",
+				"Could you gather %d %s for the logbook?",
+			],
+			"bring": [
+				"I am marking the rims. I need materials.",
+				"Bring me %d %s and I will mark pool nine.",
+			],
+			"deliver": [
+				"I copied a page out for %s. It is dry now.",
+				"Would you carry it over? Do not fold it.",
+			],
+			"progress": [
+				"Good. There is no hurry on a world like this.",
+				"Coming along. The light will wait for you.",
+			],
+			"thanks": [
+				"Perfect. These go beside the old notes.",
+				"Take this. It has sat unused for years.",
+			],
+			"decline": [
+				"Of course. The pools are patient. So am I.",
+				"Another day, then. There are plenty of days.",
+			],
+			"remind": [
+				"My little errand still stands. No rush.",
+				"When you pass by again, the note is ready.",
+			],
+			"gift": [
+				"A parcel. For me. Well. Well well.",
+				"Tell them thank you. I will write it down.",
+			],
+		},
+	},
+	# ==========================================================================================
+	"grig": {
+		"planet": "grig",
+		"display_name": "Grig",
+		"voice_profile": "elder",
+		"accent": "#c2894f",
+		"home_dir": Vector3(0.24, -0.86, -0.45),
+		"wander_radius_m": 7.0,
+		"intro": [
+			"Stop there. That riser is still curing.",
+			"I am Grig. I cut the steps. All of them.",
+			"Nine hundred and four. I number every one.",
+		],
+		"greet": {
+			"low": [
+				"Mind the riser. It was here before you.",
+				"Hello. Feet on the tread, not on the edge.",
+				"A visitor. Walk up, not across. Up.",
+				"Welcome to the steps. Take them slowly.",
+			],
+			"mid": [
+				"You. Good. You have learned where to stand.",
+				"Hello again. Step twelve missed you.",
+				"Back up the stairs? Your footing improves.",
+				"Good day. I saved you the flattest shelf.",
+			],
+			"high": [
+				"My friend! Sit on step forty. It is level.",
+				"You! Come up. I cut a new one for you.",
+				"Best neighbour on the steps. And the only one.",
+				"Ah! I numbered a riser after you. Six-A.",
+			],
+		},
+		"small_talk": [
+			"Nine hundred steps cut. I have views on eight.",
+			"A riser is knee high or it is not a riser.",
+			"I cut step one before the ring tilted over.",
+			"Chalk forgives nothing. Measure twice. Again.",
+			"You stand on the edge. Everyone does. Do not.",
+			"The big moon lights the treads. The small sulks.",
+			"My wedge is older than your planet. Probably.",
+			"Dust settles in the corners. I sweep. It returns.",
+			"Step two hundred is my finest. Come and see.",
+			"I count in risers, not in days. Simpler.",
+			"The ring is edge-on. A line, not a hoop. Better.",
+			"Lichen grows on the cool side. Only the cool.",
+			"Never run down. Down is where mistakes live.",
+			"I numbered them all twice. The numbers agreed.",
+		],
+		"time_lines": {
+			"dawn": ["Dawn. The risers throw their longest lines.", "Early. Good. The chalk is still cool."],
+			"day": ["Midday. Every step edge is a shadow line.", "Good light. Count the tiers from here."],
+			"dusk": ["Dusk. The treads go gold. Briefly. Enjoy it.", "Evening. Dust settles on step ninety."],
+			"night": ["Two moons up. The big one shows the treads.", "Night. The ring is a bright wire overhead."],
+		},
+		"deco_lines": {
+			"none": ["Nothing placed yet. A blank tread. Fine.", "An empty planet. Start at a corner. Always."],
+			"few": ["A few pieces. Line them up next time.", "You have begun. Watch your spacing."],
+			"many": ["Well placed, most of it. Well placed.", "Your planet is arranged. I approve. Mostly."],
+		},
+		"favor": {
+			"fetch": [
+				"A task, if your footing is good today.",
+				"Would you gather %d %s? For the markers.",
+			],
+			"bring": [
+				"I am cutting a new tread. I am short.",
+				"Bring %d %s and the new tread gets a number.",
+			],
+			"deliver": [
+				"I cut something for %s. Flat on both faces.",
+				"Carry it level. Do not chip the corners.",
+			],
+			"progress": [
+				"Progress. Steady is faster than quick.",
+				"Good. Keep your weight over the tread.",
+			],
+			"thanks": [
+				"Correct. Every one of them. Good work.",
+				"Take this. It came off a very good step.",
+			],
+			"decline": [
+				"No? Sensible. The stone is not going anywhere.",
+				"Another day. I have eight hundred to check.",
+			],
+			"remind": [
+				"My errand still stands. Mind the loose one.",
+				"No rush. The steps have waited longer.",
+			],
+			"gift": [
+				"A parcel. Squared corners. Someone was careful.",
+				"For me? I shall number it. Then open it.",
+			],
+		},
+	},
 }
 
 

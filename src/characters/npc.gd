@@ -33,7 +33,11 @@ const PATH_SAMPLES := 4
 ## Feet-to-feet distance at which the "Talk" prompt lights up.
 const TALK_REACH := 2.2
 const MARKER_POLL := 0.45
+## Default height of the "!" above a neighbour's feet, in model space (multiplied by body_scale).
+## A model whose crown reaches higher than this -- Grig's eye rides a stalk to 1.773 -- exposes
+## `marker_clearance() -> float` and the marker is lifted to clear it. See `_ensure_collision`.
 const MARKER_HEIGHT := 1.52
+const MARKER_CLEARANCE_GAP := 0.18
 ## Stem and dot of the "!". The 6.3 cm gap between them is what stops the pair reading as one bar.
 const MARKER_STEM_Y := 0.105
 const MARKER_DOT_Y := -0.085
@@ -67,6 +71,7 @@ var _has_face_target := false
 var _footstep_surface: String = "grass"
 var _rng := RandomNumberGenerator.new()
 var _body_scale: float = 1.0
+var _marker_h: float = MARKER_HEIGHT
 
 
 func _ready() -> void:
@@ -114,6 +119,11 @@ func _ensure_model() -> void:
 
 func _ensure_collision() -> void:
 	_body_scale = maxf(_model.body_scale, 0.4)
+	# Duck-typed so no base class has to grow the method: a model that knows it is taller than the
+	# default marker height says so, and everyone else stays byte-identical at 1.52.
+	_marker_h = MARKER_HEIGHT
+	if _model != null and _model.has_method("marker_clearance"):
+		_marker_h = maxf(MARKER_HEIGHT, float(_model.call("marker_clearance")) + MARKER_CLEARANCE_GAP)
 	for c: Node in get_children():
 		if c is CollisionShape3D:
 			return
@@ -393,7 +403,10 @@ func _surface_for_biome() -> String:
 	match planet.data.biome:
 		"chrome":
 			return "metal"
-		"plaza":
+		# AudioManager.FOOTSTEP_SURFACES is only ["grass", "stone", "metal"] and anything else is
+		# silently coerced to grass, so there is no "sand" set to reach for: Fen's salt crust and
+		# Grig's cut chalk both take stone, which is the closer of the three.
+		"plaza", "flats", "chalk":
 			return "stone"
 		_:
 			return "grass"
@@ -474,7 +487,7 @@ func _build_marker() -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_marker.add_child(mi)
 	_marker.scale = Vector3.ONE * _body_scale
-	_marker.position = Vector3(0.0, MARKER_HEIGHT * _body_scale, 0.0)
+	_marker.position = Vector3(0.0, _marker_h * _body_scale, 0.0)
 	add_child(_marker)
 
 
@@ -488,7 +501,7 @@ func _update_marker(delta: float) -> void:
 	if not _marker.visible:
 		return
 	_marker_t += delta
-	_marker.position.y = (MARKER_HEIGHT + sin(TAU * _marker_t * 1.4) * 0.06) * _body_scale
+	_marker.position.y = (_marker_h + sin(TAU * _marker_t * 1.4) * 0.06) * _body_scale
 	_face_marker_to_camera()
 
 

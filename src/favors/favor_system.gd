@@ -42,7 +42,13 @@ const PAL_STARDUST_BONUS := 0.2
 const BEST_FRIEND_STARDUST_BONUS := 0.4
 ## One-time signature gift each neighbour hands over the first time they hit "best friend" — always
 ## granted instead of the usual random reward roll, and never again after (GameState.flags gates it).
-const SIGNATURE_REWARD := {"zorp": "deco_wish_star", "bolt": "deco_robot_dog"}
+## Every id here must exist in the Catalog with a real scene, or the block at `_award()` grants a
+## decoration the player can never place. Fen and Grig take the two remaining price-0 legendaries:
+## the Gravity Well Fountain for the pan of mirror pools, the Ring-Planet Globe for the ringed world.
+const SIGNATURE_REWARD := {
+	"zorp": "deco_wish_star", "bolt": "deco_robot_dog",
+	"fen": "deco_gravity_fountain", "grig": "deco_ring_globe",
+}
 
 var _rng := RandomNumberGenerator.new()
 var _planet: Planet

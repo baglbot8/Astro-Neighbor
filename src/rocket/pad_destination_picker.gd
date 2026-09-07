@@ -34,13 +34,20 @@ const EDGE := 22.0
 const TILE := Vector2(196.0, 236.0)
 const TILE_GAP := 14.0
 const DISC := 84.0
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub"]
+## THE ROW FITS FIVE TILES AND NO MORE. Standing on any world, every OTHER world is a tile, so a
+## six-planet system puts five in the row: 5 x TILE.x + 6 x TILE_GAP (the HBox separations either
+## side of the two chevrons included) + 2 x 34 px of chevron = 1132 px, plus the card's 22 px of
+## padding each side = 1176 px inside a 1280 px viewport. A seventh world would add another
+## 196 + 14 = 210 px and overflow by 106 px, so world #7 needs a different layout, not another entry.
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
 ## One line of flavour per world - the same copy the map card used.
 const BLURB := {
 	"home": "Home sweet orbit.",
 	"zorp": "Zorp's violet world. Glowing rivers!",
 	"bolt": "Bolt's chrome world. Mind the gears.",
 	"hub": "Starport Plaza. Shops & town hall.",
+	"fen": "Fen's long dusk. Mirror pools, huge sun.",
+	"grig": "Grig's chalk steps. All the way up.",
 }
 ## Seconds `interact` is ignored after the card opens. The player just pressed E to board; without
 ## this, pressing it again — the most natural thing in the world — launches before they have read

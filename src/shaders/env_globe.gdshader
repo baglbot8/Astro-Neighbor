@@ -1,6 +1,6 @@
 // NEIGHBOURING WORLDS hanging in the sky of a tiny planet (STYLE_GUIDE R2.1).
 //
-// This is the ground-level twin of the solar-system map's src/rocket/globe.gdshader: same four
+// This is the ground-level twin of the solar-system map's src/rocket/globe.gdshader: same six
 // biome modes, same noise grammar, same soft toon terminator, so the green world you see over the
 // hill is recognisably the green world you fly to. That shader belongs to the rocket builder and is
 // referenced read-only; this is an independent implementation with three deliberate differences:
@@ -22,8 +22,11 @@ render_mode unshaded, cull_back, depth_draw_opaque, shadows_disabled, fog_disabl
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 
-/// 0 meadow (green + seas), 1 violet (glowing rivers), 2 chrome (plate grid + seams), 3 plaza.
-uniform int mode : hint_range(0, 3) = 0;
+/// 0 meadow (green + seas), 1 violet (glowing rivers), 2 chrome (plate grid + seams), 3 plaza,
+/// 4 flats (pale salt rings round dark pools), 5 chalk (quantised contour terraces).
+/// 3 IS ALSO THE FALLBACK: sky_bodies.gd reads `BIOME_MODE.get(biome, 3)`, so a biome with no mode
+/// of its own hangs in every sky as the green-and-cream hub, silently.
+uniform int mode : hint_range(0, 5) = 0;
 uniform vec3 land_a : source_color = vec3(0.30, 0.55, 0.26);
 uniform vec3 land_b : source_color = vec3(0.22, 0.44, 0.21);
 uniform vec3 low_color : source_color = vec3(0.86, 0.80, 0.62);
@@ -133,6 +136,38 @@ void fragment() {
 		float seam = smoothstep(0.030, 0.006, e);
 		col = mix(col, accent * 0.30, seam * 0.45);
 		em = seam;
+	} else if (mode == 4) {
+		// Flats: a dry salt pan pocked with round pools. A broad crust mottle for the pan, plus a
+		// lower-frequency bowl field whose low ground IS the pool; the pale ring between the two is
+		// the salt crust, and it is what makes each pool read as a bowl and not as a blue dot.
+		// Kept identical to src/rocket/globe.gdshader mode 4 so Fen in the sky is Fen on the map.
+		float n = fbm3(p * 1.35);
+		float b = fbm3(p * 1.05 + 19.0);
+		vec3 pan = mix(land_a, land_b, smoothstep(0.44, 0.68, n));
+		float pool = 1.0 - smoothstep(sea_level - 0.025, sea_level + 0.015, b);
+		float ring = smoothstep(sea_level - 0.005, sea_level + 0.030, b)
+			* (1.0 - smoothstep(sea_level + 0.055, sea_level + 0.105, b));
+		col = mix(pan, low_color * 0.92, ring * 0.80);
+		// Capped at 0.7 toward sea_deep: these are 40-70 cm mirror pools you can see the floor of,
+		// and the full deep tone punched black holes in a body only 2-4 deg across.
+		col = mix(col, mix(sea_color, sea_deep, pool * 0.7), pool);
+	} else if (mode == 5) {
+		// Chalk: the world cut into concentric terraces - the sky-scale twin of the real
+		// terrace_bank contour rings. Quantise one height field into steps, alternate the tread
+		// tone so neighbouring shelves separate, and paint a thin band at every step boundary in
+		// low_color for the riser faces.
+		// DELIBERATELY NOT fbm3, and identical to src/rocket/globe.gdshader mode 5: fbm's upper
+		// octaves shatter a contour line into speckle, and Grig's real terrain is only ~1.9 noise
+		// cycles around the whole world. One dominant smooth octave, a light second, 7 steps.
+		float h = vnoise3(p) * 0.82 + vnoise3(p * 2.1 + 7.0) * 0.18;
+		float f = h * 7.0;
+		float tread = floor(f);
+		float band = f - tread;
+		col = mix(land_a, land_b, mod(tread, 2.0) * 0.5);
+		col *= mix(0.90, 1.10, clamp(h * 1.5 - 0.25, 0.0, 1.0));
+		float edge = min(band, 1.0 - band);
+		float riser = 1.0 - smoothstep(0.06, 0.14, edge);
+		col = mix(col, low_color, riser * 0.80);
 	} else {
 		// Plaza: cream tiles and broad green lawns.
 		float n = fbm3(p * 1.15);

@@ -51,7 +51,8 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 ## For "home" this is only the level-0 fallback — `effective_radius()` is the authority. See
 ## HOME_RADII above.
 @export var radius: float = 16.0
-## "meadow" (home), "violet" (Zorp, alien), "chrome" (Bolt, robot), "plaza" (hub)
+## "meadow" (home), "violet" (Zorp, alien), "chrome" (Bolt, robot), "plaza" (hub),
+## "flats" (Fen, salt pan), "chalk" (Grig, terraced stone)
 @export var biome: String = "meadow"
 @export var seed: int = 1
 
@@ -66,6 +67,13 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 @export var terrace_step: float = 0.36
 ## Fraction of a terrace band used by the bank. Small = crisper edge (0.05 crisp .. 0.5 = no terracing).
 @export var terrace_band: float = 0.13
+## How strongly the exposed-earth `bank_color` is painted onto TERRACE RISERS (the vertical cut face
+## between two terrace steps). 0 = off, which is what the four shipped worlds use: today only crater
+## walls and plateau banks get bank paint, so a terraced world is a smooth dome of `ground_color_a`
+## with no visible contour lines at all. `Planet` feeds this into `bank_weight()` (which the ground
+## shader reads out of COLOR.g) via a bell centred on each riser, so 1.0 draws every step edge as a
+## full-strength cut face. Only meaningful when `terrace_step > 0`. [PLANET BUILDER]
+@export var terrace_bank: float = 0.0
 ## Deliberate raised landforms: flat-topped plateaus with a crisp bank.
 @export var plateau_count: int = 2
 @export var plateau_height: float = 0.72     # metres the plateau top sits above the surrounding ground
@@ -76,7 +84,12 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 ## in the tonal band: a violet or steel world starts darker than a meadow and needs less of it.
 @export var ground_ao: float = 1.0
 @export var water_level: float = -0.35       # meters relative to radius. Water sphere radius = radius + water_level. Set to -99 for no water.
-@export var mesh_subdivisions: int = 6        # icosphere subdivisions (6 = ~41k tris)
+## Icosphere subdivisions. `PlanetMeshBuilder` starts from a 20-face icosahedron and quadruples once
+## per level, so the triangle count is 20 * 4^n: 5 = 20,480 tris, 6 = 81,920 tris. (The often-quoted
+## "~41k" is the VERTEX count, 10 * 4^n + 2 = 40,962 at level 6 — not triangles.) Facet size matters
+## more than the raw count when a world is terraced: edge length is about 1.0515 * radius / 2^n, and
+## a riser needs >= 4 vertices across it or the baked bank colour renders as a dashed stipple.
+@export var mesh_subdivisions: int = 6
 
 @export_group("Colors")
 ## Keep base albedos MUTED (HSV S 0.40-0.52, V 0.62-0.75). Light makes things bright, not albedo.
@@ -113,8 +126,34 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 @export var fog_color: Color = Color("#bfe6ff")
 @export var has_ring: bool = false
 @export var ring_color: Color = Color("#ffcf8a")
+## Ring geometry, as MULTIPLES OF THE PLANET RADIUS, handed to `PlanetRing` by
+## `environment.gd::_build_ring()`. The defaults are Bolt's shipped hoop (1.7R .. 2.9R at 42 deg),
+## which that function currently hardcodes; leaving them alone keeps Bolt byte-identical. A tight
+## pair (e.g. 1.22 / 1.52) with a near-edge-on tilt reads as a razor band rather than a hoop, which
+## is how a second ringed world avoids looking like the first one. [ENVIRONMENT]
+@export var ring_inner_scale: float = 1.7
+@export var ring_outer_scale: float = 2.9
+## Tilt of the ring plane in degrees. 0 = ring in the planet's equatorial plane (seen edge-on from
+## the surface at the equator); 90 = fully face-on overhead.
+@export var ring_tilt_deg: float = 42.0
 @export var moon_count: int = 1
 @export var cloud_density: float = 0.5
+## Elevation of the sun above the horizon at LOCAL NOON, in degrees. Replaces the hardcoded constant
+## in `environment.gd` (the shipped four all ran at 52.0). This is the single strongest per-world
+## light lever there is: shadow length is 1 / tan(elev) times the caster's height, so 52 deg gives a
+## 0.8x shadow and 11 deg gives a 5.1x one. Below ~20 deg, `directional_shadow_max_distance` (25.0)
+## must be raised or long shadows are clipped mid-frame. [ENVIRONMENT]
+@export var sun_peak_elev_deg: float = 52.0
+## Angular radius of the sun disc drawn by `sky.gdshader`. 0.026 is the shader's own default, which
+## is what every planet has silently used because `environment.gd::_apply()` has never set the
+## uniform. Larger = a bigger, closer, hazier star. [ENVIRONMENT]
+@export var sun_disc_size: float = 0.026
+## Angular radius of the moons in `sky.gdshader` (same units as `sun_disc_size`); 0.055 is the
+## shader default. Inert when `moon_count` is 0. [ENVIRONMENT]
+@export var moon_size: float = 0.055
+## Multiplier on the star field density in `sky.gdshader`. 1.0 is the shader default; raise it for a
+## thin-atmosphere world where the stars stay visible by day. [ENVIRONMENT]
+@export var star_density: float = 1.0
 
 @export_group("Points of interest")
 ## Unit direction from planet center. spawn = where player first appears. pad = rocket landing pad.

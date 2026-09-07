@@ -1,0 +1,35 @@
+[gd_scene load_steps=5 format=3 uid="uid://b0astronpc0060"]
+
+[ext_resource type="Script" path="res://src/characters/npc.gd" id="1"]
+[ext_resource type="Script" path="res://src/characters/models/fen_model.gd" id="2"]
+[ext_resource type="Script" path="res://src/core/interactable.gd" id="3"]
+
+[sub_resource type="SphereShape3D" id="Sphere_talk"]
+radius = 0.9
+
+[node name="Fen" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 73
+script = ExtResource("1")
+npc_id = "fen"
+display_name = "Fen"
+voice_profile = "elder"
+accent_color = Color(0.4353, 0.549, 0.7216, 1)
+wander_radius_m = 9.0
+walk_speed = 2.2
+
+[node name="Model" type="Node3D" parent="."]
+script = ExtResource("2")
+
+[node name="TalkArea" type="Area3D" parent="."]
+collision_layer = 16
+collision_mask = 0
+monitoring = false
+script = ExtResource("3")
+prompt_text = "Talk"
+reach = 2.6
+require_facing = false
+
+[node name="TalkShape" type="CollisionShape3D" parent="TalkArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("Sphere_talk")

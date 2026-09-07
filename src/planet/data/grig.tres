@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="PlanetData" load_steps=2 format=3 uid="uid://cplanetdatagrig0"]
+
+[ext_resource type="Script" path="res://src/planet/planet_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "grig"
+display_name = "Grig's Chalk Steps"
+radius = 9.5
+biome = "chalk"
+seed = 89
+hill_amplitude = 1.55000
+hill_frequency = 0.3
+detail_amplitude = 0.01000
+crater_count = 0
+ground_ao = 0.70
+water_level = -99.00000
+mesh_subdivisions = 6
+terrace_step = 0.47000
+terrace_band = 0.055
+terrace_bank = 1.0
+plateau_count = 0
+plateau_height = 0.00000
+plateau_radius = 3.20000
+ground_shadow_color = Color(0.3843, 0.3922, 0.3608, 1)
+bank_color = Color(0.5843, 0.5137, 0.4118, 1)
+foliage_shadow_color = Color(0.3059, 0.3608, 0.2745, 1)
+ground_color_a = Color(0.7176, 0.7059, 0.6353, 1)
+ground_color_b = Color(0.6353, 0.6235, 0.549, 1)
+ground_color_low = Color(0.7647, 0.7333, 0.6392, 1)
+rock_color = Color(0.6667, 0.6588, 0.6314, 1)
+surface_color = Color(0.6941, 0.6667, 0.5843, 1)
+water_color = Color(0.4784, 0.4392, 0.3647, 1)
+water_deep_color = Color(0.3294, 0.3059, 0.2588, 1)
+foliage_color_a = Color(0.549, 0.6118, 0.4392, 1)
+foliage_color_b = Color(0.7098, 0.7451, 0.5451, 1)
+trunk_color = Color(0.4941, 0.4549, 0.3765, 1)
+flower_colors = PackedColorArray(0.7882, 0.5608, 0.4784, 1, 0.8471, 0.7961, 0.6431, 1, 0.5608, 0.6392, 0.6784, 1, 0.7176, 0.5765, 0.4275, 1)
+sun_color = Color(1, 0.8863, 0.7412, 1)
+ambient_color = Color(0.6392, 0.6588, 0.7647, 1)
+has_ring = true
+ring_color = Color(0.7608, 0.7255, 0.6353, 1)
+ring_inner_scale = 1.22
+ring_outer_scale = 1.52
+ring_tilt_deg = 86.0
+moon_count = 2
+cloud_density = 0.05
+moon_size = 0.155
+spawn_dir = Vector3(-0.28, 0.62, 0.73)
+pad_dir = Vector3(0.66, -0.19, 0.72)
+npcs = PackedStringArray("grig")
+buildings = PackedStringArray()
+music_track = "chalk"
+tree_count = 20
+rock_count = 26
+flower_patch_count = 14
+collectible_count = 8
+collectible_kind = "chalk_core,stardust_shard"

@@ -41,6 +41,10 @@ const BIOME_DUST := {
 	"violet": Color("#c197ba"),
 	"chrome": Color("#cf9f78"),
 	"plaza": Color("#d0bb9a"),
+	# A rose-amber limb band for Fen's terracotta pan, 13 deg of hue clear of chrome's orange.
+	"flats": Color("#d69f8e"),
+	# The palest dust in the dict, which is correct for a world that kicks up chalk powder.
+	"chalk": Color("#d6c9b4"),
 }
 ## Per-biome tint mixed into the deep-space stops (10%) so Zorp's sky is faintly violet etc.
 const BIOME_DEEP := {
@@ -48,6 +52,10 @@ const BIOME_DEEP := {
 	"violet": Color("#2a1a4e"),
 	"chrome": Color("#16283f"),
 	"plaza": Color("#1c2650"),
+	# The first two non-navy deeps. Lerped 10-16% into the stops, a near-black plum gives Fen a sky
+	# measurably warmer and darker than anyone else's, and a near-black rust does the same for Grig.
+	"flats": Color("#2e1c30"),
+	"chalk": Color("#2a1f1c"),
 }
 
 ## Night fill light. Strongly blue on purpose: the reference night grade washes the whole world in

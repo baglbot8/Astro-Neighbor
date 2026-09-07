@@ -73,6 +73,18 @@ func _build_visual() -> void:
 			_base_y = 0.0
 			_floating = false
 			sparkle_col = Color("#d6e8ff")
+		"chalk_core":
+			mi.mesh = PlanetPropMeshes.chalk_core()
+			# Low glow strength on purpose: a drilled plug of rock is not a gem, and R2.6 caps how
+			# bright a small object may sit against Grig's already-pale chalk.
+			mi.material_override = PlanetPropMeshes.crystal_material(Color("#cec2a6"), Color("#efe6cd"), 0.55, true, 0.15)
+			_base_y = 0.22
+			sparkle_col = Color("#ece3c8")
+		"salt_bloom":
+			mi.mesh = PlanetPropMeshes.salt_bloom()
+			mi.material_override = PlanetPropMeshes.crystal_material(Color("#e6dcc4"), Color("#fff3d8"), 0.70, true, 0.22)
+			_base_y = 0.10
+			sparkle_col = Color("#e6dcc4")
 		"gear_bit":
 			mi.mesh = PlanetPropMeshes.gear_bit()
 			mi.material_override = PlanetPropMeshes.metal_material()

@@ -91,8 +91,19 @@ const LAYOUT := {
 		"desc": "Bolt's chrome world. Mind the gears."},
 	"hub": {"radius": 3.2, "orbit": 47.0, "angle_deg": 318.0, "y": -0.9,
 		"desc": "Starport Plaza. Shops & town hall."},
+	# Orbit 24 sits between home's 20 and Zorp's 28.5; angle 71 between 24 and 118. Radius 2.0 puts
+	# Fen between home and the two small neighbours, which is honest — it is a 13 m world.
+	"fen": {"radius": 2.0, "orbit": 24.0, "angle_deg": 71.0, "y": 1.9,
+		"desc": "Fen's long dusk. Mirror pools, huge sun."},
+	# Radius 1.6 is the smallest globe on the map, which is truthful: Grig is a 9.5 m ball. Orbit 42
+	# sits between Bolt's 36.5 and the hub's 47, angle 262 between 214 and 318.
+	"grig": {"radius": 1.6, "orbit": 42.0, "angle_deg": 262.0, "y": 2.4,
+		"desc": "Grig's chalk steps. All the way up."},
 }
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub"]
+## Every id here MUST also be in LAYOUT: `_build_orbits()` indexes LAYOUT[id] with no guard at all
+## (`_build_globes()` is protected by the .tres existence check ahead of it, this one is not), so an
+## id in ORDER and missing from LAYOUT is a hard crash on entering the space map.
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
 
 ## Planet the rocket is docked at (empty = read GameState.previous_planet_id, then "home").
 @export var origin_id: String = ""

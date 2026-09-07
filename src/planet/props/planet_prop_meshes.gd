@@ -785,6 +785,45 @@ static func crystal_chunk() -> ArrayMesh:
 		return kit.commit()
 	return _cached("chunk", build)
 
+## Chalk core (Grig): a drilled plug of step. A squat faceted cylinder with a chamfer top and
+## bottom and one recessed band around the waist, so it reads as a cut sample rather than a pebble
+## -- flat planes and a panel line, per R2.3. 8 radial segments, flat-shaded.
+static func chalk_core() -> ArrayMesh:
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var prof := PackedVector2Array([
+			Vector2(0.000, 0.000),   # base
+			Vector2(0.086, 0.000),   # base rim
+			Vector2(0.104, 0.036),   # bottom chamfer out
+			Vector2(0.104, 0.112),   # wall up to the groove
+			Vector2(0.088, 0.132),   # groove in  (the drill mark Grig numbers)
+			Vector2(0.104, 0.152),   # groove out
+			Vector2(0.104, 0.232),   # wall
+			Vector2(0.086, 0.268),   # top chamfer in
+			Vector2(0.000, 0.268)])  # flat top face
+		kit.lathe(prof, 8, Transform3D.IDENTITY, Color.WHITE, false)
+		return kit.commit()
+	return _cached("chalkcore", build)
+
+## Salt bloom (Fen): a crust flower off a pool rim. Six flat tapered plates fanned out of a low
+## centre, all under 0.15 m tall -- a mineral rosette, deliberately NOT a dome. Flat triangles, so
+## it stays crisp under the raking 11-degree sun that is Fen's whole identity.
+static func salt_bloom() -> ArrayMesh:
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		for i in 6:
+			var ang := TAU * float(i) / 6.0 + 0.18 * float(i % 2)
+			var reach := 0.150 - 0.020 * float(i % 3)
+			var lift := 0.090 + 0.032 * float(i % 3)
+			var c := Vector3(cos(ang), 0.0, sin(ang))
+			var t := Vector3(-sin(ang), 0.0, cos(ang))
+			kit.triangle(c * 0.030 + t * 0.032, c * 0.030 - t * 0.032,
+				c * reach + Vector3(0.0, lift, 0.0), Color.WHITE)
+		# A small flat cap so the rosette has a centre to grow out of instead of a hole.
+		kit.cylinder(Vector3(0.0, 0.0, 0.0), 0.052, 0.040, 0.046, Color.WHITE, Basis.IDENTITY, 6)
+		return kit.commit()
+	return _cached("saltbloom", build)
+
 ## Moon flower: pale bloom with a glowing center (surface 1).
 static func moon_flower() -> ArrayMesh:
 	var build := func() -> ArrayMesh:

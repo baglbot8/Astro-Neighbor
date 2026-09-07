@@ -299,6 +299,27 @@ func _terrace(h: float) -> float:
 	var t := smoothstep(0.5 - w, 0.5 + w, f - k)
 	return (k + t) * step
 
+## Weight in [0,1] of the RISER (the cut face between two terrace treads) at `d`. Craters and plateaus
+## both hand `bank_weight()` a cliff-face band so the ground shaders can paint them with `bank_color`;
+## terracing never did, which is why a heavily terraced world renders as a smooth dome with invisible
+## steps. This is the same bell the crater/plateau banks use (4t(1-t) over the transition), evaluated
+## on the SAME quantity `_terrace()` quantises — `hill_amplitude * noise / step` — so the band lands
+## exactly on the riser the mesh actually has, not near it.
+## No-op at the default `terrace_bank = 0.0`, so the four shipped worlds are byte-identical.
+## NOTE the vertex-spacing gate: the result is baked per vertex into COLOR.g and read back as
+## smoothstep(0.36, 0.52, v_color.g), so a riser narrower than ~4 icosphere edges renders as a dashed
+## stipple rather than a cut face. Edge length is about 1.0515 * radius / 2^mesh_subdivisions.
+func _terrace_bank(d: Vector3) -> float:
+	if data.terrace_bank <= 0.001:
+		return 0.0
+	var step := data.terrace_step * _vscale
+	if step <= 0.001:
+		return 0.0
+	var f := (data.hill_amplitude * _vscale * _noise_hill.get_noise_3dv(d * radius)) / step
+	var w := clampf(data.terrace_band, 0.02, 0.5)
+	var t := smoothstep(0.5 - w, 0.5 + w, f - floorf(f))
+	return clampf(data.terrace_bank * 4.0 * t * (1.0 - t), 0.0, 1.0)
+
 ## Terrain offset without flattening (terraced noise + plateaus + biome carving + craters).
 func _raw_offset(d: Vector3) -> float:
 	var p := d * radius
@@ -356,6 +377,9 @@ func bank_weight(dir: Vector3) -> float:
 		if pang < pa:
 			var w := 1.0 - smoothstep(pa * (1.0 - PLATEAU_BANK), pa, pang)
 			bw = maxf(bw, 4.0 * w * (1.0 - w))
+	# Terrace risers are cliff faces too — same band, same bank_color, and it still gets suppressed
+	# inside the flattened discs by the (1.0 - fw) below, so a groomed plot is not striped.
+	bw = maxf(bw, _terrace_bank(d))
 	var fw := 0.0
 	for i in _flat_dirs.size():
 		var ang := acos(clampf(d.dot(_flat_dirs[i]), -1.0, 1.0))
@@ -392,6 +416,10 @@ func _bake_color(d: Vector3) -> Color:
 			var w := 1.0 - smoothstep(pa * (1.0 - PLATEAU_BANK), pa, pang)
 			var u := smoothstep(0.0, 0.42, w)
 			conc = maxf(conc, 4.0 * u * (1.0 - u))
+	# Every riser gets a contact-shade foot, exactly like a crater wall or a plateau bank. 0.8 rather
+	# than 1.0 because a terraced world has MANY risers and a full-strength foot on each would read as
+	# banding rather than as occlusion. Free (returns 0) on every world with terrace_bank at 0.
+	conc = maxf(conc, _terrace_bank(d) * 0.8)
 	# Broad landform shading: low ground reads darker than ridges, so the hills model as form even
 	# when the sun is high enough that nothing casts a long shadow.
 	var valley := 1.0 - smoothstep(-0.34, 0.20, _noise_hill.get_noise_3dv(d * radius))
@@ -601,6 +629,26 @@ func _build_water() -> void:
 			m.set_shader_parameter("wave_speed", 0.12)
 			m.set_shader_parameter("wave_strength", 0.15)
 			m.set_shader_parameter("bob", 0.004)
+		"flats":
+			# Fen's crater pools are MIRRORS. The whole shot is the 11-degree sun's track lying across
+			# them, so the surface is held near glass: the waves only have to break the reflection up
+			# enough to read as liquid, and everything else is spent on the specular streak.
+			m.set_shader_parameter("wave_speed", 0.06)
+			m.set_shader_parameter("wave_strength", 0.08)
+			m.set_shader_parameter("wave_scale", 0.5)
+			m.set_shader_parameter("bob", 0.003)
+			# First world to raise this off the 0.22 default: long streaks aimed at a sun on the horizon.
+			m.set_shader_parameter("streak_strength", 0.55)
+			m.set_shader_parameter("sparkle_strength", 2.6)
+			# Wide salt foam ring where the pale crust meets the water.
+			m.set_shader_parameter("foam_width", 0.42)
+			m.set_shader_parameter("foam_color", Color("#e6dcc4"))
+			# Shallow pools — the rust pool floor shows through, which is where the chroma budget went.
+			m.set_shader_parameter("alpha_shallow", 0.42)
+			m.set_shader_parameter("alpha_deep", 0.80)
+			m.set_shader_parameter("deep_range", 0.7)
+			# The chrome-only oil-film lever, used here with a low sun for the first time.
+			m.set_shader_parameter("sheen_strength", 0.18)
 	water_mesh.material_override = m
 	add_child(water_mesh)
 
@@ -683,6 +731,11 @@ func _make_ground_material() -> ShaderMaterial:
 			m.set_shader_parameter("path_a", _pad_v3(pa))
 			m.set_shader_parameter("path_b", _pad_v3(pb))
 		_:
+			# EVERY grass-shader world lives in THIS arm, and per-world tuning is an `elif` on
+			# `data.biome` INSIDE it (violet / flats / chalk below). Do not add a sibling `match` case
+			# for a new biome: the base colours, the path arcs, `planet_radius` and `water_radius` are
+			# all set here, so a sibling arm would render the world on GRASS_SHADER's defaults —
+			# #5cb45f meadow green with the sand band and the limb term sized for a 16 m planet.
 			m.shader = GRASS_SHADER
 			m.set_shader_parameter("color_a", data.ground_color_a)
 			m.set_shader_parameter("color_b", data.ground_color_b)
@@ -737,6 +790,97 @@ func _make_ground_material() -> ShaderMaterial:
 				# black-hole defect this fix exists to remove, just in lavender.
 				m.set_shader_parameter("shadow_fill_color", Color("#b6a8dc"))
 				m.set_shader_parameter("shadow_fill", 0.34)
+			elif data.biome == "flats":
+				# FEN — a salt pan under an 11-degree sun. The trick here is that grass_planet's
+				# triangle-grass generator retunes into polygonal crust plates: a big cell, a small
+				# triangle inside it and a low fill rate give sparse hard-edged mineral flakes, which
+				# is what a dry playa actually looks like from standing height.
+				m.set_shader_parameter("cell_size", 0.62)
+				m.set_shader_parameter("tri_radius", 0.09)
+				m.set_shader_parameter("tri_density", 0.30)
+				# A wide white salt crust ring around every pool. `sand_color` already comes from
+				# data.ground_color_low above; the shore tone is authored separately because the
+				# default (ground_color_low darkened 0.28) goes grey, and damp salt goes warm.
+				m.set_shader_parameter("sand_band", 0.55)
+				m.set_shader_parameter("shore_color", Color("#b8a184"))
+				m.set_shader_parameter("crater_color", Color("#b0855c"))
+				# Broad mineral banding across an otherwise featureless pan (every shipped world: 0.07).
+				m.set_shader_parameter("patch_strength", 0.16)
+				m.set_shader_parameter("shadow_patch", 0.34)
+				# The strongest raking dapple in the game. On a dead-flat world the only things drawing
+				# form are the cast shadows and this.
+				m.set_shader_parameter("sun_patch", 2.10)
+				m.set_shader_parameter("sun_patch_lo", 0.62)
+				m.set_shader_parameter("sun_patch_amt", 0.85)
+				m.set_shader_parameter("sun_patch_tint", Color(1.0, 0.90, 0.76))
+				# On a flat world the limb IS the silhouette, so it takes the heaviest fall-off shipped.
+				m.set_shader_parameter("limb_darken", 0.72)
+				m.set_shader_parameter("limb_tint", Color(0.62, 0.60, 0.74))
+				# Zorp's per-cell pulsing spots, reused at a fraction of the strength as sparse mineral
+				# glitter catching the low sun.
+				m.set_shader_parameter("speck_strength", 0.22)
+				m.set_shader_parameter("speck_color_a", Color("#f0e2c4"))
+				m.set_shader_parameter("speck_color_b", Color("#cbb7d8"))
+				m.set_shader_parameter("river_glow", 0.0)
+				# Shadows are ~40% of a Fen frame (a 1.4 m astronaut throws 7.2 m), so the skylight fill
+				# is doing more work here than on any other world: warm key, cool shade.
+				m.set_shader_parameter("shadow_fill_color", Color("#8fa2d6"))
+				m.set_shader_parameter("shadow_fill", 0.30)
+				m.set_shader_parameter("shade_tint", Color(0.66, 0.68, 0.92))
+				m.set_shader_parameter("shade_strength", 0.34)
+				# The tightest chroma cap in the game (shipped 0.54/0.58/0.70). This is what keeps a
+				# sunset world off the orange-crush end of R2.6.
+				m.set_shader_parameter("pastel_max", 0.44)
+				# Rock grain, almost no fibre — nothing grows on a pan.
+				m.set_shader_parameter("detail_grass", 0.6)
+				m.set_shader_parameter("detail_rock", 3.2)
+				m.set_shader_parameter("detail_bump", 0.26)
+				# Fen KEEPS its trodden path: a worn line across a blank pan is the cheapest and
+				# strongest "someone lives here" cue in the game. Paler and warmer than the default tan
+				# so it reads as scuffed crust rather than as wet earth.
+				m.set_shader_parameter("path_color", Color("#cbbb9e"))
+				m.set_shader_parameter("path_edge_color", Color("#ab9678"))
+				m.set_shader_parameter("path_width", 1.6)
+				for bid in data.buildings:
+					var bd_f := building_dir(bid)
+					if bd_f != Vector3.ZERO:
+						pa2.append(spawn); pb2.append(bd_f)
+				pa2.append(spawn); pb2.append(data.pad_dir.normalized())
+			elif data.biome == "chalk":
+				# GRIG — a bone-white ball cut into concentric shelves. Almost all of this world's read
+				# comes from ONE thing: `terrace_bank` filling COLOR.g on every riser, which the shader
+				# then paints in `bank_color` (warm ochre cut stone against cool chalk treads). The
+				# settings below exist to keep everything else out of the way of that.
+				m.set_shader_parameter("color_c", data.ground_color_a.lightened(0.06))
+				m.set_shader_parameter("crater_color", data.bank_color.lightened(0.10))
+				# Dry world: no waterline, so no beach. Explicit rather than relying on water_radius.
+				m.set_shader_parameter("sand_band", 0.0)
+				# A raking dapple is what turns flat chalk into a lit staircase — every riser picks up
+				# a shadow line. sun_patch_lo is low so the lit patches are narrow and bright.
+				m.set_shader_parameter("sun_patch", 2.10)
+				m.set_shader_parameter("sun_patch_lo", 0.36)
+				m.set_shader_parameter("sun_patch_amt", 0.85)
+				m.set_shader_parameter("sun_patch_tint", Color(1.0, 0.94, 0.84))
+				m.set_shader_parameter("shadow_patch", 0.46)
+				# Nothing shipped approaches 0.9. On a 9.5 m ball this is what makes the world read as
+				# genuinely small and far away rather than as a close-up hill.
+				m.set_shader_parameter("limb_darken", 0.88)
+				# Deliberately near-monochrome (shipped 0.54/0.58/0.70) — the chroma on Grig belongs to
+				# the risers and the flowers, nowhere else.
+				m.set_shader_parameter("pastel_max", 0.30)
+				m.set_shader_parameter("pastel_dark", 0.34)
+				m.set_shader_parameter("shadow_fill_color", Color("#b6bccf"))
+				m.set_shader_parameter("shadow_fill", 0.20)
+				# On a bare stone world the R2.9 detail uniforms are the ONLY micro-texture there is,
+				# and they sit at their defaults on all four shipped planets.
+				m.set_shader_parameter("detail_grass", 0.6)
+				m.set_shader_parameter("detail_rock", 3.2)
+				m.set_shader_parameter("detail_bump", 0.34)
+				m.set_shader_parameter("detail_light", 1.9)
+				# NO PATH: pa2/pb2 stay empty, so path_count is 0 below. A tan dirt smear across cut
+				# stone is wrong, and it would cut straight across the contour rings. This is HALF the
+				# job — the other half is excluding "chalk" from PlanetProps._collect_paths(), which
+				# only handles prop avoidance and does not stop the shader drawing the arc.
 			else:
 				m.set_shader_parameter("crater_color", data.bank_color.lightened(0.12))
 				m.set_shader_parameter("sun_patch", 1.30)
@@ -881,6 +1025,21 @@ func get_reserved_dirs() -> Array[Vector3]:
 	for d in _reserved_dirs:
 		out.append(d)
 	return out
+
+## Unit directions of this planet's craters, in placement order. Fewer than `data.crater_count` when
+## `_find_free_dir` could not fit them all. Exposed so a props pass can compose AROUND the craters
+## (ringing a pool rim, say) instead of scattering blind and hoping something lands near one.
+func crater_dirs() -> PackedVector3Array:
+	return _crater_dirs
+
+## ANGULAR radius of crater `i` (radians from its centre to its rim). Multiply by `radius` for metres.
+## Returns 0.0 for an out-of-range index.
+func crater_angle(i: int) -> float:
+	return _crater_ang[i] if i >= 0 and i < _crater_ang.size() else 0.0
+
+## Depth (metres) crater `i` cuts below the surrounding ground. 0.0 for an out-of-range index.
+func crater_depth(i: int) -> float:
+	return _crater_depth[i] if i >= 0 and i < _crater_depth.size() else 0.0
 
 ## Surface distance (meters) from dir to the nearest procedural prop; INF when there are none.
 func nearest_prop_distance(dir: Vector3) -> float:

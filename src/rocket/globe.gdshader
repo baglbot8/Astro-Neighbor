@@ -1,9 +1,15 @@
-// Miniature planet surfaces for the solar-system map. One shader, four biome modes, all driven from
+// Miniature planet surfaces for the solar-system map. One shader, six biome modes, all driven from
 // the planet's PlanetData so the globe you see in space matches the world you land on:
 //   0 meadow  green land + small blue seas with a sand shore
 //   1 violet  muted violet land with thin glowing river lines
 //   2 chrome  grey-blue plate grid with glowing orange seams
 //   3 plaza   cream/green patchwork with a few lit windows
+//   4 flats   a dry terracotta pan pocked with dark pools, each ringed in pale salt crust
+//   5 chalk   a bone-white ball cut into quantised contour terraces, risers in the bank tone
+//
+// 3 IS ALSO THE FALLBACK. The final `else` is plaza, so a biome with no mode of its own renders as
+// the green-and-cream hub with no error anywhere - see space_globe.gd::_apply_biome, which must
+// carry an explicit arm for every biome that ships.
 //
 // Lighting is the game's soft toon ramp (same grammar as toon_soft.gdshader) so the globes read as
 // rounded forms with a clean terminator — the dark limb is what keeps the space frames dark.
@@ -11,7 +17,7 @@
 shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 
-uniform int mode : hint_range(0, 3) = 0;
+uniform int mode : hint_range(0, 5) = 0;
 uniform vec4 land_a : source_color = vec4(0.30, 0.55, 0.26, 1.0);
 uniform vec4 land_b : source_color = vec4(0.22, 0.44, 0.21, 1.0);
 uniform vec4 low_color : source_color = vec4(0.86, 0.80, 0.62, 1.0);
@@ -118,6 +124,42 @@ void fragment() {
 		col = mix(col, accent.rgb * 0.30, seam * 0.45);
 		em = accent.rgb * seam * accent_glow;
 		rough = 0.52;
+	} else if (mode == 4) {
+		// Flats: a dry salt pan pocked with round pools. Two fields, deliberately at different
+		// frequencies: a broad crust mottle for the pan, and a lower-frequency bowl field whose
+		// low ground IS the pool. The pale ring is the salt crust the shallow water leaves behind
+		// as it retreats, and it is what makes each pool read as a bowl and not as a blue dot.
+		float n = fbm3(p * 1.35);
+		float b = fbm3(p * 1.05 + 19.0);
+		vec3 pan = mix(land_a.rgb, land_b.rgb, smoothstep(0.44, 0.68, n));
+		float pool = 1.0 - smoothstep(sea_level - 0.025, sea_level + 0.015, b);
+		float ring = smoothstep(sea_level - 0.005, sea_level + 0.030, b)
+			* (1.0 - smoothstep(sea_level + 0.055, sea_level + 0.105, b));
+		col = mix(pan, low_color.rgb, ring * 0.80);
+		// Capped at 0.7 toward sea_deep on purpose: these are 40-70 cm mirror pools you can see the
+		// floor of, and taking them all the way to the deep tone punched black holes in the disc.
+		col = mix(col, mix(sea_color.rgb, sea_deep.rgb, pool * 0.7), pool);
+		// The pools are mirror-still; the pan is gritty crust.
+		rough = mix(0.94, 0.22, pool);
+	} else if (mode == 5) {
+		// Chalk: the world cut into concentric terraces - the map-scale twin of the real
+		// terrace_bank contour rings. Quantise one height field into steps, alternate the tread
+		// tone so neighbouring shelves separate, and paint a thin band at every step boundary in
+		// low_color for the riser faces.
+		// DELIBERATELY NOT fbm3. Its upper octaves shatter a contour line into speckle: a first
+		// pass at 4 octaves and 13 steps rendered Grig as a mottled ball with no rings visible at
+		// all. Grig's real terrain is ~1.9 noise cycles around the whole world, so this is one
+		// dominant smooth octave with a light second one for interest, and 7 steps.
+		float h = vnoise3(p) * 0.82 + vnoise3(p * 2.1 + 7.0) * 0.18;
+		float f = h * 7.0;
+		float tread = floor(f);
+		float band = f - tread;
+		col = mix(land_a.rgb, land_b.rgb, mod(tread, 2.0) * 0.5);
+		col *= mix(0.90, 1.10, clamp(h * 1.5 - 0.25, 0.0, 1.0));
+		float edge = min(band, 1.0 - band);
+		float riser = 1.0 - smoothstep(0.06, 0.14, edge);
+		col = mix(col, low_color.rgb, riser * 0.80);
+		rough = 0.90;
 	} else {
 		// Plaza: cream tiles and lawn patches with a scatter of warm lit windows.
 		// Cream plaza tiles with broad green lawns; the town lights are real meshes (space_globe.gd),

@@ -47,6 +47,10 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 			_chrome()
 		"plaza":
 			_plaza()
+		"flats":
+			_fen()
+		"chalk":
+			_grig()
 		_:
 			_meadow()
 	_collectibles()
@@ -54,7 +58,13 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 # ============================================================================================ helpers
 func _collect_paths() -> void:
 	var spawn := data.spawn_dir.normalized()
-	if data.biome == "chrome" or data.biome == "violet":
+	# A trodden dirt line is right on soft ground and wrong on cut stone or plating. Fen KEEPS its
+	# path (a worn line across a blank salt pan is the strongest "someone lives here" cue the game
+	# has); Grig's chalk steps do not, because the tan smear would cut straight across the contours.
+	# NOTE: the path is drawn in TWO places. This one only feeds _on_paved() for prop avoidance; the
+	# ground shader's arcs are set separately in Planet._make_ground_material(), so "chalk" has to be
+	# excluded there as well or the smear is still painted and props merely stop avoiding it.
+	if data.biome == "chrome" or data.biome == "violet" or data.biome == "chalk":
 		return
 	for bid in data.buildings:
 		var bd := planet.building_dir(bid)
@@ -179,6 +189,21 @@ func _spawn_simple(mesh: ArrayMesh, mats: Array, dir: Vector3, scale: float, foo
 		planet.register_prop(dir, footprint * scale)
 	return n
 
+## Non-blocking prop that must FACE something (a gate across a path, a shelf across a step edge).
+## _spawn_simple only takes a yaw, and that yaw is applied to a RANDOM tangent basis, so there is no
+## way to aim it; this is the same body with a forward hint instead.
+func _spawn_oriented(mesh: ArrayMesh, mats: Array, dir: Vector3, scale: float, footprint: float, sink: float, forward_hint: Vector3, shadow: bool = true, label: String = "") -> Node3D:
+	var n := Node3D.new()
+	if label != "":
+		n.name = label + str(_label_counts.get(label, 0))
+		_label_counts[label] = int(_label_counts.get(label, 0)) + 1
+	n.add_child(_mesh_instance(mesh, mats, scale, shadow))
+	n.transform = _surface_xf(dir, 0.0, sink * scale, false, forward_hint)
+	root.add_child(n)
+	if footprint > 0.0:
+		planet.register_prop(dir, footprint * scale)
+	return n
+
 func _omni(parent: Node3D, pos: Vector3, color: Color, energy: float, range_m: float) -> void:
 	var l := OmniLight3D.new()
 	l.position = pos
@@ -256,6 +281,26 @@ func _hero_dirs(count: int, clearance: float) -> Array[Vector3]:
 		if not placed:
 			continue
 	return out
+
+## True when a cliff face (a terrace riser, a crater wall, a plateau bank) is within `reach_m`.
+## Grig's shelves and lamps want the step EDGE specifically, and that is the one thing a uniform
+## find_free_dir will never hand you — it looks for the flattest ground it can find.
+func _near_riser(dir: Vector3, reach_m: float = 1.0) -> bool:
+	var xf := planet.surface_transform(dir)
+	for k in 4:
+		var ang := TAU * float(k) / 4.0
+		var t := (xf.basis.x * cos(ang) + xf.basis.z * sin(ang)) * (reach_m / planet.radius)
+		if planet.bank_weight((dir + t).normalized()) > 0.35:
+			return true
+	return false
+
+## Tangential DOWNHILL direction at dir (zero on level ground). A prop that spans an elevation
+## change has to know which way the ground falls; nothing else in the file needed this.
+func _downhill(dir: Vector3) -> Vector3:
+	var d := dir.normalized()
+	var n := planet.ground_normal(d, 0.5)
+	var t := n - d * n.dot(d)
+	return t.normalized() if t.length_squared() > 0.0004 else Vector3.ZERO
 
 # ============================================================================================ meadow
 func _meadow() -> void:
@@ -785,6 +830,524 @@ func _fountain_water(fountain: Node3D) -> void:
 	sm.material = PlanetPropMeshes.puff_material(Color.WHITE)
 	p.draw_pass_1 = sm
 	fountain.add_child(p)
+
+# ============================================================================================ flats
+## FEN'S LONG DUSK. `sun_peak_elev_deg` is 11, so every shadow on this pan is 5.1x its caster and the
+## world is read through CAST SHADOWS instead of through relief (there is none: hill_amplitude 0.035
+## is a pan, and the 14 craters are pools, not hills). Two rules come straight out of that:
+##
+##   * NOTHING HERE IS OVER 4.5 m TALL. environment.gd sets directional_shadow_max_distance = 25 and
+##     a 4.5 m prop at 11 degrees already lays a 23 m shadow; anything taller has its own shadow cut
+##     off in the middle of the pan, which is the one thing this world cannot afford.
+##   * The identity rides on LARGE props. _scatter_scale() thins small scatter to 35% under
+##     Compatibility/mobile, so a pan whose character came from pebbles would simply empty out.
+##
+## Two patterned placements carry it: the seven-stone colonnade along the spawn -> pad great circle,
+## and a graded ring of spires around every crater pool. Everything is drawn from the seeded `rng`
+## only — Planet.prebuild() builds a throwaway planet WITH props during the rocket cruise and bakes
+## AO off it, so a non-deterministic placement here bakes shadows for props that never appear.
+func _fen() -> void:
+	var rock_mat := PlanetPropMeshes.rock_material()
+	var spawn := data.spawn_dir.normalized()
+	var pad := data.pad_dir.normalized()
+
+	# 1. THE STONE LINE. Seven slabs alternating sides of the walk to the rocket, the first PATTERNED
+	# scatter in the game outside the hub's fountain ring. Under an 11-degree sun each 2.4-3.2 m slab
+	# lays a 12-16 m shadow bar across the pan, so the walk is a colonnade of alternating stripes —
+	# this is the establishing shot of the world. Deterministic by construction (_arc_side, not
+	# find_free_dir), which is what makes it survive Planet.prebuild()'s AO bake unchanged.
+	#
+	# THE ARITHMETIC THE SPEC MISSED. Spawn and pad are 14.0 m apart, but planet.gd reserves
+	# SPAWN_FLAT_RADIUS + 0.6 = 3.6 m and PAD_FLAT_RADIUS + 1.0 = 5.0 m, so the spec's t = 0.14 +
+	# 0.12i at 3.2 m to the side puts FOUR of the seven inside a reserved disc and _is_free drops
+	# them — a three-stone colonnade. Widening the offsets to 4.2/4.4 m buys the run back (the
+	# exclusion is radial, so a stone further off the centreline may sit closer along it) and 0.093
+	# per step then spaces same-side neighbours 2.6 m apart, clear of the 1.9 m two props need.
+	for i in 7:
+		var t := 0.14 + 0.093 * float(i)
+		var side := 4.4 if i % 2 == 0 else -4.2
+		var h := 2.4 + 0.28 * float(i % 4)
+		var d := Vector3.ZERO
+		# (metres along the arc, side-offset multiplier). A pool or a neighbour's disc can sit on any
+		# one slot; stepping along the line first and standing further off it second keeps the row
+		# whole instead of leaving a hole in the middle of the establishing shot.
+		for off: Vector2 in [Vector2(0.0, 1.0), Vector2(0.8, 1.0), Vector2(-0.8, 1.0),
+				Vector2(0.0, 1.28), Vector2(1.7, 1.0), Vector2(-1.7, 1.0), Vector2(0.0, 0.78)]:
+			var c := _arc_side(spawn, pad, t, side * off.y, off.x)
+			if not planet._is_free(c, 1.0):
+				continue
+			if wr > 0.0 and planet.height_at(c) < wr + 0.30:   # never in a pool
+				continue
+			if planet.bank_weight(c) > 0.40:                   # never on a crater wall
+				continue
+			d = c
+			break
+		if d == Vector3.ZERO:
+			continue
+		# Face the walk, so the broad 0.62 m plane is what the player and the sun both see. A random
+		# yaw turns a third of the colonnade edge-on and the shadow bars go thin.
+		var toward := arc_point(spawn, pad, t) - d
+		_spawn_blocking(_standing_stone(data.rock_color, data.bank_color, h, i), [rock_mat], d,
+			1.0, 0.9, 0.42, h, 0.10, false, rng.randf_range(-0.16, 0.16), toward, null, "StandingStone")
+
+	# 2. THE ARCH at the far end of the avenue. The project has no arch, monolith, obelisk or ruin
+	# anywhere — gantry() is the only span structure and it is Bolt's. Deliberately NOT a blocking
+	# prop: it is a gate you walk through, and a cylinder collider in a 1.6 m opening blocks it.
+	# t = 0.56 is as close to the pad as the 6.0 m pad exclusion allows.
+	for nudge: float in [0.0, -1.1, 1.1]:
+		var ad := _arc_side(spawn, pad, 0.56, 0.0, nudge)
+		if not planet._is_free(ad, 0.9):
+			continue
+		if wr > 0.0 and planet.height_at(ad) < wr + 0.30:
+			continue
+		_spawn_oriented(_resonator_arch(data.rock_color, data.bank_color), [rock_mat], ad,
+			1.0, 1.4, 0.06, pad - ad, true, "Arch")
+		break
+
+	# 3. GRADED RINGS around the pools (see _pool_rings).
+	_pool_rings(data.rock_color, data.ground_color_low)
+
+	# 4. SALT SCRUB. Low and sparse on purpose: nothing on this world is allowed to compete with the
+	# stones for silhouette, and a 0.34 m blade still throws 1.7 m of shadow here.
+	var scrub_mat := PlanetPropMeshes.foliage_material(0.05, 0.7, false, 0.8, Color.BLACK, 0.0, 0.06, 0.03,
+		{"strength": 1.2, "near": 3.0, "far": 13.0, "sss": 0.14})
+	for i in _n(data.tree_count, 3):
+		var s := rng.randf_range(0.85, 1.25)
+		var d := planet.find_free_dir(rng, 0.6 * s)
+		if d == Vector3.ZERO:
+			continue
+		_spawn_simple(_salt_scrub(data.foliage_color_a, data.foliage_shadow_color, i), [scrub_mat],
+			d, s, 0.55, 0.04, false, NAN, _scatter_shadow(true), "SaltScrub")
+
+	# 5-6. A pan is strewn: rock_count 24 is the highest in the game.
+	_pebbles(_n(data.rock_count, 6))
+	var petal: Color = data.flower_colors[0] if data.flower_colors.size() > 0 else Color("#d9b8a0")
+	_flower_patches(_n(data.flower_patch_count, 2), data.foliage_color_a, petal)
+
+	# 7. THE SPARSEST TUFTS IN THE GAME. `density_m2` is a DIVISOR (planet_props.gd `area / density`),
+	# so a SMALLER number means MORE tufts: the spec's 0.55 would have carpeted a dead salt pan with
+	# ~3800 tufts, seven times home's density and the exact opposite of what it asked for. 3.2 gives
+	# ~660 on 2124 m² (0.31/m² against home's 1.0/m²). Tinted at the SALT colour, not the ground
+	# colour, so they read as dry crust whiskers rather than as a lawn (the Zorp lesson below).
+	_grass_tufts(data.ground_color_low.darkened(0.10), 3.2)
+	_ashfall()
+
+	# 8. ONE lamp at the pad. Home and Zorp have no point lights at all; on a world where the sun
+	# never gets off the horizon, arrival needs a warm pool to land in.
+	var pad_node := Node3D.new()
+	pad_node.name = "PadGlow"
+	pad_node.transform = planet.surface_transform(pad, spawn - pad)
+	root.add_child(pad_node)
+	_omni(pad_node, Vector3(0.0, 2.4, 0.0), Color("#ffb46e"), 1.0, 6.0)
+
+## A ring of spires around every crater pool, graded in height around the circle. Fen has 14 pools
+## and nothing in the game is scattered in a PATTERN except the hub's fountain ring and the colonnade
+## above — ringing the rims is what makes the craters read as designed features instead of scenery.
+## The grade (tall on one side, short on the other, sweeping smoothly between) is what stops it
+## reading as a fence. Uses Planet.crater_dirs()/crater_angle(), which exist for exactly this.
+func _pool_rings(stone: Color, salt: Color) -> void:
+	var craters := planet.crater_dirs()
+	if craters.is_empty():
+		return
+	# Small scatter, so it pays the mobile budget: 5 per pool on desktop, 3 under Compatibility.
+	var per_pool := 5 if _scatter_scale() >= 0.9 else 3
+	var xfs_a: Array[Transform3D] = []
+	var xfs_b: Array[Transform3D] = []
+	var tints_a := PackedColorArray()
+	var tints_b := PackedColorArray()
+	for i in craters.size():
+		var cd := craters[i].normalized()
+		# crater_angle is the ANGULAR rim radius; +0.75 m clears the 0.13 m lip onto the flat pan.
+		var rim_m := planet.crater_angle(i) * planet.radius + 0.75
+		var xf0 := planet.surface_transform(cd, Vector3.FORWARD)
+		var phase := rng.randf_range(0.0, TAU)
+		for k in per_pool:
+			var ang := TAU * float(k) / float(per_pool) + phase
+			var off := (xf0.basis.x * cos(ang) + xf0.basis.z * sin(ang)) * (rim_m / planet.radius)
+			var d := (cd + off).normalized()
+			if not planet._is_free(d, 0.5):
+				continue
+			if wr > 0.0 and planet.height_at(d) < wr + 0.22:
+				continue
+			var grade := 0.58 + 0.72 * (0.5 + 0.5 * cos(ang - phase))
+			var xf := _surface_xf(d, rng.randf_range(0.0, TAU), 0.05, false)
+			xf.basis = xf.basis.scaled(Vector3(0.86 + 0.16 * grade, grade, 0.86 + 0.16 * grade))
+			planet.register_prop(d, 0.42)
+			if k % 2 == 0:
+				xfs_a.append(xf)
+				tints_a.append(Color.WHITE)
+			else:
+				xfs_b.append(xf)
+				tints_b.append(Color.WHITE)
+	# One MultiMesh per variant: ~70 spires for two draw calls. They still register a footprint each
+	# so the DecorationManager does not drop a chair inside a ring.
+	var mat := PlanetPropMeshes.rock_material()
+	if not xfs_a.is_empty():
+		_multimesh(_pool_spire(stone, salt, 0), xfs_a, tints_a, mat, _scatter_shadow(true))
+	if not xfs_b.is_empty():
+		_multimesh(_pool_spire(stone.darkened(0.07), salt, 1), xfs_b, tints_b, mat, _scatter_shadow(true))
+
+## Suspended warm dust, deliberately NOT Zorp's _spores(): slower (0.02-0.10 vs 0.08-0.25), longer
+## lived (14 s vs 9), much higher off the ground (radius + 3.4 vs + 1.3) and barely turbulent, so it
+## hangs in the raking light as a haze instead of swirling like spores.
+func _ashfall() -> void:
+	var p := GPUParticles3D.new()
+	p.name = "Ashfall"
+	p.amount = 90
+	p.lifetime = 14.0
+	p.preprocess = 14.0
+	p.local_coords = true
+	p.visibility_aabb = AABB(Vector3.ONE * -(planet.radius + 6.0), Vector3.ONE * (planet.radius + 6.0) * 2.0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = planet.radius + 3.4
+	pm.direction = Vector3.ZERO
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.02
+	pm.initial_velocity_max = 0.10
+	pm.gravity = Vector3.ZERO
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 0.25
+	pm.turbulence_noise_scale = 1.6
+	pm.scale_min = 0.7
+	pm.scale_max = 1.6
+	var g := Gradient.new()
+	var warm := Color("#e8d8bc")
+	g.set_color(0, Color(warm.r, warm.g, warm.b, 0.0))
+	g.add_point(0.18, warm)
+	g.add_point(0.55, Color("#c9a184"))
+	g.set_color(g.get_point_count() - 1, Color(warm.r, warm.g, warm.b, 0.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.07, 0.07)
+	q.material = PlanetPropMeshes.sparkle_material(Color(1.0, 1.0, 1.0, 0.45))
+	p.draw_pass_1 = q
+	root.add_child(p)
+
+# ============================================================================================ chalk
+## GRIG'S CHALK STEPS. A 9.5 m ball cut into five concentric shelves at a 0.279 m riser. Everything
+## here is arranged against HORIZONTALS: the world is nothing but contour lines, so the props that
+## matter are the ones that stand up (the henge, the spindle trees) or the ones that deliberately
+## span a step (the shelves). No trodden paths — see _collect_paths().
+func _grig() -> void:
+	var stone_mat := PlanetPropMeshes.rock_material()
+	var prop_mat := PlanetPropMeshes.prop_material()
+	var spawn := data.spawn_dir.normalized()
+
+	# 1. THE HENGE. Nine monoliths in a ring around the landing point, heights graded 2.2 -> 3.4 ->
+	# 2.2 around the circle so it reads as built rather than scattered. _hero_dirs is already a
+	# deterministic ring 5.5-7 m out; on a world with a 59.7 m circumference it is visible in one
+	# glance from almost anywhere. Each one faces the middle, which is what makes it a henge.
+	var ring := _hero_dirs(9, 1.4)
+	for i in ring.size():
+		var t := float(i) / maxf(1.0, float(ring.size() - 1))
+		var h := 2.2 + 1.2 * (1.0 - absf(2.0 * t - 1.0))
+		var mesh := _step_monolith(data.rock_color, data.ground_color_low, data.ground_shadow_color, h, i)
+		# Footprints on this world are deliberately tight to the stone the prop actually stands on.
+		# MEASURED with showcase/planet_survey.tscn: Grig is 1134 m², the smallest world in the game,
+		# and the reserved discs already take 10.1% of it, so a generous footprint here costs several
+		# points of decorable ground apiece. A 0.8 m slab gets 1.0, not the 1.2 a puff tree gets.
+		_spawn_blocking(mesh, [stone_mat], ring[i], 1.0, 1.0, 0.40, h, 0.10, false,
+			0.0, spawn - ring[i], null, "Monolith")
+
+	# 2. CHALK SHELVES. The only props in the game that span an elevation change, and what makes the
+	# staircase read as inhabited rather than geological. allow_slope is on because they are MEANT to
+	# sit on a step edge, and the span is turned across the contour so it actually bridges the riser.
+	var shelf_mesh := _chalk_shelf(data.rock_color.lightened(0.04), data.ground_shadow_color, 2.6)
+	for i in 3:
+		var d := Vector3.ZERO
+		for attempt in 5:
+			var c := planet.find_free_dir(rng, 1.4, 64, true)
+			if c == Vector3.ZERO:
+				continue
+			d = c
+			if _near_riser(c, 1.0):
+				break
+		if d == Vector3.ZERO:
+			continue
+		var down := _downhill(d)
+		var hint := d.cross(down) if down != Vector3.ZERO else Vector3.ZERO
+		_spawn_blocking(shelf_mesh, [stone_mat], d, 1.0, 1.2, 0.85, 0.78, 0.05, false,
+			0.0 if hint != Vector3.ZERO else NAN, hint, null, "ChalkShelf")
+
+	# 3. SPINDLE TREES: one straight tapered trunk under a FLAT table of foliage. Tall and thin on
+	# purpose — they are the only verticals on a world made entirely of horizontals.
+	var tree_mat := PlanetPropMeshes.foliage_material(0.030, 3.4, false, 1.0, Color.BLACK, 0.0, 0.08, 0.04,
+		{"strength": 1.4, "near": 4.5, "far": 18.0, "sss": 0.16})
+	for i in _n(data.tree_count, 4):
+		var s := rng.randf_range(0.90, 1.12)
+		var d := planet.find_free_dir(rng, 1.1 * s, 96)
+		if d == Vector3.ZERO:
+			continue
+		# 0.85, not the 1.0 the spec proposed: the trunk is 0.2 m and the table of foliage is 3 m up,
+		# so a chair genuinely fits under one. On a 9.5 m world that difference is a point of budget.
+		_spawn_blocking(_spindle_tree(data.trunk_color, data.foliage_color_a, data.foliage_shadow_color, i),
+			[tree_mat], d, s, 0.85, 0.28, 3.0, 0.05, false, NAN, Vector3.ZERO, null, "SpindleTree")
+
+	# 4. Quarry spoil (pebble_rock in rock_color, allow_slope already true inside _pebbles).
+	_pebbles(_n(data.rock_count, 3))
+
+	# 5. FOUR LAMPS on riser tops. The steps have to be readable at night, and only chrome and plaza
+	# use point lights today.
+	var lamp_mesh := PlanetPropMeshes.lamp_post(Color("#8a8171"), Color("#6f6759"), 2.4, false)
+	var glow := PlanetPropMeshes.pulse_material(Color("#ffd0a0"), 1.0, 1.1, 0, 0.75, Color("#e8cea0"))
+	for i in 4:
+		var d := Vector3.ZERO
+		for attempt in 5:
+			var c := planet.find_free_dir(rng, 0.55, 48)
+			if c == Vector3.ZERO:
+				continue
+			d = c
+			if _near_riser(c, 1.2):
+				break
+		if d == Vector3.ZERO:
+			continue
+		var lamp := _spawn_blocking(lamp_mesh, [prop_mat, glow], d, 1.0, 0.45, 0.16, 2.4, 0.05,
+			false, NAN, Vector3.ZERO, null, "Lamp")
+		_omni(lamp, Vector3(0.0, 2.45, 0.0), Color("#ffd0a0"), 0.9, 5.0)
+
+	# 6. Lichen cushions and the one place chroma is allowed on this world.
+	_bushes(4)
+	var petal: Color = data.flower_colors[1 % data.flower_colors.size()] if data.flower_colors.size() > 0 else Color("#d8cba4")
+	_flower_patches(_n(data.flower_patch_count, 3), data.foliage_color_a, petal)
+
+	# SPARSE LICHEN, NOT A LAWN. Same divisor trap as Fen above: the authored 0.55 would have put
+	# ~2060 tufts on 1134 m², the densest field in the game, on a world described as bare stone.
+	# 3.0 gives ~380 (0.33/m²). Tinted LIGHTER than the ground per the Zorp luma lesson: these blades
+	# are mostly toon-shade side, so a tint darker than the ground reads as several thousand
+	# near-black specks and pins the planet's luma p05 outside the R2.6 window. _grass_tufts already
+	# skips anything with bank_weight > 0.34, so the risers stay bare stone by themselves.
+	_grass_tufts(Color("#9aa88a"), 3.0)
+	_chalk_dust()
+
+## Chalk powder drifting along the terrace floors. A GROUND-HUGGING layer (radius + 0.4) against
+## Zorp's spores at + 1.3 and Fen's ashfall at + 3.4 — on a staircase the dust sits in the treads.
+func _chalk_dust() -> void:
+	var p := GPUParticles3D.new()
+	p.name = "ChalkDust"
+	p.amount = 70
+	p.lifetime = 11.0
+	p.preprocess = 11.0
+	p.local_coords = true
+	p.visibility_aabb = AABB(Vector3.ONE * -(planet.radius + 3.0), Vector3.ONE * (planet.radius + 3.0) * 2.0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = planet.radius + 0.4
+	pm.direction = Vector3.ZERO
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.05
+	pm.initial_velocity_max = 0.18
+	pm.gravity = Vector3.ZERO
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 0.35
+	pm.turbulence_noise_scale = 2.0
+	pm.scale_min = 0.6
+	pm.scale_max = 1.3
+	var g := Gradient.new()
+	var c := Color("#ddd2bd")
+	g.set_color(0, Color(c.r, c.g, c.b, 0.0))
+	g.add_point(0.30, c)
+	g.set_color(g.get_point_count() - 1, Color(c.r, c.g, c.b, 0.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.07, 0.07)
+	q.material = PlanetPropMeshes.sparkle_material(Color(1.0, 1.0, 1.0, 0.40))
+	p.draw_pass_1 = q
+	root.add_child(p)
+
+# ============================================================================================ meshes for the two new worlds
+## Meshes for "flats" and "chalk". They live here rather than in PlanetPropMeshes because the two
+## worlds were built in parallel with that file and neither of these forms existed in it; the cache
+## below mirrors PlanetPropMeshes._cached() so repeated builds (and Planet.prebuild's throwaway
+## planet) share one ArrayMesh per key. Everything is flat planes, chamfers, tapers and panel lines
+## per R2.3 — no blobs, and every prop stays under the ~2k triangle budget in ARCHITECTURE.md.
+static var _extra_mesh_cache: Dictionary = {}
+
+static func _cached_mesh(key: String, builder: Callable) -> ArrayMesh:
+	if _extra_mesh_cache.has(key):
+		return _extra_mesh_cache[key]
+	var m: ArrayMesh = builder.call()
+	_extra_mesh_cache[key] = m
+	return m
+
+## A flat-sided (optionally tapered) beam between two points in the XZ=0 plane, `hd` deep in Z.
+## 24 tris; a lintel built out of these is a tenth of the cost of one built out of rounded boxes,
+## and it is genuinely faceted cut stone rather than a tube.
+static func _beam(kit: PlanetMeshKit, a: Vector3, b: Vector3, hw_a: float, hw_b: float, hd: float, color: Color) -> void:
+	var axis := b - a
+	if axis.length_squared() < 0.000001:
+		return
+	axis = axis.normalized()
+	var side := Vector3(-axis.y, axis.x, 0.0)
+	if side.length_squared() < 0.000001:
+		side = Vector3(1.0, 0.0, 0.0)
+	side = side.normalized()
+	var dep := Vector3(0.0, 0.0, hd)
+	var a0 := a + side * hw_a + dep
+	var a1 := a - side * hw_a + dep
+	var a2 := a - side * hw_a - dep
+	var a3 := a + side * hw_a - dep
+	var b0 := b + side * hw_b + dep
+	var b1 := b - side * hw_b + dep
+	var b2 := b - side * hw_b - dep
+	var b3 := b + side * hw_b - dep
+	kit.quad(a0, a1, a2, a3, color)
+	kit.quad(b3, b2, b1, b0, color)
+	kit.quad(a0, b0, b1, a1, color)
+	kit.quad(a1, b1, b2, a2, color)
+	kit.quad(a2, b2, b3, a3, color)
+	kit.quad(a3, b3, b0, a0, color)
+
+## Fen's standing slab: three stacked slabs of shrinking width, a chamfered top cut and one mineral
+## inlay band across the middle. ~1290 tris. Total height stays at `height` + 0.14, and `height` is
+## capped at 3.24 by the caller, which keeps the 11-degree shadow inside the 25 m shadow distance.
+static func _standing_stone(rock: Color, vein: Color, height: float, variant: int) -> ArrayMesh:
+	var key := "fen_stone|%s|%s|%.3f|%d" % [rock.to_html(), vein.to_html(), height, variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var widths := PackedFloat32Array([0.62, 0.50, 0.38])
+		var tops := PackedFloat32Array([0.42, 0.76, 1.00])
+		var lean := (0.020 + 0.012 * float(variant % 3)) * (1.0 if variant % 2 == 0 else -1.0)
+		var prev := 0.0
+		for k in 3:
+			var y0 := prev * height
+			var y1 := tops[k] * height
+			var cy := (y0 + y1) * 0.5
+			kit.rounded_box(Vector3(lean * cy, cy, 0.0), Vector3(widths[k], y1 - y0, 0.24 - 0.02 * float(k)),
+				0.05, rock.darkened(0.06 - 0.03 * float(k)))
+			prev = tops[k]
+		var by := 0.62 * height
+		kit.rounded_box(Vector3(lean * by, by, 0.0), Vector3(0.54, 0.055, 0.27), 0.015, vein)
+		# Chamfered crown: two triangles slicing the top back, so the silhouette ends on an angle
+		# rather than on a flat lid (R2.3 "flat planes, chamfers and hard edges").
+		var back := 1.0 if variant % 2 == 0 else -1.0
+		var xo := lean * height
+		kit.quad(
+			Vector3(xo - 0.19, height + 0.14, back * 0.10),
+			Vector3(xo + 0.19, height + 0.14, back * 0.10),
+			Vector3(xo + 0.19, height - 0.02, -back * 0.10),
+			Vector3(xo - 0.19, height - 0.02, -back * 0.10),
+			rock.lightened(0.05))
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Fen's salt scrub: five flat tapered blades in a splayed rosette, none over 0.335 m. 12 tris.
+static func _salt_scrub(leaf: Color, shadow: Color, variant: int) -> ArrayMesh:
+	var key := "fen_scrub|%s|%s|%d" % [leaf.to_html(), shadow.to_html(), variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		for k in 5:
+			var a := TAU * float(k) / 5.0 + 0.7 * float(variant)
+			var outw := Vector3(cos(a), 0.0, sin(a))
+			var side := Vector3(-sin(a), 0.0, cos(a)) * 0.038
+			var base := outw * 0.035
+			var hgt := 0.200 + 0.045 * float((k * 2 + variant) % 4)
+			var tip := base + outw * (0.16 + 0.05 * float((k + variant) % 3)) + Vector3(0.0, hgt, 0.0)
+			kit.triangle(base - side, base + side, tip, leaf if k % 2 == 0 else leaf.lerp(shadow, 0.45))
+		kit.cylinder(Vector3(0.0, -0.015, 0.0), 0.062, 0.050, 0.035, shadow, Basis.IDENTITY, 8)
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Fen's pool spire: a slim hard-faceted mineral spike with a salt crust at the foot, ~1.05 m tall
+## before the ring grades it 0.58-1.30. ~100 tris, and it is instanced through a MultiMesh.
+static func _pool_spire(stone: Color, salt: Color, variant: int) -> ArrayMesh:
+	var key := "fen_spire|%s|%s|%d" % [stone.to_html(), salt.to_html(), variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var prof := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.135, 0.0), Vector2(0.105, 0.30),
+			Vector2(0.052, 0.74), Vector2(0.0, 1.05)])
+		if variant % 2 == 1:
+			prof = PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.150, 0.0), Vector2(0.088, 0.42),
+				Vector2(0.070, 0.62), Vector2(0.0, 0.92)])
+		kit.lathe(prof, 7, Transform3D.IDENTITY, stone, false)
+		kit.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.175, 0.0), Vector2(0.150, 0.075),
+			Vector2(0.0, 0.075)]), 7, Transform3D.IDENTITY, salt, false)
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Fen's resonator arch: two tapered legs and a faceted span, 3.42 m to the top of the keystone (the
+## 4.5 m shadow ceiling). Clear opening ~1.6 m, and it is spawned without a collider so the walk to
+## the rocket goes straight through it. ~240 tris.
+static func _resonator_arch(stone: Color, vein: Color) -> ArrayMesh:
+	var key := "fen_arch|%s|%s" % [stone.to_html(), vein.to_html()]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var leg_y := 2.20
+		var span_r := 0.95
+		for sx: float in [-1.0, 1.0]:
+			_beam(kit, Vector3(sx * span_r, 0.0, 0.0), Vector3(sx * span_r, leg_y, 0.0), 0.22, 0.16, 0.17, stone)
+			_beam(kit, Vector3(sx * span_r - sx * 0.03, 1.34, 0.0), Vector3(sx * span_r - sx * 0.03, 1.46, 0.0),
+				0.20, 0.20, 0.19, vein)
+		var segs := 6
+		for i in segs:
+			var a0 := PI * (1.0 - float(i) / float(segs))
+			var a1 := PI * (1.0 - float(i + 1) / float(segs))
+			var p0 := Vector3(cos(a0) * span_r, leg_y + sin(a0) * span_r, 0.0)
+			var p1 := Vector3(cos(a1) * span_r, leg_y + sin(a1) * span_r, 0.0)
+			_beam(kit, p0, p1, 0.16, 0.16, 0.17, stone.lightened(0.03) if i % 2 == 0 else stone)
+		_beam(kit, Vector3(0.0, leg_y + span_r - 0.06, 0.0), Vector3(0.0, leg_y + span_r + 0.27, 0.0),
+			0.17, 0.13, 0.15, vein)
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Grig's step monolith: a FOUR-SIDED tapered shaft (a 4-segment lathe with hard normals, so the
+## sides are genuine flat planes), one scribed groove band and a flat chamfered cap. ~700 tris.
+static func _step_monolith(stone: Color, cap: Color, shadow: Color, height: float, variant: int) -> ArrayMesh:
+	var key := "grig_mono|%s|%s|%s|%.3f|%d" % [stone.to_html(), cap.to_html(), shadow.to_html(), height, variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var r0 := 0.40 + 0.03 * float(variant % 3)
+		var r_top := r0 * 0.74
+		kit.lathe(PackedVector2Array([
+			Vector2(0.0, 0.0), Vector2(r0, 0.0),
+			Vector2(r0 * 0.94, height * 0.26),
+			Vector2(r_top, height * 0.90),
+			Vector2(0.0, height * 0.90)]), 4, Transform3D.IDENTITY, stone, false)
+		# A 4-segment lathe is a square standing on its diagonal, so a matching box is rotated 45 deg
+		# and sized side = radius * sqrt(2). Groove band first, then the overhanging cap.
+		var gy := height * (0.56 + 0.06 * float(variant % 2))
+		var gr := lerpf(r0 * 0.94, r_top, clampf((gy - height * 0.26) / (height * 0.64), 0.0, 1.0))
+		var q := Basis(Vector3.UP, PI * 0.25)
+		kit.rounded_box(Vector3(0.0, gy, 0.0), Vector3(gr * 1.470, 0.062, gr * 1.470), 0.012, shadow, q)
+		kit.rounded_box(Vector3(0.0, height * 0.935, 0.0), Vector3(r_top * 1.78, 0.095, r_top * 1.78), 0.022, cap, q)
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Grig's chalk shelf: a flat deck on two chamfered piers with a step block at one end. ~1300 tris.
+## Placed across a riser, it is the only prop in the game that spans an elevation change.
+static func _chalk_shelf(stone: Color, shadow: Color, span: float) -> ArrayMesh:
+	var key := "grig_shelf|%s|%s|%.2f" % [stone.to_html(), shadow.to_html(), span]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		kit.rounded_box(Vector3(0.0, 0.62, 0.0), Vector3(span, 0.16, 0.86), 0.035, stone)
+		for sx: float in [-1.0, 1.0]:
+			kit.rounded_box(Vector3(sx * (span * 0.5 - 0.30), 0.28, 0.0), Vector3(0.32, 0.56, 0.62),
+				0.04, stone.darkened(0.12))
+		kit.rounded_box(Vector3(span * 0.5 - 0.06, 0.30, 0.0), Vector3(0.24, 0.34, 0.72), 0.03, shadow.lightened(0.22))
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Grig's spindle tree: one straight tapered trunk under a FLAT horizontal table of foliage with a
+## dark bracket underneath. ~300 tris. The trunk carries PlanetPropMeshes.WOOD_ALPHA so the foliage
+## shader gives it directional grain instead of plump leaf softness (R2.9).
+static func _spindle_tree(trunk: Color, frond: Color, shadow: Color, variant: int) -> ArrayMesh:
+	var key := "grig_spindle|%s|%s|%s|%d" % [trunk.to_html(), frond.to_html(), shadow.to_html(), variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var h := 2.80 + 0.28 * float(variant % 3)
+		var wood := Color(trunk.r, trunk.g, trunk.b, PlanetPropMeshes.WOOD_ALPHA)
+		kit.cylinder(Vector3(0.0, -0.05, 0.0), 0.20, 0.085, h + 0.05, wood, Basis.IDENTITY, 9)
+		kit.cylinder(Vector3(0.0, h - 0.10, 0.0), 0.26, 0.98, 0.12, shadow, Basis.IDENTITY, 14)
+		kit.cylinder(Vector3(0.0, h + 0.02, 0.0), 1.00, 0.92, 0.10, frond, Basis.IDENTITY, 14)
+		kit.cylinder(Vector3(0.0, h + 0.12, 0.0), 0.58, 0.36, 0.09, frond.lightened(0.07), Basis.IDENTITY, 12)
+		return kit.commit()
+	return _cached_mesh(key, build)
 
 # ============================================================================================ collectibles
 func _collectibles() -> void:

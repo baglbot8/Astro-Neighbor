@@ -382,21 +382,41 @@ func _rename_flow() -> void:
 
 func _stats_flow() -> void:
 	var placed: int = (GameState.placed_decorations.get("home", []) as Array).size()
-	var zorp: int = int(GameState.npc_data("zorp").get("friendship", 0))
-	var bolt: int = int(GameState.npc_data("bolt").get("friendship", 0))
 	var rating := PlanetScore.compute("home")
 	var lines: Array[String] = [
 		"Day %d on %s." % [GameState.day_count, GameState.home_planet_name],
 		"Stardust in the bank: %d." % GameState.stardust,
 		"Decorations placed at home: %d." % placed,
-		"Zorp likes you %d%%. Bolt likes you %d%%." % [zorp, bolt],
-		"Planet rating: %s (%d/100)." % [PlanetScore.star_glyphs(int(rating["stars"])), int(rating["score"])],
 	]
+	lines.append_array(_trust_lines())
+	lines.append("Planet rating: %s (%d/100)." %
+		[PlanetScore.star_glyphs(int(rating["stars"])), int(rating["score"])])
 	var trash_count := int(rating["trash_count"])
 	if trash_count > 0:
 		lines.append("There's %d piece%s of space junk lying around. Might want to clean that up!" %
 			[trash_count, "" if trash_count == 1 else "s"])
 	await say("Mayor Orbit", lines, "elder", MAYOR_ACCENT)
+
+
+## The Mayor reads out the same neighbours PlanetScore actually averages, so the readout can never
+## drift from the number underneath it. This was two hardcoded names; the list is four now and will
+## grow again, so it LOOPS. Two per dialogue line - a typewriter box chewing through four names at
+## once reads as a wall of text, and the box is sized for about that much.
+func _trust_lines() -> Array[String]:
+	var parts: Array[String] = []
+	for npc_id: String in PlanetScore.TRUST_NPCS:
+		var who := str(NpcData.get_data(npc_id).get("display_name", npc_id.capitalize()))
+		var friendship: int = int(GameState.npc_data(npc_id).get("friendship", 0))
+		parts.append("%s likes you %d%%." % [who, friendship])
+	var out: Array[String] = []
+	var i := 0
+	while i < parts.size():
+		var line: String = parts[i]
+		if i + 1 < parts.size():
+			line += " " + parts[i + 1]
+		out.append(line)
+		i += 2
+	return out
 
 
 func _on_board(player: Node3D) -> void:

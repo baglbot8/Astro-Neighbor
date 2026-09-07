@@ -477,17 +477,20 @@ static func landing_frame(data: PlanetData) -> Array:
 
 
 ## Normal of a ringed planet's ring plane, in that planet's world space.
-## ALSO DUPLICATED from the environment (src/world/environment.gd `ring_tilt_deg` = 42 and
-## src/world/planet_ring.gd's fixed 8 deg roll), for the same reason and with the same caveat as
-## the sun arc above: the space scene has to tilt the globe it is flying at to match the ring the
-## real world is about to show, or Bolt's ring - which reaches 2.9 planet radii - swings through a
-## quarter of the frame across the arrival cut.
+## The tilt now comes from the world itself (`PlanetData.ring_tilt_deg`, 42.0 default = Bolt), the
+## same field src/world/environment.gd and src/rocket/space_globe.gd build their rings from; only
+## src/world/planet_ring.gd's fixed 8 deg roll is still duplicated here. Same reason and same
+## caveat as the sun arc above: the space scene has to tilt the globe it is flying at to match the
+## ring the real world is about to show, or Bolt's ring - which reaches 2.9 planet radii - swings
+## through a quarter of the frame across the arrival cut. Grig's is at 86 deg, near edge-on, so a
+## hardcoded 42 here would have swung his band by a full 44 degrees on arrival.
 const RING_TILT_DEG := 42.0
 const RING_ROLL_DEG := 8.0
 
 
-static func ring_normal(_data: PlanetData) -> Vector3:
-	return Basis.from_euler(Vector3(deg_to_rad(RING_TILT_DEG), 0.0, deg_to_rad(RING_ROLL_DEG))) * Vector3.UP
+static func ring_normal(data: PlanetData) -> Vector3:
+	var tilt := RING_TILT_DEG if data == null else data.ring_tilt_deg
+	return Basis.from_euler(Vector3(deg_to_rad(tilt), 0.0, deg_to_rad(RING_ROLL_DEG))) * Vector3.UP
 
 
 ## Unit vector pointing TOWARD the sun on `data` at `hour`, in that planet's world space.
@@ -531,10 +534,15 @@ static func synthesise(origin_id: String, dest_id: String) -> void:
 	var inv := cam_basis.inverse()
 	focus_dir = (inv * -up_ref).normalized()
 	focus_angle = deg_to_rad(CLIMB_SEAM_DEG)
-	# Three neighbours spread across the frame at plausible ground-sky sizes.
+	# Every neighbour spread across the frame at plausible ground-sky sizes. FIVE slots, because six
+	# worlds means five neighbours and R2.1 says the others are ALWAYS in the sky - a three-slot cap
+	# here would drop two of them out of the seam frame and they would pop in on the space side.
+	# The directions mirror src/world/sky_bodies.gd SLOTS (same azimuth spread, same height order),
+	# so the synthesised departure frames the sky the way a real planet does.
 	bodies = []
-	var slots := [Vector3(-0.42, 0.10, -0.90), Vector3(0.06, 0.22, -0.97), Vector3(0.50, -0.06, -0.86)]
-	var ids := ["home", "zorp", "bolt", "hub"]
+	var slots := [Vector3(-0.42, 0.10, -0.90), Vector3(0.06, 0.22, -0.97), Vector3(0.50, -0.06, -0.86),
+		Vector3(0.29, 0.07, -0.95), Vector3(-0.24, -0.13, -0.96)]
+	var ids := ["home", "zorp", "bolt", "hub", "fen", "grig"]
 	var i := 0
 	for id in ids:
 		if id == origin_id or i >= slots.size():

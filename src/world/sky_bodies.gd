@@ -1,10 +1,11 @@
 class_name SkyBodies
 extends Node3D
-## The three neighbouring worlds, always hanging in the sky (STYLE_GUIDE R2.1).
+## Every OTHER world, always hanging in the sky (STYLE_GUIDE R2.1).
 ##
-## From every planet you can see the other three as small, distinct, correctly-lit bodies that
+## From every planet you can see the other five as small, distinct, correctly-lit bodies that
 ## drift slowly across the sky: home's green world with its seas, Zorp's violet world with its
-## glowing rivers, Bolt's chrome world WITH ITS RING, and Starport Plaza. They are the strongest
+## glowing rivers, Bolt's chrome world WITH ITS RING, Starport Plaza, Fen's pool-pocked terracotta
+## pan and Grig's banded chalk ball with its razor ring. They are the strongest
 ## "I am in space" cue in the game and they double as navigation - the world you are looking at is
 ## the world you can fly to.
 ##
@@ -30,7 +31,7 @@ extends Node3D
 ## moons' framing with it. Anchoring to the opening view instead means the three worlds are always
 ## in the establishing shot on every planet whatever the player builder picks for spawn_dir, and
 ## they still slide out of frame normally as the player turns, because the anchor is captured once
-## and then held. The three offsets are spread right/centre/left and dodge the HUD chips; each
+## and then held. The five offsets are spread across the frame and dodge the HUD chips; each
 ## drifts on a slow, bounded oscillation so the sky is alive without any body wandering out of the
 ## playable band.
 ##
@@ -39,16 +40,22 @@ extends Node3D
 
 const BODY_SHADER := preload("res://src/shaders/env_globe.gdshader")
 const RING_SHADER := preload("res://src/shaders/ring.gdshader")
-## Ring geometry, as multiples of the body radius. Kept equal to src/world/planet_ring.gd's
-## inner_radius/outer_radius over the planet's own radius, so the sky body and the real ring agree.
-const RING_INNER_SCALE := 2.15
-const RING_OUTER_SCALE := 3.00
+## Ring geometry, as multiples of the body radius. Per-world since R2.10: read from
+## `PlanetData.ring_inner_scale` / `ring_outer_scale`, the same fields environment.gd builds the
+## real PlanetRing from. These constants are only the fallback when a body has no data.
+## They were 2.15 / 3.00, derived from planet_ring.gd's authored 28 m / 39 m "on a 13 m planet";
+## Bolt is R 10.5 and environment.gd overrides those with 1.7x / 2.9x, so the sky body was 26%
+## wider at the inner edge than the ring you see from the ground on the same world.
+const RING_INNER_SCALE := 1.7
+const RING_OUTER_SCALE := 2.9
 
 ## How far from the camera the bodies are parked. Well inside the camera's 300 m far plane and far
 ## beyond any terrain (the biggest planet is R=26), so the depth buffer occludes them correctly.
 const BODY_DISTANCE := 140.0
-## Planet ids in system order.
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub"]
+## Planet ids in system order. New worlds are APPENDED, never inserted: the slot a world gets is its
+## index in this list once the viewer is skipped, so reordering would re-frame every shipped planet's
+## sky.
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
 ## Mirror of src/rocket/space_travel.gd LAYOUT (globe radius, orbit radius, orbit angle, height).
 ## Duplicated rather than imported so the environment never depends on the rocket scene; it is only
 ## used to derive plausible RELATIVE angular sizes, so small drift between the two is harmless.
@@ -57,6 +64,8 @@ const SYSTEM_LAYOUT := {
 	"zorp": {"r": 1.9, "orbit": 28.5, "angle": 118.0, "y": -1.7},
 	"bolt": {"r": 1.9, "orbit": 36.5, "angle": 214.0, "y": 1.5},
 	"hub": {"r": 3.2, "orbit": 47.0, "angle": 318.0, "y": -0.9},
+	"fen": {"r": 2.0, "orbit": 24.0, "angle": 71.0, "y": 1.9},
+	"grig": {"r": 1.6, "orbit": 42.0, "angle": 262.0, "y": 2.4},
 }
 ## Map units -> degrees of angular diameter. Tuned so the nearest neighbour reads ~4.6 deg across
 ## (about 73 px tall at 720p, still clearly smaller than the 6.3 deg moon) and the furthest ~2.3 deg
@@ -72,10 +81,18 @@ const ANGULAR_MAX_DEG := 4.6
 ## hub's town hall fills the middle of the plaza skyline (so the centre slot rides high) and the
 ## arrival banner covers x 595-1160 / y 85-180 for its first few seconds (so the right slot rides
 ## above it rather than behind it).
+## SIX WORLDS NEED FIVE SLOTS. `setup()` stops once the slots run out, so a three-slot table on a
+## six-planet system would silently hide two neighbours - a straight violation of R2.1 ("other
+## planets are ALWAYS in the sky"). Slots 3 and 4 thread between the original three rather than
+## beside them: sorted by azimuth the five read -27 / -14 / +4 / +17 / +30 with heights
+## 0.74 / 0.20 / 0.88 / 0.58 / 0.34, so no two neighbouring bearings share a height and the discs
+## never stack. Slots are APPENDED so the shipped worlds keep the framing they have today.
 const SLOTS := [
 	[-27.0, 0.74, 2.5, 1.4, 27.0],
 	[4.0, 0.88, 2.5, 1.1, 34.0],
 	[30.0, 0.34, 3.0, 1.3, 41.0],
+	[17.0, 0.58, 2.2, 1.2, 30.0],
+	[-14.0, 0.20, 2.6, 1.5, 37.0],
 ]
 ## Degrees of spin per second. Slow: at 2-3 deg across, anything faster reads as a spinning marble.
 const SPIN_DEG_PER_SEC := 1.1
@@ -87,8 +104,14 @@ const BIOME_ANCHOR := {
 	"violet": [Color("#8262a8"), 0.62],
 	"chrome": [Color("#8fa3bf"), 0.50],
 	"plaza": [Color("#7ec46a"), 0.14],
+	"flats": [Color("#c49a76"), 0.30],
+	"chalk": [Color("#b9b09a"), 0.40],
 }
-const BIOME_MODE := {"meadow": 0, "violet": 1, "chrome": 2, "plaza": 3}
+## A MISSING KEY HERE IS SILENT: `_apply_biome` reads `BIOME_MODE.get(data.biome, 3)`, so a world
+## whose biome is not listed draws as the green-and-cream hub in every sky, with no error anywhere.
+## Modes 4 (flats: pale salt rings round dark pools) and 5 (chalk: quantised contour terraces) are
+## real branches in env_globe.gdshader - see its `mode` uniform, which runs 0..5.
+const BIOME_MODE := {"meadow": 0, "violet": 1, "chrome": 2, "plaza": 3, "flats": 4, "chalk": 5}
 
 ## One entry per visible world.
 class Body:
@@ -105,8 +128,9 @@ class Body:
 var _bodies: Array[Body] = []
 var _clock_hours: float = 0.0
 
-## Builds the three neighbours of `current_id`. Silently builds nothing if the .tres files are
-## missing (showcase scenes that run standalone).
+## Builds every neighbour of `current_id`, one per SLOT. Silently skips any world whose .tres is
+## missing (showcase scenes that run standalone), and stops if the slots run out - so SLOTS must
+## always hold at least PLANET_IDS.size() - 1 entries or a neighbour is dropped from the sky.
 func setup(current_id: String) -> void:
 	var slot := 0
 	for id in ORDER:
@@ -241,11 +265,12 @@ func _build_body(data: PlanetData, viewer_id: String, slot: int) -> Body:
 	b.spin.add_child(mi)
 
 	if data.has_ring:
-		b.ring_material = _build_ring(b.node, mesh_radius, data.ring_color)
+		b.ring_material = _build_ring(b.node, mesh_radius, data)
 	return b
 
 ## Bolt's ring. Same proportions and tilt as the map globe so it is recognisably the same world.
-func _build_ring(parent: Node3D, body_radius: float, ring_color: Color) -> ShaderMaterial:
+func _build_ring(parent: Node3D, body_radius: float, data: PlanetData) -> ShaderMaterial:
+	var ring_color := data.ring_color
 	var ring := Node3D.new()
 	ring.name = "Ring"
 	ring.rotation = Vector3(deg_to_rad(-24.0), 0.0, deg_to_rad(17.0))
@@ -260,10 +285,10 @@ func _build_ring(parent: Node3D, body_radius: float, ring_color: Color) -> Shade
 	mat.set_shader_parameter("display_cap", 0.44)
 	var mi := MeshInstance3D.new()
 	mi.name = "Band"
-	# Matched to the real PlanetRing on Bolt (inner 28 m / outer 39 m on a 13 m planet = 2.15x /
-	# 3.00x). These were 1.32x / 2.05x, which made the ringed world in the sky visibly different
-	# from the one you land on and left a delta at the rocket journey's departure cut.
-	mi.mesh = _annulus(body_radius * RING_INNER_SCALE, body_radius * RING_OUTER_SCALE, 64)
+	# Matched to the real PlanetRing the environment builds on that world, via the same PlanetData
+	# fields, so the ringed world in the sky is the same object you land on and there is no delta
+	# at the rocket journey's departure cut. Grig's near edge-on razor stays a razor up here.
+	mi.mesh = _annulus(body_radius * data.ring_inner_scale, body_radius * data.ring_outer_scale, 64)
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -314,6 +339,34 @@ func _apply_biome(mat: ShaderMaterial, data: PlanetData) -> void:
 			mat.set_shader_parameter("cloud_amount", 0.0)
 			mat.set_shader_parameter("rim_color", Color("#ffb27a"))
 			mat.set_shader_parameter("rim_strength", 0.24)
+		"flats":
+			# Fen from orbit: a dusty terracotta pan pocked with mirror pools, each ringed in salt.
+			# `sea_level` is the pool threshold on mode 4's bowl field, not a real waterline.
+			mat.set_shader_parameter("sea_level", 0.30)
+			mat.set_shader_parameter("pattern_scale", 2.6)
+			mat.set_shader_parameter("accent", Color("#7fb8bb"))
+			# Nothing on Fen glows: one pad lamp, no rivers, no seams.
+			mat.set_shader_parameter("accent_glow", 0.0)
+			# The pan's own haze is dust filaments, not white puffs (R2.1) - the sky shader draws
+			# those, and a white cloud deck here would read as an Earth atmosphere.
+			mat.set_shader_parameter("cloud_amount", 0.0)
+			mat.set_shader_parameter("rim_color", Color("#e8b79c"))
+			mat.set_shader_parameter("rim_strength", 0.26)
+		"chalk":
+			# Grig from orbit: a bone-white ball banded by its own terraces. Tight pattern_scale so
+			# the contour rings are still readable on a 1.6-unit disc.
+			mat.set_shader_parameter("sea_level", 0.0)
+			# 1.6, not the spec's 5.2: mode 5 quantises ONE smooth octave, and 5.2 put ~10 cells across
+			# the disc, which shattered the contour rings into speckle. Matches space_globe.gd.
+			mat.set_shader_parameter("pattern_scale", 1.6)
+			mat.set_shader_parameter("accent", Color("#d7b98a"))
+			mat.set_shader_parameter("accent_glow", 0.0)
+			mat.set_shader_parameter("cloud_amount", 0.0)
+			mat.set_shader_parameter("rim_color", Color("#e2d6bd"))
+			mat.set_shader_parameter("rim_strength", 0.24)
+			# Mode 5 draws every riser in `low_color`, and on Grig the riser tone is `bank_color`
+			# (the warm ochre cut stone) - `ground_color_low` is inert on a world with no water.
+			mat.set_shader_parameter("low_color", data.bank_color.darkened(0.06))
 		_:
 			mat.set_shader_parameter("pattern_scale", 1.7)
 			mat.set_shader_parameter("accent", Color("#ffd98a"))

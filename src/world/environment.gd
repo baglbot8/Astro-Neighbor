@@ -35,7 +35,14 @@ const SUN_RISE_HOUR := 5.6
 const SUN_SET_HOUR := 19.8
 const SUN_RISE_AZ_DEG := -45.0
 const SUN_PEAK_AZ_DEG := -135.0
+## Default noon elevation. Per-world now: `PlanetData.sun_peak_elev_deg` (52.0 default, so the four
+## shipped worlds are byte-identical). Fen ships 11.0 for a sun that never leaves the horizon.
 const SUN_PEAK_ELEV_DEG := 52.0
+## Below this sun elevation, shadows run so long that the default 25 m shadow range clips them
+## mid-frame (at 11 deg a 4.5 m prop throws 23 m), so the range is widened. See `_build_lights`.
+const LOW_SUN_ELEV_DEG := 20.0
+const LOW_SUN_SHADOW_DISTANCE := 34.0
+const SHADOW_DISTANCE := 25.0
 ## Moon arcs are tuned to the real gameplay rig (camera_rig.gd: 28 deg pitch, 45 deg FOV): the top of
 ## the screen sits ~5.5 deg BELOW local horizontal and the planet's limb ~24 deg below, so the moon
 ## has to ride between roughly -10 and -16 deg to be inside the frame and clear of the ground.
@@ -112,8 +119,9 @@ const GRADE_STEP := 0.02
 @export var time_scale := 1.0
 ## When set, used instead of looking up the planet (showcase scenes).
 @export var data_override: PlanetData
-## Tilt of the planetary ring plane (degrees) when the planet has a ring.
-@export var ring_tilt_deg := 42.0
+## Showcase override for the ring plane tilt in degrees. Negative = use the world's own
+## `PlanetData.ring_tilt_deg` (42.0 default = Bolt's hoop; Grig ships 86.0, near edge-on).
+@export var ring_tilt_deg := -1.0
 ## Master switch for the vignette overlay.
 @export var vignette_enabled := true
 
@@ -395,7 +403,10 @@ func _track_opening_bearing() -> void:
 
 func _compute_bodies(hour: float) -> void:
 	var theta := (hour - SUN_RISE_HOUR) / (SUN_SET_HOUR - SUN_RISE_HOUR) * PI
-	_sun_dir = _arc_dir(theta, SUN_RISE_AZ_DEG, SUN_PEAK_AZ_DEG, SUN_PEAK_ELEV_DEG)
+	var peak_elev := SUN_PEAK_ELEV_DEG
+	if planet_data != null:
+		peak_elev = planet_data.sun_peak_elev_deg
+	_sun_dir = _arc_dir(theta, SUN_RISE_AZ_DEG, SUN_PEAK_AZ_DEG, peak_elev)
 	var theta_m := (hour - 18.5) / 12.0 * PI
 	_moon_dir_a = _arc_dir(theta_m, MOON_RISE_AZ_DEG, MOON_PEAK_AZ_DEG, MOON_PEAK_ELEV_DEG, MOON_RISE_ELEV_DEG)
 	_moon_dir_b = _arc_dir(theta_m + MOON_B_PHASE_OFFSET, MOON_B_RISE_AZ_DEG, MOON_B_PEAK_AZ_DEG,
@@ -560,7 +571,12 @@ func _build_lights() -> void:
 	_sun.shadow_enabled = true
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	_sun.directional_shadow_split_1 = 0.3
-	_sun.directional_shadow_max_distance = 25.0
+	# A low sun stretches every shadow: at 11 deg the caster-to-shadow ratio is 5.1x, so a 4.5 m
+	# prop reaches 23 m and the 25 m range would cut the colonnade's shadow bars off mid-pan.
+	var shadow_dist := SHADOW_DISTANCE
+	if planet_data != null and planet_data.sun_peak_elev_deg < LOW_SUN_ELEV_DEG:
+		shadow_dist = LOW_SUN_SHADOW_DISTANCE
+	_sun.directional_shadow_max_distance = shadow_dist
 	_sun.directional_shadow_fade_start = 0.8
 	_sun.directional_shadow_blend_splits = true
 	_sun.light_angular_distance = 0.0
@@ -575,7 +591,7 @@ func _build_lights() -> void:
 	_moon.shadow_enabled = false
 	_moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	_moon.directional_shadow_split_1 = 0.3
-	_moon.directional_shadow_max_distance = 25.0
+	_moon.directional_shadow_max_distance = shadow_dist
 	_moon.directional_shadow_fade_start = 0.8
 	_moon.directional_shadow_blend_splits = true
 	_moon.light_angular_distance = 0.0
@@ -613,10 +629,14 @@ func _build_ring() -> void:
 		return
 	_ring = PlanetRing.new()
 	_ring.name = "Ring"
-	_ring.inner_radius = planet_radius * 1.7
-	_ring.outer_radius = planet_radius * 2.9
+	# Per-world since R2.10. The 1.7 / 2.9 / 42.0 defaults reproduce Bolt's shipped hoop exactly;
+	# Grig ships 1.22 / 1.52 / 86.0, a near edge-on razor band that reads as a different object.
+	# src/rocket/space_globe.gd and src/world/sky_bodies.gd now read the same three fields, so the
+	# ring no longer changes size across the journey cut.
+	_ring.inner_radius = planet_radius * planet_data.ring_inner_scale
+	_ring.outer_radius = planet_radius * planet_data.ring_outer_scale
 	_ring.ring_color = planet_data.ring_color
-	_ring.tilt_deg = ring_tilt_deg
+	_ring.tilt_deg = ring_tilt_deg if ring_tilt_deg >= 0.0 else planet_data.ring_tilt_deg
 	add_child(_ring)
 
 func _build_night_life() -> void:
@@ -687,6 +707,13 @@ func _apply(hour: float) -> void:
 	_sky_mat.set_shader_parameter("moon_dir_a", _moon_dir_a)
 	_sky_mat.set_shader_parameter("moon_dir_b", _moon_dir_b)
 	_sky_mat.set_shader_parameter("moon_count", planet_data.moon_count)
+	# Three sky uniforms that were declared but never set for any planet before R2.10. The
+	# defaults below are the shader's own, so the shipped four are byte-identical; Fen ships a
+	# 0.082 sun disc (3.2x) and Grig 0.155 moons. Set beside moon_count rather than once at build
+	# time so a showcase that swaps `data_override` at runtime picks them up too.
+	_sky_mat.set_shader_parameter("sun_disc_size", planet_data.sun_disc_size)
+	_sky_mat.set_shader_parameter("moon_size", planet_data.moon_size)
+	_sky_mat.set_shader_parameter("star_density", planet_data.star_density)
 	_sky_mat.set_shader_parameter("zenith_color", zenith)
 	_sky_mat.set_shader_parameter("mid_color", mid)
 	_sky_mat.set_shader_parameter("limb_color", limb)

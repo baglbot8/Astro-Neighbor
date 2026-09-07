@@ -9,11 +9,16 @@ extends Node3D
 
 const GLOBE_SHADER := preload("res://src/rocket/globe.gdshader")
 const RING_SHADER := preload("res://src/shaders/ring.gdshader")
-## Ring geometry as multiples of the body radius. Kept equal to src/world/planet_ring.gd
-## (28 m / 39 m on a 13 m planet) and to src/world/sky_bodies.gd, so the ringed world in the sky,
-## the one on the map and the one you land on are all the same object.
-const RING_INNER_SCALE := 2.15
-const RING_OUTER_SCALE := 3.00
+## Ring geometry as multiples of the body radius. Per-world since R2.10: read from
+## `PlanetData.ring_inner_scale` / `ring_outer_scale`, the same two fields src/world/environment.gd
+## builds the real PlanetRing from, so the ringed world in the sky, the one on the map and the one
+## you land on are all the same object. These constants are the fallback when there is no data.
+##
+## They were 2.15 / 3.00, derived from planet_ring.gd's authored 28 m / 39 m defaults "on a 13 m
+## planet" -- but Bolt is R 10.5 and environment.gd overwrites those defaults with 1.7x / 2.9x, so
+## the map ring was 26% too big at the inner edge against the one the player actually lands on.
+const RING_INNER_SCALE := 1.7
+const RING_OUTER_SCALE := 2.9
 const SPIN_DEG_PER_SEC := 3.2
 
 var planet_id: String = "home"
@@ -73,6 +78,16 @@ func setup(planet_data: PlanetData, globe_radius: float) -> void:
 		"plaza":
 			_build_clouds(3)
 			_build_town_glow()
+		"flats":
+			# Deliberately NOTHING. Fen has no clouds (its haze is dust filaments, not puffs),
+			# no moons (moon_count 0, the only moonless world) and no ring. Written out rather
+			# than left to fall off the end of the match so the next reader can see it is a
+			# decision and not an omission.
+			pass
+		"chalk":
+			# One tight near-edge-on band and two moons, one big and bone-white.
+			_build_ring()
+			_build_moons(2)
 
 
 func _process(delta: float) -> void:
@@ -152,6 +167,8 @@ const BIOME_ANCHOR := {
 	"violet": [Color("#8262a8"), 0.62],
 	"chrome": [Color("#8fa3bf"), 0.50],
 	"plaza": [Color("#7ec46a"), 0.14],
+	"flats": [Color("#c49a76"), 0.30],
+	"chalk": [Color("#b9b09a"), 0.40],
 }
 
 
@@ -214,6 +231,33 @@ func _apply_biome() -> void:
 			_material.set_shader_parameter("accent_glow", 0.55)
 			_material.set_shader_parameter("rim_color", Color("#ffb27a"))
 			_material.set_shader_parameter("rim_strength", 0.24)
+		"flats":
+			# Fen: a dusty terracotta pan pocked with mirror pools, each ringed in salt crust.
+			# `sea_level` is mode 4's pool threshold on the bowl field, not a real waterline.
+			_material.set_shader_parameter("mode", 4)
+			_material.set_shader_parameter("sea_level", 0.30)
+			_material.set_shader_parameter("pattern_scale", 2.6)
+			_material.set_shader_parameter("accent", Color("#7fb8bb"))
+			# Nothing on Fen glows - no rivers, no seams, no town, one pad lamp.
+			_material.set_shader_parameter("accent_glow", 0.0)
+			_material.set_shader_parameter("rim_color", Color("#e8b79c"))
+			_material.set_shader_parameter("rim_strength", 0.26)
+		"chalk":
+			# Grig: a bone-white ball banded by its own terraces. The map-scale version of the real
+			# terrace_bank contour rings, tight enough to still read on a 1.6-unit globe.
+			_material.set_shader_parameter("mode", 5)
+			_material.set_shader_parameter("sea_level", 0.0)
+			# 1.6, not the 5.2 the build spec guessed: mode 5 quantises ONE smooth octave, so 5.2 put
+			# ~10 cells across the disc and the contour rings vanished into speckle. 1.6 gives the
+			# ~2 cycles Grig's real hill_frequency 0.30 puts around the world.
+			_material.set_shader_parameter("pattern_scale", 1.6)
+			_material.set_shader_parameter("accent", Color("#d7b98a"))
+			_material.set_shader_parameter("accent_glow", 0.0)
+			_material.set_shader_parameter("rim_color", Color("#e2d6bd"))
+			_material.set_shader_parameter("rim_strength", 0.24)
+			# Mode 5 paints every riser in `low_color`, and on Grig the riser tone is `bank_color`
+			# (warm ochre cut stone); `ground_color_low` is inert on a world with no water.
+			_material.set_shader_parameter("low_color", data.bank_color.darkened(0.04))
 		_:
 			_material.set_shader_parameter("mode", 3)
 			_material.set_shader_parameter("pattern_scale", 1.7)
@@ -264,17 +308,25 @@ func _build_ring() -> void:
 	var ring := Node3D.new()
 	ring.name = "Ring"
 	# Same tilt the real world's ring is built with, so the map's Bolt and the Bolt you land on are
-	# the same object from the same angle (STYLE_GUIDE R2.1: "share the look").
-	ring.rotation = Vector3(deg_to_rad(RocketJourney.RING_TILT_DEG), 0.0,
-		deg_to_rad(RocketJourney.RING_ROLL_DEG))
+	# the same object from the same angle (STYLE_GUIDE R2.1: "share the look"). Per-world since
+	# R2.10 -- PlanetData.ring_tilt_deg defaults to 42.0, which is RocketJourney.RING_TILT_DEG, so
+	# Bolt is unchanged; Grig's 86.0 is near edge-on and has to survive the cut to the map.
+	var tilt := RocketJourney.RING_TILT_DEG
+	if data != null:
+		tilt = data.ring_tilt_deg
+	ring.rotation = Vector3(deg_to_rad(tilt), 0.0, deg_to_rad(RocketJourney.RING_ROLL_DEG))
 	add_child(ring)
 	_ring = ring
 	_ring_rest = ring.basis
-	# Same proportions as the real world's ring AND as the one the environment hangs in the sky:
-	# src/world/planet_ring.gd is 28 m / 39 m on a 13 m planet, and src/world/sky_bodies.gd mirrors
-	# that as RING_INNER_SCALE / RING_OUTER_SCALE. This was 1.7 / 2.9, which is why Bolt's band
-	# changed size across BOTH journey cuts and had to be faded in to hide it.
-	var mesh := _annulus_uv(radius * RING_INNER_SCALE, radius * RING_OUTER_SCALE, 72)
+	# Same proportions as the ring environment.gd builds on the ground, taken from the same two
+	# PlanetData fields, so Bolt's band no longer changes size across either journey cut and Grig's
+	# 1.22 / 1.52 razor stays a razor on the map instead of becoming Bolt's hoop.
+	var inner := RING_INNER_SCALE
+	var outer := RING_OUTER_SCALE
+	if data != null:
+		inner = data.ring_inner_scale
+		outer = data.ring_outer_scale
+	var mesh := _annulus_uv(radius * inner, radius * outer, 72)
 	var mat := ShaderMaterial.new()
 	mat.shader = RING_SHADER
 	# Colours and opacity lifted from src/world/planet_ring.gd, so the band reads the same warm tan

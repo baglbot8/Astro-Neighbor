@@ -187,6 +187,10 @@ const TRAIL_COLORS := {
 	"plaza": [Color("#e0d5b9"), Color("#ffcc33")],
 	"violet": [Color("#b6a4dc"), Color("#3ec6ff")],
 	"chrome": [Color("#8fa3bf"), Color("#ff8a3d")],
+	# Both values are ARRAYS of two colours (stone, chevron) - `_build_trail` does `pair[0]`/`pair[1]`
+	# off a `: Array` assignment, so a bare Color here hard-errors on the pad the first time you land.
+	"flats": [Color("#cfbb9c"), Color("#ff9a4d")],
+	"chalk": [Color("#c8bfa8"), Color("#e0a45c")],
 }
 ## Stepping stones every this many metres along the spawn->pad great circle.
 const TRAIL_STEP_M := 2.0

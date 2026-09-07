@@ -13,7 +13,12 @@ const CATEGORY_BONUS := 5.0
 const MAX_VARIETY_POINTS := 30.0
 const MAX_TRUST_POINTS := 10.0
 const TRASH_PENALTY_PER_PIECE := 5.0
-const TRUST_NPCS: PackedStringArray = ["zorp", "bolt"]
+## Every neighbour whose friendship counts toward the home rating. DELIBERATE REBALANCE: adding Fen
+## and Grig takes the divisor at `trust_points` from 2 to 4, which HALVES the trust component of
+## every existing save's rating until the player has met them. That is the intended cost of the
+## system growing - their friendship should count too - and it is at most 5 points of a 100-point
+## score. Anything reading this list (Town Hall's stats readout) must LOOP, not name names.
+const TRUST_NPCS: PackedStringArray = ["zorp", "bolt", "fen", "grig"]
 
 const STAR_THRESHOLDS := [20.0, 40.0, 60.0, 80.0]   # score >= threshold -> that many stars past 1
 
