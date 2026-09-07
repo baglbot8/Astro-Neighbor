@@ -30,7 +30,9 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 // leaf albedo is a ~14x multiply that clips into the ACES shoulder where chroma collapses.
 // `astro_compat` is 1.0 only under Compatibility, so this is a no-op on desktop and mobile.
 global uniform float astro_compat;
-uniform float compat_light_boost : hint_range(1.0, 6.0) = 3.6;
+// 3.6 was fitted to the tree CANOPY crop alone. Grass tufts run through the same shader with a
+// much lighter albedo, and at 3.6 they rendered almost white on a real iPhone. Fit to both.
+uniform float compat_light_boost : hint_range(1.0, 6.0) = 2.0;
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float sway_amount = 0.05;

@@ -90,7 +90,12 @@ uniform float display_cap : hint_range(0.3, 1.0) = 0.85;
 // scaling the result: the curve is steep down there, so darks recover far more than the sun
 // and stars, which are added afterwards and are untouched.
 global uniform float astro_compat;
-uniform float compat_sky_gain : hint_range(1.0, 4.0) = 1.35;
+// A MULTIPLY was tried first and is wrong: the dark sky is blue-dominant, so scaling it grows
+// the blue channel fastest and at the strength needed to fix the darks it turned the sky vivid
+// royal blue — exactly the Earth-like sky R2.1 bans. A neutral ADD lifts the black end toward
+// the intended navy without touching the hue balance. Desktop reference for the sky band is a
+// near-neutral (91,88,99); Compatibility rendered the bulk of it at luma 13 against 33.
+uniform float compat_sky_lift : hint_range(0.0, 0.3) = 0.08;
 
 const float WISP_PERIOD = 9.0;
 // Stars are clamped just under Environment.glow_hdr_threshold so they stay crisp pinpoints
@@ -291,7 +296,7 @@ void sky() {
 		}
 
 		// ---- to HDR ----------------------------------------------------------------------
-		col = aces_inverse(cap_display(col * mix(1.0, compat_sky_gain, astro_compat), display_cap), tonemap_white);
+		col = aces_inverse(cap_display(col + vec3(compat_sky_lift * astro_compat), display_cap), tonemap_white);
 
 		// ---- stars: always present, dimmer by day ---------------------------------------
 		// Suppressed inside the bright limb band (the only place there is enough dust to

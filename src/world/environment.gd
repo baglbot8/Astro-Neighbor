@@ -83,7 +83,11 @@ const NIGHT_PARAM := &"astro_night"
 ## Ambient multiplier applied ONLY under the Compatibility (WebGL2) renderer; 1.0 everywhere
 ## else, so desktop and mobile are untouched. Set in _ready() from Platform. See the note beside
 ## its use below, and re-measure BOTH renderers if you change it.
-const COMPAT_AMBIENT_SCALE := 0.75
+# Was 0.75, tuned while glow was still on under Compatibility. Turning glow off removed the same
+# wash a second time, and the two together crushed the darks — measured whole-frame luma p05 of
+# 11 against 25 on Forward+, which a player on a real iPhone read as 'all dark colors much
+# darker'. Glow-off does this job on its own.
+const COMPAT_AMBIENT_SCALE := 1.0
 var _ambient_scale: float = 1.0
 ## True on a phone or in the browser: see _apply_quality_profile in the Platform autoload.
 var _low_power := false

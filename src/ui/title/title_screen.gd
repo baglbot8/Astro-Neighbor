@@ -178,7 +178,9 @@ func _make_environment() -> Environment:
 	e.adjustment_enabled = true
 	e.adjustment_contrast = 1.04
 	e.adjustment_saturation = 1.02
-	e.glow_enabled = true
+	# The start page builds its OWN Environment, so it does not inherit the world's low-power
+	# profile. Glow is the expensive part and is what washed the dome pale on a phone.
+	e.glow_enabled = not (Platform.is_compatibility_renderer() or Platform.is_mobile())
 	e.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	e.glow_hdr_threshold = 1.25
 	e.glow_hdr_scale = 1.1

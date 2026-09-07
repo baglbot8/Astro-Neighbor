@@ -352,3 +352,54 @@ like a serious regression. Re-running the same code twice produced 12.3% and 12.
 apples-to-apples comparison in the same directory gave 0.38%. It was a one-off bad run. **Confirm a
 regression is repeatable before chasing it**, and compare within one working copy — a capture from a
 different directory carries its own RNG and import cache and is not a valid baseline.
+
+
+## 34. [2026-09-06] Second iPhone playtest — contrast over-correction, black start page, no audio
+Item 33's fixes were played on a real iPhone. Four new findings, three fixed.
+
+### The contrast over-correction (mine)
+The player reported "all dark colors much darker and light colors much lighter" — grass almost white,
+tree tops almost black. Measured whole-frame luma: Forward+ `p05=25 p50=119`, Compatibility
+`p05=11 p50=138`. Three of item 33's changes each removed the same wash and stacked up:
+
+* `COMPAT_AMBIENT_SCALE` 0.75 -> **1.0**. The 0.75 cut was fitted while glow was still ON under
+  Compatibility. Turning glow off does that job on its own, so the cut was double-counted.
+* `compat_light_boost` 3.6 -> **2.0**. 3.6 was fitted to the tree CANOPY crop alone; grass tufts run
+  through the same shader with a much lighter albedo and blew out to white at that value. **Fit a
+  shared shader against every surface that uses it, not the one crop you are looking at.**
+
+### The sky, properly this time
+The crushed darks were the sky, not the ground: **22.2%** of a Compatibility frame sat below luma 15
+against **0.0%** on Forward+. Item 33's `compat_sky_gain` was a MULTIPLY, and raising it far enough
+to fix the darks turned the sky vivid royal blue — the Earth-like sky R2.1 bans — because the dark
+sky is blue-dominant so scaling grows blue fastest.
+
+Replaced with a neutral **`compat_sky_lift = 0.08`**, added before the inverse ACES curve. Sky band
+now reads `(79,80,90)` against Forward+'s `(81,79,93)`, and the share of frame below luma 15 is
+**0.2%** against 0.0%. Hue preserved, darks recovered.
+
+### The start page was still black
+`title_screen.gd` builds its **own** `Environment` and never saw the world's low-power profile, so it
+kept the seven-level glow on a phone. Now gated the same way.
+
+### No audio anywhere in the browser
+Ruled out first: the engine itself is fine (a `--write-movie` capture on desktop has a full-scale
+peak of 32768), and the samples ARE in the export (`assets/audio` is 46 MB on disk, QOA-compressed by
+`compress/mode=2`, and the pack contains the paths).
+
+The cause is the browser: iOS suspends an `AudioContext` until a user gesture, and Godot's own resume
+was not enough there. Godot's `GodotAudio.ctx` lives in module scope and **cannot be reached from
+`JavaScriptBridge.eval()`** (verified by probing `window.Godot` and `window.Engine`), so the fix goes
+in `html/head_include` in `export_presets.cfg`: a shim that wraps `AudioContext` **before the engine
+constructs one**, keeps a registry, and resumes every context on any pointer, touch, key or
+visibility event. Verified in a desktop browser — the shim captures exactly one context (48 kHz).
+
+**Still unverified on the device**, and worth checking before more work: **iOS Web Audio obeys the
+physical ring/silent switch.** If that switch is on, a phone plays nothing regardless of this fix.
+
+### Still open: lag
+The low-power profile helped but did not remove it. Frame cost on a phone is now dominated by the
+scene itself rather than post-processing, and the long pause when approaching a planet is procedural
+generation (`Planet.prebuild` already caches geometry; the props are rebuilt per visit). The next
+lever is cutting MultiMesh instance counts on mobile — thousands of 16 cm grass blades per planet —
+which is a visual change and must be measured, not guessed.
