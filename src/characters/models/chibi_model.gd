@@ -31,6 +31,12 @@ const HEAD_Y := 0.945
 ## `_orient_on_head`), so every feature still lands exactly on the shell.
 const HEAD_SEMI := Vector3(HEAD_R * 1.04, HEAD_R * HEAD_SQUASH, HEAD_R * 0.96)
 const HEAD_N := 2.6
+## How far the crown seam stands OUT of the shell it rings. `_add_head_shell` sizes the seam so its
+## edge is exactly ON the shell, which is co-planar geometry: it z-fights, and the fight resolves
+## differently per triangle, so the seam reads as a dashed line rather than a rim. 2 % clears it and
+## is what turns the seam into the hard rim the top plane needs to read AS a plane. The waist
+## chamfer needs no equivalent — at half a semi-axis down the bean it is already 3.5 % proud.
+const SEAM_PROUD := 1.02
 ## Body superellipsoid exponents: the bean, the mitts and the feet all get planes too.
 const TORSO_N := 2.4
 const HAND_N := 2.3
@@ -105,6 +111,16 @@ enum P {
 ## stay put). Small neighbours raise it so their eyes and mouth still read at 6.5 m — scaling the
 ## whole model down is what made Pip & Pop faceless at gameplay distance.
 @export var face_scale: float = 1.0
+## How long this character HOLDS its eyes open between blinks, as a multiple of the cast default
+## (one blink every 3-5 s). 0.3 is a nervy character that crinkles shut three times as often; 2.0 is
+## an unblinking one. MANNER IS A DIFFERENTIATOR AND IT IS FREE — two neighbours with the same face
+## read as different creatures if one of them blinks at a different rate.
+##
+## Why a multiplier on the interval and not a "rest on the happy arcs" state: `_apply_face` applies
+## `_eye_open` to `oval.scale.y` ONLY, and the happy arcs are a different mesh that is shown INSTEAD
+## of the oval — so a character parked on the arcs would not blink at all, it would simply be a
+## character whose eyes are permanently closed and whose blink is invisible.
+@export var blink_hold: float = 1.0
 
 ## HEAD SHAPE, PER SPECIES. Set these in a subclass `_init()`, which runs before `_build_geometry()`.
 ##
@@ -172,10 +188,20 @@ var _hand_r: Node3D
 var _leg_l: Node3D
 var _leg_r: Node3D
 var _face: Node3D
+## THE FIVE PARALLEL EYE ARRAYS. One entry per eye, in the same order and always the same length.
+## `_build_eye` is the only thing that appends to them and `_drop_eye` the only thing that removes,
+## so they cannot drift apart. `_apply_face` walks all five EVERY FRAME.
 var _eyes: Array[Node3D] = []
 var _eye_ovals: Array[MeshInstance3D] = []
 var _eye_happy: Array[Node3D] = []
 var _eye_round: Array[Node3D] = []
+## PER-EYE RESTING SIZE, and the reason per-eye sizes are possible at all. `_apply_face` rewrites
+## `oval.scale` every frame, so before this array existed it could only rewrite it from the single
+## model-wide `eye_w`/`eye_h`/`eye_d` — anything authored per eye on frame 0 was stamped flat on
+## frame 1. A graded set of eyes (a big one and two small ones, a squint beside a stare) was
+## therefore impossible, not merely awkward. Defaults to `Vector3(eye_w, eye_h, eye_d)`, which is
+## exactly what the old code hardcoded.
+var _eye_size: Array[Vector3] = []
 var _eye_flat: Array[Node3D] = []
 var _brows: Array[Node3D] = []
 ## How far the muzzle patch stands proud of the head shell (0 when the character has no muzzle).
@@ -198,7 +224,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	_blink_timer = randf_range(2.0, 4.5)
+	_blink_timer = randf_range(2.0, 4.5) * maxf(blink_hold, 0.05)
 	_look_timer = randf_range(3.0, 6.0)
 	_time = randf() * 10.0
 	if not _built:
@@ -215,6 +241,7 @@ func rebuild() -> void:
 	_eye_ovals.clear()
 	_eye_happy.clear()
 	_eye_round.clear()
+	_eye_size.clear()
 	_eye_flat.clear()
 	_brows.clear()
 	_mouth_smile = null
@@ -337,7 +364,7 @@ func _update_blink(delta: float) -> void:
 		_blink_timer -= delta
 		if _blink_timer <= 0.0 and _state != "surprised":
 			_blink_t = 0.11
-			_blink_timer = randf_range(3.0, 5.0)
+			_blink_timer = randf_range(3.0, 5.0) * maxf(blink_hold, 0.05)
 	var want := 0.06 if _blink_t > 0.0 else 1.0
 	_eye_open = lerpf(_eye_open, want, 1.0 - exp(-38.0 * delta))
 
@@ -566,7 +593,10 @@ func _apply_face(p: PackedFloat32Array) -> void:
 		var oval := _eye_ovals[i]
 		oval.visible = not happy and not round_eye and not flat
 		if oval.visible:
-			oval.scale = Vector3(eye_w * fs * wide, eye_h * fs * wide * _eye_open, eye_d)
+			# PER EYE, not model-wide (see `_eye_size`). The fallback keeps a subclass that has
+			# pulled an eye out of four arrays but not the fifth rendering instead of crashing.
+			var sz: Vector3 = _eye_size[i] if i < _eye_size.size() else Vector3(eye_w, eye_h, eye_d)
+			oval.scale = Vector3(sz.x * fs * wide, sz.y * fs * wide * _eye_open, sz.z)
 	for n: Node3D in _eye_happy:
 		n.visible = happy
 	for n2: Node3D in _eye_round:
@@ -611,8 +641,23 @@ func _add_head_shell(color: Color, opts: Dictionary = {}) -> MeshInstance3D:
 		# n = 2.6, i.e. the 0.735 literal this replaces. Deriving it keeps the seam welded to the
 		# shell for any species that changes `head_n`.
 		var seam_frac := pow(1.0 - pow(0.795, head_n), 1.0 / head_n)
-		var seam := _mi(superellipsoid(Vector3(head_semi.x * 0.795, head_semi.y * 0.10, head_semi.z * 0.795), 2.8, 18, 6),
-			_toon(seam_col, _matte({"rim": 0.02})), _head, Vector3(0.0, head_semi.y * seam_frac, 0.012), "CrownSeam")
+		# `_se_slab`, not a flat `superellipsoid()` — see that helper. Built the old way this seam
+		# reached 37 % of its own radius and was buried inside the shell on EVERY character.
+		#
+		# IT TAKES THE HEAD'S OWN `head_n` AND `head_segs.x`, NOT CONSTANTS. Hard-coded at n 2.8
+		# and seg 30 it rendered as a DASHED zigzag of light triangles across the forehead: an
+		# 18-gon slab sitting flush on a 26-gon shell pokes out at its own vertices and sinks
+		# between them. Sharing the exponent makes the two cross-sections the same CURVE, and
+		# sharing the radial count puts their vertices on the same rays, so the seam can only be
+		# uniformly proud. SEAM_PROUD is what makes it proud rather than co-planar — a hard rim is
+		# the point of the part, and flush geometry z-fights.
+		# Radial count is CAPPED at the head's, not simply copied: Fen's 50-segment shell would
+		# spend 360 tris on a 6 mm rim and put her at 5998 of the 6000 budget. Being proud is what
+		# makes the cap safe — an 18-gon inscribed in a 30-gon dips to 1.02*cos(PI/18) = 1.005 of
+		# the shell at its edge midpoints, so it is still outside everywhere and cannot dash.
+		var seam := _se_slab(_head, Vector2(head_semi.x * 0.795, head_semi.z * 0.795) * SEAM_PROUD,
+			head_semi.y * 0.10, head_n, _toon(seam_col, _matte({"rim": 0.02})),
+			Vector3(0.0, head_semi.y * seam_frac, 0.012), "CrownSeam", mini(head_segs.x, 30))
 		seam.rotation.x = -0.06
 	return mi
 
@@ -626,8 +671,13 @@ func _add_torso_bean(color: Color, opts: Dictionary = {}) -> MeshInstance3D:
 		_toon(color, _matte(opts)), _torso, Vector3(0.0, TORSO_Y, 0.0), "Torso")
 	if bool(opts.get("waist_chamfer", true)):
 		var chamfer: Color = opts.get("chamfer_color", color.darkened(0.14))
-		_mi(superellipsoid(Vector3(semi.x * 0.965, semi.y * 0.085, semi.z * 0.965), 2.8, 16, 6),
-			_toon(chamfer, _matte({"rim": 0.02})), _torso, Vector3(0.0, TORSO_Y - semi.y * 0.50, 0.0), "WaistChamfer")
+		# `_se_slab`, not a flat `superellipsoid()` — see that helper. Built the old way this
+		# chamfer reached 31 % of its own radius and never appeared on any character. It takes the
+		# TORSO's own exponent and radial count for the same reason the crown seam takes the
+		# head's: a slab on a different polygon than the shell it rings renders dashed.
+		_se_slab(_torso, Vector2(semi.x * 0.965, semi.z * 0.965), semi.y * 0.085, TORSO_N,
+			_toon(chamfer, _matte({"rim": 0.02})),
+			Vector3(0.0, TORSO_Y - semi.y * 0.50, 0.0), "WaistChamfer", 20)
 	return mi
 
 
@@ -703,45 +753,190 @@ func _add_legs(leg_color: Color, foot_color: Color, leg_opts: Dictionary = {}) -
 ## R2.3 changes: the eyes are ~28 % smaller in area, the specular glint is a small dull off-white
 ## dot instead of a big pure-white one, the brow is visible AT REST (the strongest "not a baby"
 ## cue), and `opts.blush = false` turns blush off entirely for the robots.
+## R4 (CAST VARIETY). The two-eye loop is gone; `opts.eyes` is a LIST OF EYE SPECS and the default
+## list is exactly the two eyes this function always built, so every existing call site is untouched.
+## `opts.mouth = false` and `opts.brows = false` are the switches that replace the hand-rolled
+## "build it then free it" loops four model files had each written out by hand.
+##
+## THE TRAP, WRITTEN DOWN BECAUSE THREE FILES HAVE HIT IT: you cannot turn a face part off by giving
+## it a transparent colour. `toon_soft` is OPAQUE, so an alpha-0 blush renders as two BLACK ovals on
+## the cheeks. The boolean switches are the only way.
 func _add_face(eye_color: Color, mouth_color: Color, blush_color: Color, opts: Dictionary = {}) -> void:
 	var inset: float = opts.get("inset", 0.004)
 	## Eyes may sit proud of the shell (Mayor Orbit's sit on top of his goggle lenses) while the
 	## mouth, nose and blush stay flush — hence a separate inset for them.
 	var eye_inset: float = opts.get("eye_inset", inset)
-	var fs := face_scale
 	var m_eye := _toon(eye_color, {"spec": 0.0, "rim": 0.0, "shade": 0.08})
 	var m_hl := _toon(GLINT, {"spec": 0.0, "rim": 0.0, "shade": 0.02})
 	var m_mouth := _toon(mouth_color, {"spec": 0.0, "rim": 0.0, "shade": 0.06})
 	var brow_col: Color = opts.get("brow_color", eye_color)
 	var m_brow := _toon(brow_col, {"spec": 0.0, "rim": 0.0, "shade": 0.05})
-	var yaws: Array[float] = [-EYE_YAW, EYE_YAW]
-	for i in 2:
-		var eye := _node("Eye%d" % i, _face, Vector3.ZERO)
-		_orient_on_head(eye, yaws[i], EYE_PITCH, eye_inset)
-		_eyes.append(eye)
-		var oval := _mi(sphere(1.0, 14, 8), m_eye, eye, Vector3.ZERO, "Oval")
-		oval.scale = Vector3(eye_w * fs, eye_h * fs, eye_d)
-		_eye_ovals.append(oval)
-		_add_glint(oval, m_hl)
-		# happy "^ ^" — ONE solid arc, the same grammar the robots use
-		var happy := _node("Happy", eye, Vector3(0.0, -0.006 * fs, -0.004))
-		_mi(arc_tube(0.042 * fs, 0.0115 * fs, deg_to_rad(24.0), deg_to_rad(156.0), 12, 6), m_eye, happy, Vector3.ZERO, "Arc")
-		happy.visible = false
-		_eye_happy.append(happy)
-		# surprised "O O" — one solid round eye, a little bigger than the resting oval
-		var round_eye := _node("Round", eye, Vector3(0.0, 0.003, -0.002))
-		var ball := _mi(sphere(1.0, 12, 7), m_eye, round_eye, Vector3.ZERO, "Ball")
-		ball.scale = Vector3(0.043 * fs, 0.048 * fs, eye_d)
-		round_eye.visible = false
-		_eye_round.append(round_eye)
-		# brow: visible AT REST as a shallow near-straight bar, lifting and steepening for "think"
-		_add_brow(eye, m_brow, -1.0 if i == 0 else 1.0)
+	var eyes: Array = opts.get("eyes", [{"yaw": -EYE_YAW}, {"yaw": EYE_YAW}])
+	for e: Dictionary in eyes:
+		var spec := e.duplicate()
+		spec["inset"] = spec.get("inset", eye_inset)
+		spec["brow"] = spec.get("brow", bool(opts.get("brows", true)))
+		spec["fit_expr"] = spec.get("fit_expr", bool(opts.get("fit_expr", false)))
+		_build_eye(spec, m_eye, m_hl, m_brow)
 	# the nose and smile ride on top of the muzzle patch, not on the shell underneath it
 	if bool(opts.get("nose", true)):
 		_add_nose(Color(opts.get("nose_color", mouth_color)), inset - _muzzle_lift - 0.004)
-	_add_mouth(m_mouth, Color(opts.get("mouth_inner", Color("#8c3b52"))), inset - _muzzle_lift - 0.002)
+	if bool(opts.get("mouth", true)):
+		_add_mouth(m_mouth, Color(opts.get("mouth_inner", Color("#8c3b52"))), inset - _muzzle_lift - 0.002)
 	if bool(opts.get("blush", true)):
 		_add_blush(blush_color, inset)
+
+
+## ONE EYE, and the only thing in this file that appends to the five parallel eye arrays. Everything
+## a face can vary about an eye lives here so a species is a LIST OF SPECS rather than a new loop.
+##
+## spec keys (all optional):
+##   w / h / d      resting half-size; defaults to the model-wide `eye_w`/`eye_h`/`eye_d`. Stored in
+##                  `_eye_size`, which is what makes a graded set of eyes survive `_apply_face`.
+##   yaw / pitch    degrees on the head superellipsoid (`_orient_on_head`). pitch defaults EYE_PITCH.
+##   inset          how far into the shell, negative to sit proud of it.
+##   parent / pos   place the eye at `pos` under `parent` INSTEAD of on the head — for a faceplate.
+##   shape          "oval" (default sphere) | "almond" (a four-pointed DIAMOND, not a lens — see
+##                  the warning on `_eye_mesh`) | "bar" (a hard rounded rectangle) | "pixel" (a
+##                  chunky square). All are UNIT meshes, because `_apply_face` owns the scale.
+##   slant_deg      rolls the whole eye — oval, arcs and brow together — on a child node.
+##   brow           false drops the resting brow bar (ruling: the hard vocabulary is capped).
+##   sclera         a Color adds a pale backing disc, so the dark oval reads as a PUPIL.
+##   glint          false drops the specular dot.
+##   fit_expr       see below.
+##
+## FIT_EXPR — the "surprised makes small eyes GROW" bug. The happy "^" arc and the surprise "O" ball
+## are authored at fixed chibi sizes and were never scaled by the eye they belong to, so a character
+## with a small pupil visibly gained eye area at the exact moment its expression was meant to read.
+## GrigModel compensated by hand with two magic scale numbers. The fix is graded:
+##   * ALWAYS, and for free: the expression nodes are scaled by this eye's size RELATIVE TO THE
+##     MODEL-WIDE `eye_w`/`eye_h`. For every character shipped before R4 that ratio is exactly 1, so
+##     nothing moves — but a per-eye size now carries its own expressions with it, which is the bug
+##     `_eye_size` would otherwise have introduced.
+##   * OPT IN with `fit_expr = true`: scale against the chibi CONSTANTS instead, which additionally
+##     fixes the model-wide case (Zorp, Fen and Grig all run eyes well off the chibi default). It is
+##     opt-in because it changes those three characters' expressions, and that is a design decision
+##     belonging to their files, not to this one.
+func _build_eye(spec: Dictionary, m_eye: Material, m_hl: Material, m_brow: Material) -> Node3D:
+	var fs := face_scale
+	var idx := _eyes.size()
+	var w: float = float(spec.get("w", eye_w))
+	var h: float = float(spec.get("h", eye_h))
+	var d: float = float(spec.get("d", eye_d))
+	var yaw: float = float(spec.get("yaw", 0.0))
+	var eye := _node("Eye%d" % idx, spec.get("parent", _face), Vector3.ZERO)
+	if spec.has("pos"):
+		eye.position = spec["pos"]
+	else:
+		_orient_on_head(eye, yaw, float(spec.get("pitch", EYE_PITCH)), float(spec.get("inset", 0.004)))
+	_eyes.append(eye)
+	_eye_size.append(Vector3(w, h, d))
+	# The slant goes on a CHILD. `_add_eyestalks` overwrites `eye.basis` outright when it lifts an
+	# eye onto a stalk, so a roll written on the eye node itself would silently vanish there.
+	var host := eye
+	var slant: float = float(spec.get("slant_deg", 0.0))
+	if not is_zero_approx(slant):
+		host = _node("Slant", eye, Vector3.ZERO)
+		host.rotation.z = deg_to_rad(slant)
+	# A SCLERA IS A PALE BALL WITH THE PUPIL PROUD OF IT, which is the arrangement `_add_eyestalks`
+	# already ships and the only one that works here. Nesting the sclera INSIDE the dark oval reads
+	# well on paper — it would inherit the blink squash — but the maths kills it: to stay behind the
+	# pupil at the pupil's own silhouette the sclera's front can never get further forward than
+	# ~0.24 of the eye depth, which is less than the 4 mm the eye is inset into the shell, so it
+	# renders half-buried in the head. Measured on the first build; it looked like a bandage.
+	# So: sclera as a SIBLING, and the whole pupil stack pushed out in front of it.
+	var lift_z := 0.0
+	if spec.has("sclera"):
+		var sm: float = float(spec.get("sclera_mul", 1.50))
+		var lift: float = float(spec.get("sclera_lift", d * 0.55))
+		var m_sc := _toon(Color(spec["sclera"]), _matte({"spec": 0.04, "rim": 0.02}))
+		_mi(sphere(1.0, 14, 8), m_sc, host, Vector3(0.0, 0.0, -lift), "Sclera").scale = \
+			Vector3(w * fs * sm, h * fs * sm, d * 1.2)
+		lift_z = lift + d * 1.03
+	var mesh := _eye_mesh(String(spec.get("shape", "oval")))
+	var oval := _mi(mesh, m_eye, host, Vector3.ZERO, "Oval")
+	if lift_z != 0.0:
+		oval.position.z = -lift_z
+	oval.scale = Vector3(w * fs, h * fs, d)
+	_eye_ovals.append(oval)
+	if bool(spec.get("glint", true)):
+		_add_glint(oval, m_hl)
+	var ref_w: float = EYE_HALF_W if bool(spec.get("fit_expr", false)) else eye_w
+	var ref_h: float = EYE_HALF_H if bool(spec.get("fit_expr", false)) else eye_h
+	var expr := Vector3(w / maxf(ref_w, 1e-4), h / maxf(ref_h, 1e-4), 1.0)
+	# happy "^ ^" — ONE solid arc, the same grammar the robots use. Both expression meshes ride the
+	# same `lift_z` as the pupil, or a sclera'd eye would show its arc INSIDE the pale ball.
+	var happy := _node("Happy", host, Vector3(0.0, -0.006 * fs, -0.004 - lift_z))
+	_mi(arc_tube(0.042 * fs, 0.0115 * fs, deg_to_rad(24.0), deg_to_rad(156.0), 12, 6), m_eye, happy, Vector3.ZERO, "Arc")
+	happy.visible = false
+	happy.scale = expr
+	_eye_happy.append(happy)
+	# surprised "O O" — one solid round eye, a little bigger than the resting oval
+	var round_eye := _node("Round", host, Vector3(0.0, 0.003, -0.002 - lift_z))
+	var ball := _mi(sphere(1.0, 12, 7), m_eye, round_eye, Vector3.ZERO, "Ball")
+	ball.scale = Vector3(0.043 * fs, 0.048 * fs, d)
+	round_eye.visible = false
+	round_eye.scale = expr
+	_eye_round.append(round_eye)
+	# brow: visible AT REST as a shallow near-straight bar, lifting and steepening for "think"
+	if bool(spec.get("brow", true)):
+		_add_brow(host, m_brow, float(spec.get("sx", -1.0 if yaw < 0.0 else 1.0)))
+	return eye
+
+
+## The unit meshes an eye can be cut from. All are -1..1 in every axis, because `_apply_face` owns
+## `oval.scale` and would flatten anything pre-sized. "oval" is the shipped sphere.
+static func _eye_mesh(shape: String) -> Mesh:
+	match shape:
+		"almond":
+			# WARNING — THIS IS NOT AN ALMOND, AND THE NAME IS KEPT ONLY BECAUSE IT IS THE `shape`
+			# string. n < 2 pulls the DIAGONALS in while the axes stay at 1.0, so what comes out is
+			# a rounded OCTAHEDRON: a four-pointed diamond with points at top, bottom and both ends.
+			# It is a diamond eye, which is a real and usable look — it is just not a lens.
+			#
+			# A TRUE LENS CANNOT BE ONE SUPERELLIPSOID (the two side points need the profile to be
+			# convex between them, which a single radial projection will not give you). The working
+			# recipe is Pop's, in twin_model.gd `_cut_almond_eyes()`: a rounded rectangle at n ~2.4
+			# for the fat lobe, PLUS one cone carrying the taper out to a single point. Copy that if
+			# you want a lens; do not reach for this expecting one.
+			return superellipsoid(Vector3.ONE, 1.55, 14, 8)
+		"bar":
+			return rounded_box(Vector3(2.0, 2.0, 2.0), 0.90, 12)
+		"pixel":
+			return rounded_box(Vector3(2.0, 2.0, 2.0), 0.34, 10)
+		_:
+			return sphere(1.0, 14, 8)
+
+
+## Removes one eye from ALL FIVE parallel arrays and then frees it. `remove_child` first, because
+## `queue_free` alone runs at the END of the frame and would leave the eye visible for one frame.
+##
+## This exists because doing it by hand is a crash: an index that outlives its node fires on the
+## very next blink, and it is five arrays now, not four.
+func _drop_eye(index: int) -> void:
+	if index < 0 or index >= _eyes.size():
+		return
+	var dead: Node3D = _eyes[index]
+	_eyes.remove_at(index)
+	if index < _eye_ovals.size():
+		_eye_ovals.remove_at(index)
+	if index < _eye_happy.size():
+		_eye_happy.remove_at(index)
+	if index < _eye_round.size():
+		_eye_round.remove_at(index)
+	if index < _eye_size.size():
+		_eye_size.remove_at(index)
+	if index < _eye_flat.size():
+		_eye_flat.remove_at(index)
+	# The brow is a CHILD of the eye, so it dies with it — and `_brows` is walked every frame, so
+	# the entry has to go first or `_apply_face` reads a freed node on the next tick.
+	for b: Node3D in _brows.duplicate():
+		if b == dead or dead.is_ancestor_of(b):
+			_brows.erase(b)
+	var parent := dead.get_parent()
+	if parent != null:
+		parent.remove_child(dead)
+	dead.queue_free()
 
 
 ## The eye glint. R2.3 asked for "less glossy eyes": the old dot was pure #ffffff at 0.34 x 0.26 of
@@ -845,6 +1040,9 @@ func _add_flat_eyes(parent: Node3D, spacing: float, y_off: float, m_dark: Materi
 		var oval := _mi(sphere(1.0, 14, 8), m_dark, eye, Vector3.ZERO, "Oval")
 		oval.scale = Vector3(eye_w * fs, eye_h * fs, eye_d)
 		_eye_ovals.append(oval)
+		# The FIFTH parallel array has to be fed here too, or a screen face and an organic face
+		# disagree about how many eyes exist and `_apply_face` indexes past the end.
+		_eye_size.append(Vector3(eye_w, eye_h, eye_d))
 		if m_hl != null:
 			_add_glint(oval, m_hl)
 		# happy "^ ^" — one solid arc
@@ -897,17 +1095,23 @@ static func lit_material(base: Color, strength: float = 1.4, emit: Color = Color
 	return _toon(base, {"emission": e, "emission_strength": strength, "shade": 0.16, "rim": 0.08, "spec": 0.0})
 
 
-## A single antenna: stalk + glowing bulb. Returns the pivot (rotate it to droop) and stores the
-## bulb material in meta "bulb_mat" so subclasses can pulse it.
 ## ---------------------------------------------------------------------------- alien features
-## EYESTALKS. Shared by every non-robot neighbour (see reference/'Alien References.webp'): the one
-## trait that most separates those creatures from animals is that their eyes are not on their face.
+## EYESTALKS. Two of the cast keep these; the ruling is that they are a CHOICE, not the species.
+## (The stray two-line `_add_antenna` docstring that used to sit here has moved to the function it
+## documents, which now has options of its own.)
+##
+## Shared by the neighbours that do wear them (see reference/'Alien References.webp'): the one trait
+## that most separates those creatures from animals is that their eyes are not on their face.
 ##
 ## Each spec is `{"base": Vector3, "tip": Vector3, "r": float}` in HEAD-LOCAL space, and specs are
 ## matched to `_eyes` in order. The eye nodes are only REPOSITIONED, never rebuilt, so every blink,
 ## squint, happy-arc and surprise state keeps animating exactly as it does on a normal face. Do not
 ## supply more specs than there are eyes: an eye that cannot blink beside two that can reads as a
 ## bug, not as an extra eye.
+## R4: `eyeball_r` is now a DEFAULT, not a constant — a spec may carry its own `eyeball_r`, and it
+## is used in BOTH the sphere and the eye-node offset. Without that a "graded fan" of stalks ships
+## as three different stem lengths carrying three identical balls, which reads as a manufacturing
+## error rather than as an organism.
 func _add_eyestalks(specs: Array, stalk_color: Color, sclera_color: Color, eyeball_r: float = 0.062) -> void:
 	var m_stalk := _toon(stalk_color, _matte({"spec": 0.05}))
 	var m_sclera := _toon(sclera_color, _matte({"spec": 0.04, "rim": 0.02}))
@@ -916,23 +1120,20 @@ func _add_eyestalks(specs: Array, stalk_color: Color, sclera_color: Color, eyeba
 		var base: Vector3 = spec["base"]
 		var tip: Vector3 = spec["tip"]
 		var r: float = float(spec.get("r", 0.030))
+		var ball_r: float = float(spec.get("eyeball_r", eyeball_r))
 		var span := tip - base
 		var length := span.length()
-		# A capsule runs along its own +Y, so build a basis whose Y follows the stalk.
-		var yv := span.normalized()
-		var xv := Vector3.RIGHT if absf(yv.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
-		var zv := xv.cross(yv).normalized()
-		xv = yv.cross(zv).normalized()
 		var stalk := _node("EyeStalk%d" % i, _head, base + span * 0.5)
-		stalk.basis = Basis(xv, yv, zv)
+		# A capsule runs along its own +Y, so build a basis whose Y follows the stalk.
+		stalk.basis = _basis_from_up(span.normalized())
 		_mi(capsule(r, maxf(0.02, length - r * 2.0), 8, 2), m_stalk, stalk, Vector3.ZERO, "Stem")
 		# A pale ball at the tip; the face's dark oval sits proud of it and becomes the pupil.
-		_mi(sphere(eyeball_r, 14, 8), m_sclera, _head, tip, "Eyeball%d" % i)
+		_mi(sphere(ball_r, 14, 8), m_sclera, _head, tip, "Eyeball%d" % i)
 		# Splay each eye outward and down. Two stalks staring dead ahead in parallel look like a toy.
 		var splay: float = float(spec.get("splay", 0.20 if tip.x >= 0.0 else -0.20))
 		var eye: Node3D = _eyes[i]
 		eye.basis = Basis.looking_at(Vector3(splay, -0.14, -1.0).normalized(), Vector3.UP)
-		eye.position = tip + eye.basis.z * -(eyeball_r * 0.84)
+		eye.position = tip + eye.basis.z * -(ball_r * 0.84)
 
 
 ## A WIDE OPEN GRIN with blunt teeth, replacing the hairline smile arc.
@@ -957,20 +1158,272 @@ func _add_wide_grin(mouth_node: Node3D, grin_color: Color, tooth_color: Color,
 	# Odd count and uneven widths on purpose: a neat even row reads as a cartoon animal's smile.
 	var rows: Array = teeth if not teeth.is_empty() else [[-0.045, 0.019], [0.002, 0.023], [0.046, 0.016]]
 	for t: Array in rows:
-		_mi(rounded_box(Vector3(float(t[1]), size3.y * 0.62, 0.016), 0.005, 8), m_tooth, grin,
-			Vector3(float(t[0]), size3.y * 0.56, -0.006), "Tooth")
+		_add_tooth(grin, m_tooth, size3, t)
 
 
-func _add_antenna(parent: Node3D, offset: Vector3, tilt: float, stalk_color: Color, bulb_color: Color, length: float = 0.20, bulb_r: float = 0.045) -> Node3D:
+## ONE TOOTH. An entry is `[x, w]`, `[x, w, row]` or `[x, w, row, shape]`:
+##   x      offset across the grin.
+##   w      the tooth's FULL width (this is what the shipped call sites pass).
+##   row    +1 hangs from the upper jaw (the default, and what every tooth in the game did before
+##          R4 — the row was hardcoded), -1 stands up from the LOWER jaw. A lower row alone is an
+##          under-bite, and an under-bite is a whole different animal from a top-row grin.
+##   shape  "blunt" (the shipped rounded slab) | "point" (a cone — a fang) | "peg" (a rounded stub).
+## Two- and three-element entries mean exactly what they meant before, so no existing call moves.
+func _add_tooth(grin: Node3D, m_tooth: Material, size3: Vector3, t: Array) -> void:
+	var x := float(t[0])
+	var w := float(t[1])
+	var row := float(t[2]) if t.size() > 2 else 1.0
+	var shape := String(t[3]) if t.size() > 3 else "blunt"
+	match shape:
+		"point":
+			# taper_tube grows along +Y, so a top-row fang is the same cone turned over.
+			var fang := _node("Tooth", grin, Vector3(x, row * size3.y * 0.92, -0.006))
+			fang.rotation.x = PI if row > 0.0 else 0.0
+			_mi(taper_tube(size3.y * 1.05, w * 0.50, w * 0.10, 0.0, 4, 6), m_tooth, fang, Vector3.ZERO, "Fang")
+		"peg":
+			_mi(capsule(w * 0.44, size3.y * 0.62, 8, 2), m_tooth, grin,
+				Vector3(x, row * size3.y * 0.56, -0.006), "Tooth")
+		_:
+			_mi(rounded_box(Vector3(w, size3.y * 0.62, 0.016), 0.005, 8), m_tooth, grin,
+				Vector3(x, row * size3.y * 0.56, -0.006), "Tooth")
+
+
+## R4 (CAST VARIETY). Four neighbours wore this and it built exactly one thing every time — a
+## straight 16 mm capsule with an ALWAYS-emissive ball on the end — which is why Zorp, Pip, Pop and
+## Bolt read as the same character from the eyebrows up. `opts` EXTENDS it; every default reproduces
+## the shipped antenna exactly, so no existing call site moves:
+##   tip      "bulb" (the shipped ball) | "paddle" (a flat blade) | "knob" (a squat faceted cap)
+##   glow     true (shipped) | false for a dead, unlit tip | a float for a different emission
+##            strength. The meta is set EITHER WAY, see below.
+##   stalk_r  stem radius, default the shipped 0.016
+##   curve    total bend of the stem in radians; 0 keeps the shipped straight capsule
+##
+## It MUST keep setting the metas "bulb_mat" and "rest_tilt" and returning the pivot: three
+## `_animate_extras` implementations read them, and one of them pulses `emission_strength` on the
+## material every frame. An unlit tip therefore still gets its own duplicated material with the
+## uniform present — writing to it is simply inert — rather than a null those callers would crash on.
+func _add_antenna(parent: Node3D, offset: Vector3, tilt: float, stalk_color: Color, bulb_color: Color,
+		length: float = 0.20, bulb_r: float = 0.045, opts: Dictionary = {}) -> Node3D:
 	var pivot := _node("Antenna", parent, offset)
 	pivot.rotation.z = tilt
-	_mi(capsule(0.016, length, 8, 2), _toon(stalk_color, _matte({"spec": 0.06})), pivot, Vector3(0.0, length * 0.5, 0.0), "Stalk")
-	var bulb_mat := lit_material(bulb_color.darkened(0.48), 1.2, bulb_color).duplicate() as ShaderMaterial
-	var bulb := _mi(sphere(bulb_r, 12, 6), bulb_mat, pivot, Vector3(0.0, length + bulb_r * 0.6, 0.0), "Bulb")
+	var m_stalk := _toon(stalk_color, _matte({"spec": 0.06}))
+	var stalk_r: float = float(opts.get("stalk_r", 0.016))
+	var curve: float = float(opts.get("curve", 0.0))
+	var tip_pos := Vector3(0.0, length + bulb_r * 0.6, 0.0)
+	var tip_up := Vector3.UP
+	if is_zero_approx(curve):
+		_mi(capsule(stalk_r, length, 8, 2), m_stalk, pivot, Vector3(0.0, length * 0.5, 0.0), "Stalk")
+	else:
+		_mi(taper_tube(length, stalk_r, stalk_r * 0.82, curve, 7, 6), m_stalk, pivot, Vector3.ZERO, "Stalk")
+		tip_up = Vector3(0.0, cos(curve), sin(curve))
+		tip_pos = taper_tube_end(length, curve, 7) + tip_up * (bulb_r * 0.6)
+	var glow: Variant = opts.get("glow", true)
+	var bulb_mat: ShaderMaterial
+	if typeof(glow) == TYPE_BOOL and not bool(glow):
+		bulb_mat = _toon(bulb_color, _matte({"spec": 0.10, "rim": 0.04})).duplicate() as ShaderMaterial
+	else:
+		var strength := 1.2 if typeof(glow) == TYPE_BOOL else float(glow)
+		bulb_mat = lit_material(bulb_color.darkened(0.48), strength, bulb_color).duplicate() as ShaderMaterial
+	var bulb: MeshInstance3D
+	match String(opts.get("tip", "bulb")):
+		"paddle":
+			bulb = _mi(rounded_box(Vector3(bulb_r * 2.3, bulb_r * 3.0, bulb_r * 0.70), bulb_r * 0.30, 10),
+				bulb_mat, pivot, tip_pos, "Bulb")
+		"knob":
+			bulb = _mi(superellipsoid(Vector3(bulb_r * 1.06, bulb_r * 0.74, bulb_r * 1.06), 3.2, 12, 6),
+				bulb_mat, pivot, tip_pos, "Bulb")
+		_:
+			bulb = _mi(sphere(bulb_r, 12, 6), bulb_mat, pivot, tip_pos, "Bulb")
+	if not is_zero_approx(curve):
+		bulb.basis = _basis_from_up(tip_up)
 	bulb.set_meta("bulb_mat", bulb_mat)
 	pivot.set_meta("bulb_mat", bulb_mat)
 	pivot.set_meta("rest_tilt", tilt)
 	return pivot
+
+
+## ---------------------------------------------------------------------------- horns, crests, ruffs
+## A BANDED HORN, seated on the real head surface and growing along its outward normal.
+##
+## `seat_dir` is a direction in head-local space (it is normalised here, so `Vector3(0.6, 1, -0.2)`
+## is a perfectly good argument). The seat and the normal come from `se_point`/`se_normal` DIRECTLY,
+## never from `_orient_on_head`: that ends in `Basis.looking_at(outward, Vector3.UP)`, which warns on
+## colinear vectors as the seat approaches the crown and whose yaw is already meaningless by 85 deg
+## of pitch — and the crown is exactly where horns go.
+##
+## `tilt` is euler radians and is applied to a CHILD of the seated pivot, so aiming the horn cannot
+## destroy the placement. `segments` stacked `taper_tube`s in ALTERNATING `band_colors` give the
+## keratin ring pattern; each segment is nested inside the last, so `opts.curl` (total bend in
+## radians, default straight) sweeps the whole horn instead of kinking it. Returns the seated pivot.
+func _add_horn(parent: Node3D, seat_dir: Vector3, tilt: Vector3, segments: int, length: float,
+		base_r: float, band_colors: Array, opts: Dictionary = {}) -> Node3D:
+	segments = maxi(segments, 1)
+	var semi: Vector3 = opts.get("semi", head_semi)
+	var n: float = float(opts.get("exp", head_n))
+	var p := se_point(seat_dir.normalized(), semi, n)
+	var outward := se_normal(p, semi, n)
+	var pivot := _node("Horn", parent, p - outward * float(opts.get("inset", 0.012)))
+	pivot.basis = _basis_from_up(outward)
+	var aim := _node("Aim", pivot, Vector3.ZERO)
+	aim.rotation = tilt
+	var seg_len := length / float(segments)
+	var tip_r := float(opts.get("tip_r", base_r * 0.16))
+	var seg_curl := float(opts.get("curl", 0.0)) / float(segments)
+	var mat_opts: Dictionary = opts.get("surface", {"spec": 0.05, "rim": 0.03})
+	var cursor := aim
+	for i in segments:
+		var r_a := lerpf(base_r, tip_r, float(i) / float(segments))
+		var r_b := lerpf(base_r, tip_r, float(i + 1) / float(segments))
+		var col: Color = Color.WHITE if band_colors.is_empty() else Color(band_colors[i % band_colors.size()])
+		_mi(taper_tube(seg_len, r_a, r_b, seg_curl, 4, 6), _toon(col, _matte(mat_opts)),
+			cursor, Vector3.ZERO, "Band%d" % i)
+		if i < segments - 1:
+			var joint := _node("Joint%d" % i, cursor, taper_tube_end(seg_len, seg_curl, 4))
+			joint.rotation.x = seg_curl
+			cursor = joint
+	return pivot
+
+
+## A ROW OF SEATS on the head superellipsoid — the spine of a crest, a fan of horns, a row of vents.
+## `count` pivots spaced evenly in PITCH from `pitch_from` to `pitch_to` at a fixed `yaw_deg` (call it
+## twice with +/- yaw for a symmetric pair of rows).
+##
+## Returns the TILT CHILDREN, not the seats. That is the whole point: a node `_orient_on_head` has
+## posed carries a basis, and writing `rotation.x` on it makes Godot rebuild that basis from euler
+## and throw the placement away — a bug three files in this project have written by hand. The nodes
+## you get back start at identity and are safe to rotate however you like; their PARENT holds the
+## placement, with +Y pointing straight out of the head, which is the direction every long primitive
+## in this file grows along.
+func _crown_row(count: int, pitch_from: float, pitch_to: float, yaw_deg: float = 0.0,
+		inset: float = 0.006) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	count = maxi(count, 1)
+	var yaw := deg_to_rad(yaw_deg)
+	for i in count:
+		var t := 0.5 if count == 1 else float(i) / float(count - 1)
+		var pitch := deg_to_rad(lerpf(pitch_from, pitch_to, t))
+		# The same direction formula `_orient_on_head` uses, so a crest lines up with the face.
+		var d := Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+		var p := se_point(d, head_semi, head_n)
+		var outward := se_normal(p, head_semi, head_n)
+		var seat := _node("CrownSeat%d" % i, _head, p - outward * inset)
+		seat.basis = _basis_from_up(outward)
+		out.append(_node("Tilt", seat, Vector3.ZERO))
+	return out
+
+
+## A PLASTRON — the contrasting belly plate six of the eighteen reference creatures wear and nothing
+## in this game has. It is a cheap, strong species mark: it breaks the torso into a front and a back
+## instead of one coloured bean, and it reads at gameplay distance because it is a large flat value
+## contrast rather than a small detail.
+##
+## The rim is drawn FIRST, slightly larger and slightly further back, so the plate's own front face
+## always sits proud of it and the rim reads as an outline band rather than z-fighting with it.
+##
+## THE DEPTH IS COMPUTED, NOT GUESSED. The torso is a superellipsoid, so its front surface RECEDES
+## as you move up or down the belly; a hand-picked z sinks the plate inside the bean and all that
+## ships is a thin dark arc peeking out under it (measured on the first build of this). The default
+## solves the torso's own implicit equation at the plate's centre height and buries just over half
+## the plate's depth, so it stands proud by a definite amount at any `y`. Pass `torso_mul` if the
+## character scaled its bean with `_add_torso_bean`'s `size_mul`, or the surface is somewhere else.
+##
+## opts: y, z (explicit centre, skipping the solve), torso_mul, n (superellipsoid exponent), rim_w,
+## seams (horizontal scute lines), navel_r, navel_color, plus any `_matte` keys for the plate.
+func _add_plastron(color: Color, rim_color: Color, size3: Vector3 = Vector3(0.140, 0.150, 0.046),
+		navel: bool = true, opts: Dictionary = {}) -> Node3D:
+	var y: float = float(opts.get("y", TORSO_Y - 0.010))
+	var k: Vector3 = opts.get("torso_mul", Vector3.ONE)
+	# torso front half-depth at this height: |dy/ry|^n + |dz/rz|^n = 1 solved for dz
+	var dy := absf(y - TORSO_Y) / maxf(TORSO_RY * k.y, 1e-4)
+	var front := TORSO_RZ * k.z * pow(maxf(1.0 - pow(minf(dy, 1.0), TORSO_N), 0.0), 1.0 / TORSO_N)
+	var z: float = float(opts.get("z", -(front - size3.z * 0.55)))
+	var n: float = float(opts.get("n", 2.7))
+	var rim_w: float = float(opts.get("rim_w", 0.015))
+	var plate := _node("Plastron", _torso, Vector3(0.0, y, z))
+	var m_rim := _toon(rim_color, _matte({"rim": 0.02}))
+	_mi(superellipsoid(Vector3(size3.x + rim_w, size3.y + rim_w, size3.z * 0.90), n, 18, 10),
+		m_rim, plate, Vector3(0.0, 0.0, size3.z * 0.10), "Rim")
+	var plate_mesh := superellipsoid(size3, n, 18, 10)
+	_mi(plate_mesh, _toon(color, _matte(opts)), plate, Vector3.ZERO, "Plate")
+	# SCUTE LINES. A seam is a SQUASHED COPY OF THE PLATE'S OWN MESH, not a bar laid across it, and
+	# both facts are load-bearing:
+	#   * the plate's front recedes toward its edges, so a bar at a fixed z is buried at both ends
+	#     and shows only as a stub in the middle;
+	#   * and building the slice as its own very FLAT superellipsoid does not work either —
+	#     `se_point` collapses a slab whose y semi-axis is tiny toward the poles unless a vertex ring
+	#     happens to land on the equator, so the seam can vanish entirely depending on the ring count
+	#     the DETAIL constant happens to produce. Both were measured, in that order.
+	# Reusing the plate mesh and scaling the NODE sidesteps the whole question: the ratio is exactly
+	# the 1.05 asked for, whatever the tessellation, and the mesh is already in the cache.
+	var seams: int = int(opts.get("seams", 0))
+	for i in seams:
+		var sy := lerpf(size3.y * 0.62, -size3.y * 0.62, float(i + 1) / float(seams + 1))
+		var az := pow(maxf(1.0 - pow(minf(absf(sy) / size3.y, 1.0), n), 0.0), 1.0 / n)
+		_mi(plate_mesh, m_rim, plate, Vector3(0.0, sy, 0.0), "Seam").scale = \
+			Vector3(az * 0.99, rim_w * 0.34 / maxf(size3.y, 1e-4), az * 1.05)
+	if navel:
+		var nr: float = float(opts.get("navel_r", size3.x * 0.13))
+		_mi(superellipsoid(Vector3(nr, nr * 0.72, nr * 0.40), 2.5, 10, 6),
+			_toon(Color(opts.get("navel_color", rim_color.darkened(0.28))), _matte({"rim": 0.0})),
+			plate, Vector3(0.0, -size3.y * 0.44, -size3.z * 0.92), "Navel")
+	return plate
+
+
+## A RING OF TENDRILS hanging off `parent` — a beard of feelers, a mane of cables, a jellyfish skirt.
+##
+## The joints are NESTED, not siblings. That is the difference between a tendril that WHIPS — each
+## joint's swing carried and amplified by every joint above it — and one that shears, where the
+## whole strand slides sideways as one rigid stick. It costs nothing: it is the same node count.
+##
+## The ring sits at `parent`'s ORIGIN with radius `ring_r`; `drop` is how far each strand hangs,
+## split evenly between `joints` nested segments tapering `r0` -> `r1`. Angles run from -Z (the
+## model's facing), so `arc_deg` under 360 leaves the gap at the BACK.
+##
+## Returns a FLAT array of EVERY joint pivot, tendril-major. Each one carries the metas an animator
+## needs, so `_animate_extras` is a single loop with no bookkeeping of its own:
+##   "tendril" / "joint"  indices, if a caller wants to treat strands differently
+##   "period" / "phase"   this joint's own cycle — every joint is on a different one, which is what
+##                        keeps the ring from pulsing in lockstep like a machine
+##   "rest_x" / "rest_z"  the resting euler this joint was built at; ADD your swing to these, and
+##                        write `rotation`, which is safe because these pivots were seated by euler
+##                        and not by a basis.
+func _add_tendril_ring(parent: Node3D, count: int, ring_r: float, drop: float, r0: float, r1: float,
+		color: Color, joints: int = 3, arc_deg: float = 360.0) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	count = maxi(count, 1)
+	joints = maxi(joints, 1)
+	var m := _toon(color, _matte({"spec": 0.04}))
+	var span := deg_to_rad(clampf(arc_deg, 1.0, 360.0))
+	var full := arc_deg >= 359.9
+	var seg_len := 1.0 / float(joints)
+	var seg_drop := drop / float(joints)
+	for i in count:
+		var a := TAU * float(i) / float(count) if full else \
+			(-span * 0.5 + span * float(i) / float(maxi(count - 1, 1)))
+		var cursor := _node("Tendril%d" % i, parent, Vector3(sin(a) * ring_r, 0.0, -cos(a) * ring_r))
+		# Yaw puts this strand's local -Z along the outward radial, so the pitch that follows leans
+		# it OUTWARD from the ring wherever round the ring it happens to sit.
+		cursor.rotation = Vector3(0.13, a, 0.0)
+		for j in joints:
+			var t0 := float(j) * seg_len
+			var t1 := float(j + 1) * seg_len
+			var node := cursor
+			if j > 0:
+				node = _node("Joint%d" % j, cursor, Vector3(0.0, -seg_drop, 0.0))
+				# a little more lean at every joint, so the strand hangs in a curve, not a rod
+				node.rotation = Vector3(0.11, 0.0, 0.0)
+			# taper_tube grows along +Y; a tendril hangs, so the mesh is turned over in place.
+			_mi(taper_tube(seg_drop, lerpf(r0, r1, t0), lerpf(r0, r1, t1), 0.0, 4, 5),
+				m, node, Vector3.ZERO, "Seg").rotation.x = PI
+			node.set_meta("tendril", i)
+			node.set_meta("joint", j)
+			node.set_meta("period", 1.45 + 0.31 * float(i) + 0.23 * float(j))
+			node.set_meta("phase", fmod(0.618 * float(i) + 0.317 * float(j), 1.0))
+			node.set_meta("rest_x", node.rotation.x)
+			node.set_meta("rest_z", node.rotation.z)
+			out.append(node)
+			cursor = node
+	return out
 
 
 # ============================================================================= helpers
@@ -1044,6 +1497,59 @@ func _mi(mesh: Mesh, mat: Material, parent: Node, pos: Vector3, n: String) -> Me
 	return mi
 
 
+## A THIN SLAB that hugs a superellipsoid cross-section: a crown seam, a waist chamfer, a strata
+## band. Use this instead of calling `superellipsoid()` with a tiny Y semi-axis.
+##
+## WHY THIS EXISTS — A FLAT SUPERELLIPSOID DOES NOT REACH ITS OWN EQUATOR, AND SILENTLY RENDERS
+## NOTHING. `superellipsoid()` projects SphereMesh vertex DIRECTIONS radially onto the implicit
+## surface, so the mesh only reaches the equatorial radius if a vertex row lies ON the equator.
+## Godot places SphereMesh's rows at v = j/(rings+1), so an EVEN ring count has no equator row —
+## and `_segs(6, 4)` resolves to exactly 4. On a pancake the outermost row runs out of the thin Y
+## axis long before it reaches the wide X one, so it lands well inside the requested radius and the
+## part sits INSIDE its parent shell drawing nothing at all.
+##
+## MEASURED, on the two parts that used to be built the wrong way:
+##   crown seam   asked half-x 0.203600, built 0.076166 -> 37.4 % of what it asked for
+##   waist chamfer asked half-x 0.214300, built 0.066913 -> 31.2 %
+## Both were completely buried. Every character in the game was missing both hard edges, which is
+## why heads read rounder than art direction revision 2 asks for.
+##
+## THE FIX: build the part NEAR-ROUND (Y semi = the larger of the two plan radii), where the row
+## nearest the equator is at worst PI/2*(1/(rings+1)) off it and still reaches >= 99 % of the plan,
+## then squash it to a slab with a NODE SCALE. Same triangle count, same primitive cache, and the
+## cross-section at y = 0 is still exactly the shell's own plan — which is what lets it hug a
+## rounded-square head where a torus or a rounded_box cannot.
+##
+## Do NOT "fix" this instead by picking a ring count that happens to land on the equator. That
+## works today and breaks silently the next time `DETAIL` moves.
+##
+## RINGS ARE FORCED ODD, AND THAT IS A BUDGET DECISION, NOT A TRICK. Near-round alone is not
+## enough on a cheap mesh: with an even ring count the row nearest the equator is up to
+## PI/2*(1/(rings+1)) off it, which at 4 rings reaches only ~95 % of the plan — and 95 % of a seam
+## sized at 0.795 of the head is 0.755, still inside the shell. The honest ways out are many rings
+## (a 30/30 slab measured +1158 tris per character and put four neighbours over the 6 k budget) or
+## ONE row landing exactly on the equator, which is what an odd ring count guarantees. So this
+## searches for the smallest `rings` argument whose RESOLVED count is odd, instead of hard-coding
+## one that happens to be odd at today's `DETAIL`. That is the distinction the warning above draws:
+## depending on parity is fine when you ENFORCE it, and fatal when you assume it.
+##
+## `plan` is the slab's half-extents in X and Z; `thickness` is its half-height AFTER the squash.
+## `seg` must be high enough to wrap the parent cleanly — at seg 18 against a 23-segment head the
+## slab pokes out at its vertices and sinks between them, and renders DASHED. 30 is the smallest
+## that wraps cleanly at the ~1.04 oversizing these parts use.
+func _se_slab(parent: Node, plan: Vector2, thickness: float, n: float, mat: Material,
+		pos: Vector3, node_name: String, seg: int = 30, rings: int = 5) -> MeshInstance3D:
+	var r := maxf(plan.x, plan.y)
+	var want := maxi(1, rings)
+	# `_segs` is not invertible in closed form, so step up until the resolved count is odd. Bounded:
+	# `_segs` is monotonic in its argument, so parity flips within a few steps at any DETAIL.
+	while _segs(want, 4) % 2 == 0 and want < rings + 12:
+		want += 1
+	var mi := _mi(superellipsoid(Vector3(plan.x, r, plan.y), n, seg, want), mat, parent, pos, node_name)
+	mi.scale = Vector3(1.0, thickness / r, 1.0)
+	return mi
+
+
 ## Places `node` on the head SUPERELLIPSOID (the same surface `_add_head_shell` builds) so its
 ## local -Z points along the outward normal and `inset` pushes it in (or out, if negative) along
 ## that normal. Because the head has flat-ish planes now, the two eye planes are nearly coplanar and
@@ -1056,6 +1562,19 @@ func _orient_on_head(node: Node3D, yaw_deg: float, pitch_deg: float, inset: floa
 	var outward := se_normal(p, head_semi, head_n)
 	node.position = p - outward * inset
 	node.basis = Basis.looking_at(outward, Vector3.UP)
+
+
+## An orthonormal basis whose +Y is `up` (already normalised). Use this, NOT `_orient_on_head`, for
+## anything that GROWS out of the head near the crown: `_orient_on_head` ends in
+## `Basis.looking_at(outward, Vector3.UP)`, which warns on colinear vectors as the pitch approaches
+## 90 deg and whose yaw is meaningless well before that. Every primitive in this file that has a
+## length — capsule, taper_tube, cylinder — runs along its own +Y, so this is the frame they want.
+static func _basis_from_up(up: Vector3) -> Basis:
+	var yv := up
+	var xv := Vector3.RIGHT if absf(yv.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
+	var zv := xv.cross(yv).normalized()
+	xv = yv.cross(zv).normalized()
+	return Basis(xv, yv, zv)
 
 
 # ---------------------------------------------------------------------------- mesh primitives
@@ -1250,6 +1769,8 @@ static func arc_tube(ring_r: float, tube_r: float, a0: float, a1: float, segs: i
 		for j in sides:
 			var a2 := i * (sides + 1) + j
 			var b2 := (i + 1) * (sides + 1) + j
+			# INSIDE-OUT, AND LEFT THAT WAY DELIBERATELY — see the winding note below. Flipping
+			# these two triples is the whole "fix"; it was tried during integration and reverted.
 			st.add_index(a2)
 			st.add_index(b2)
 			st.add_index(b2 + 1)
@@ -1259,3 +1780,202 @@ static func arc_tube(ring_r: float, tube_r: float, a0: float, a1: float, segs: i
 	var arc := st.commit()
 	_mesh_cache[akey] = arc
 	return arc
+
+
+# ---------------------------------------------------------------------------- R4 organic primitives
+## WINDING, once, because both primitives below depend on it and getting it wrong is invisible from
+## exactly one side — which is why it survives a screenshot check.
+##
+## GODOT WINDS FRONT FACES CLOCKWISE seen from outside: for a triangle (v0, v1, v2) on a correctly
+## built closed mesh, `(v1-v0) x (v2-v0)` points INWARD. Measured, not assumed — the signed volume
+## of BoxMesh, SphereMesh, TorusMesh, CapsuleMesh and of this file's own `superellipsoid` and
+## `rounded_box` (which inherit SphereMesh's index order) all come out NEGATIVE. `toon_soft` is
+## `render_mode cull_back` and MaterialLib has no cull_disabled material, so the other winding is a
+## solid you can see straight through from the front.
+##
+## `arc_tube` IS WOUND THE OTHER WAY, AND IT STAYS THAT WAY FOR NOW. Confirmed by signed volume in
+## one deterministic run, against Godot's own primitives and this file's:
+##     TorusMesh -0.19582   BoxMesh -1.00000   superellipsoid -4.75974   taper_tube -0.04161
+##     arc_tube (360 deg sweep) +0.15783        <-- the odd one out
+## So under `cull_back` every smile, brow, lid ridge, Grig's ridge and DJ Nova's headband is drawing
+## its FAR wall. Silhouettes are unaffected and the vertex normals still point outward, so nothing
+## renders as a hole; it is wrong in principle rather than broken in practice.
+##
+## IT IS NOT FIXED HERE BECAUSE THE FIX IS A CAST-WIDE REPAINT THAT CANNOT CURRENTLY BE REVIEWED.
+## Flipping the two index triples changes the shading of a brow or smile on all nine shipped
+## neighbours at once, and those nine were authored and signed off against how they look today.
+## An A/B was attempted and is INCONCLUSIVE — do not trust a pixel diff here: `tools/capture.sh` is
+## NOT deterministic. Two captures of the same scene with identical code differ by ~55,000 pixels
+## (`--face=dj_nova --freeze`, 1280x720), because neither the idle phase nor the framing is pinned.
+## Any before/after smaller than that is invisible to the harness. Fixing the winding properly needs
+## a deterministic capture first, then its own review pass — it is not integration cleanup.
+##
+## The primitives below deliberately follow GODOT, not `arc_tube`: a horn or a fur fin is a fat
+## solid seen from every angle, and inside-out is obvious on those.
+
+## The centreline of a `taper_tube`: `segs` equal steps of arc length, turning `curl` radians in
+## total. Shared with `taper_tube_end` so a caller can seat something at the tip and land on the
+## exact vertex the mesh ends at rather than near it.
+static func _taper_path(length: float, curl: float, segs: int) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	pts.resize(segs + 1)
+	pts[0] = Vector3.ZERO
+	var p := Vector3.ZERO
+	var step := length / float(segs)
+	for i in range(1, segs + 1):
+		# tangent sampled at the MIDDLE of each step, so the polyline sits on the arc, not outside it
+		var a := curl * (float(i) - 0.5) / float(segs)
+		p += Vector3(0.0, cos(a), sin(a)) * step
+		pts[i] = p
+	return pts
+
+
+## Where a `taper_tube` with these arguments ends, in its own local space.
+static func taper_tube_end(length: float, curl: float = 0.0, segs: int = 6) -> Vector3:
+	var pts := _taper_path(length, curl, _segs(segs, 3))
+	return pts[pts.size() - 1]
+
+
+## A TAPERING, OPTIONALLY CURVED TUBE — the missing primitive. `arc_tube` sweeps in XY at a CONSTANT
+## tube radius, so every organic part that narrows (a horn, a tendril, a fang, a bent antenna stem)
+## had to be faked as a stack of shrinking capsules: ~300 triangles and a visibly lumpy silhouette
+## where 6 x 6 here is 72 wall triangles plus two 6-triangle caps.
+##
+## Runs along +Y from the origin (the same convention as `capsule` and `cylinder`, so it drops into
+## `_basis_from_up` frames unchanged) and bends toward +Z as it rises; `curl` is the TOTAL turn in
+## radians. Both ends are capped — an open tube under `cull_back` reads as a hole punched in the
+## model. Same SurfaceTool pattern and `_mesh_cache` keying as `arc_tube`.
+static func taper_tube(length: float, r0: float, r1: float, curl: float = 0.0,
+		segs: int = 6, sides: int = 6) -> ArrayMesh:
+	var key := "tt|%.4f|%.4f|%.4f|%.4f|%d|%d" % [length, r0, r1, curl, segs, sides]
+	if _mesh_cache.has(key):
+		return _mesh_cache[key]
+	segs = _segs(segs, 3)
+	sides = _segs(sides, 4)
+	var pts := _taper_path(length, curl, segs)
+	var slope := (r1 - r0) / maxf(length, 1e-5)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in segs + 1:
+		var t := float(i) / float(segs)
+		var a := curl * t
+		var tang := Vector3(0.0, cos(a), sin(a))
+		var n1 := Vector3.RIGHT
+		var n2 := n1.cross(tang)          ## n1 x n2 == -tang; the caps rely on that identity
+		var r := lerpf(r0, r1, t)
+		for j in sides + 1:
+			var b := TAU * float(j) / float(sides)
+			var radial := n1 * cos(b) + n2 * sin(b)
+			st.set_normal((radial - tang * slope).normalized())
+			st.set_uv(Vector2(t, float(j) / float(sides)))
+			st.add_vertex(pts[i] + radial * r)
+	for i in segs:
+		for j in sides:
+			var a2 := i * (sides + 1) + j
+			var b2 := (i + 1) * (sides + 1) + j
+			# clockwise from outside — see the winding note above
+			st.add_index(a2)
+			st.add_index(b2 + 1)
+			st.add_index(b2)
+			st.add_index(a2)
+			st.add_index(a2 + 1)
+			st.add_index(b2 + 1)
+	# SurfaceTool has no vertex counter, so the caps are told where their own vertices start.
+	var used := (segs + 1) * (sides + 1)
+	used += _taper_cap(st, used, pts[0], r0, 0.0, sides, false)
+	_taper_cap(st, used, pts[segs], r1, curl, sides, true)
+	var mesh := st.commit()
+	_mesh_cache[key] = mesh
+	return mesh
+
+
+## One flat end cap for `taper_tube`, whose first vertex lands at index `base`. `forward` = the tip
+## (normal +tangent); otherwise the base (normal -tangent). Returns the vertex count it added.
+static func _taper_cap(st: SurfaceTool, base: int, centre: Vector3, r: float, a: float,
+		sides: int, forward: bool) -> int:
+	if r <= 1e-5:
+		return 0
+	var tang := Vector3(0.0, cos(a), sin(a))
+	var n1 := Vector3.RIGHT
+	var n2 := n1.cross(tang)
+	var nrm := tang if forward else -tang
+	st.set_normal(nrm)
+	st.set_uv(Vector2(0.5, 0.5))
+	st.add_vertex(centre)
+	for j in sides:
+		var b := TAU * float(j) / float(sides)
+		st.set_normal(nrm)
+		st.set_uv(Vector2(0.5 + 0.5 * cos(b), 0.5 + 0.5 * sin(b)))
+		st.add_vertex(centre + (n1 * cos(b) + n2 * sin(b)) * r)
+	for j in sides:
+		var v0 := base + 1 + j
+		var v1 := base + 1 + (j + 1) % sides
+		st.add_index(base)
+		# radial(j) x radial(j+1) == -tang. Godot wants the cross product pointing INWARD, so the
+		# BASE cap (outward normal -tang) takes the reversed order and the TIP cap the forward one.
+		st.add_index(v0 if forward else v1)
+		st.add_index(v1 if forward else v0)
+	return sides + 1
+
+
+## A RING OF FUR / SPINES / FRONDS — `count` fins radiating outward from a ring of radius `ring_r`
+## in the XZ plane, angles measured from -Z (the model's facing) so `arc_deg` under 360 leaves a gap
+## centred on the BACK. Rotate the parent to put the gap anywhere else.
+##
+## THE FINS ARE THREE-SIDED PYRAMIDS — 4 triangles each — and NEVER double-sided quads. `toon_soft`
+## is `render_mode cull_back` and MaterialLib has no cull_disabled material, so a quad fringe simply
+## disappears when the camera walks round to the other side of the character.
+##
+## `jitter` (0..1) varies each fin's length, angle and rise. It is DETERMINISTIC: the RNG is seeded
+## from the cache key, because these meshes are shared and two call sites with identical arguments
+## must not get two different ruffs.
+static func fur_ring(ring_r: float, fin_len: float, fin_w: float, count: int,
+		jitter: float = 0.25, arc_deg: float = 360.0) -> ArrayMesh:
+	var key := "fur|%.4f|%.4f|%.4f|%d|%.3f|%.2f" % [ring_r, fin_len, fin_w, count, jitter, arc_deg]
+	if _mesh_cache.has(key):
+		return _mesh_cache[key]
+	count = maxi(count, 1)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(key)
+	var span := deg_to_rad(clampf(arc_deg, 1.0, 360.0))
+	var full := arc_deg >= 359.9
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in count:
+		var a := TAU * float(i) / float(count) if full else \
+			(-span * 0.5 + span * float(i) / float(maxi(count - 1, 1)))
+		a += rng.randf_range(-jitter, jitter) * span / float(count) * 0.5
+		var dir := Vector3(sin(a), 0.0, -cos(a))
+		var tan := Vector3(cos(a), 0.0, sin(a))
+		var seat := dir * ring_r
+		var jl := 1.0 + rng.randf_range(-jitter, jitter)
+		# Four points: two on the ring, one lifted spine vertex that gives the fin its thickness,
+		# and the tip. Flat, but a closed volume — which is the whole point.
+		var v0 := seat + tan * (fin_w * 0.5)
+		var v1 := seat - tan * (fin_w * 0.5)
+		var v2 := seat + dir * (fin_len * 0.14) + Vector3.UP * (fin_w * 0.42)
+		var v3 := seat + dir * (fin_len * jl) + Vector3.UP * (fin_len * (0.18 + rng.randf_range(-jitter, jitter) * 0.25) * jl)
+		var g := (v0 + v1 + v2 + v3) * 0.25
+		for f: Array in [[v0, v1, v2], [v0, v1, v3], [v0, v2, v3], [v1, v2, v3]]:
+			_tri_out(st, f[0], f[1], f[2], g)
+	var mesh := st.commit()
+	_mesh_cache[key] = mesh
+	return mesh
+
+
+## Emits one triangle facing AWAY from `inside`, with a flat outward normal and the winding Godot
+## culls correctly (clockwise from outside, i.e. `(b-a) x (c-a)` pointing INWARD).
+static func _tri_out(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, inside: Vector3) -> void:
+	var n := (b - a).cross(c - a)
+	if n.dot((a + b + c) / 3.0 - inside) < 0.0:
+		# already wound Godot's way; the shading normal is the other one
+		n = -n
+	else:
+		var t := b
+		b = c
+		c = t
+	n = n.normalized()
+	for v: Vector3 in [a, b, c]:
+		st.set_normal(n)
+		st.set_uv(Vector2(v.x, v.z))
+		st.add_vertex(v)

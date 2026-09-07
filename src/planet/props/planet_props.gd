@@ -51,6 +51,8 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 			_fen()
 		"chalk":
 			_grig()
+		"frost":
+			_vela()
 		_:
 			_meadow()
 	_collectibles()
@@ -58,13 +60,17 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 # ============================================================================================ helpers
 func _collect_paths() -> void:
 	var spawn := data.spawn_dir.normalized()
-	# A trodden dirt line is right on soft ground and wrong on cut stone or plating. Fen KEEPS its
-	# path (a worn line across a blank salt pan is the strongest "someone lives here" cue the game
-	# has); Grig's chalk steps do not, because the tan smear would cut straight across the contours.
+	# A trodden dirt line is right on soft ground and wrong on cut stone, plating or fresh powder.
+	# Fen KEEPS its path (a worn line across a blank salt pan is the strongest "someone lives here"
+	# cue the game has); Grig's chalk steps do not, because the tan smear would cut straight across
+	# the contours; and Vela's frost does not, because a path is an EDGE and "no edges anywhere" is
+	# that world's entire claim — a warm tan arc would also be the only warm thing on a planet whose
+	# one warm colour is reserved for the relay lamps.
 	# NOTE: the path is drawn in TWO places. This one only feeds _on_paved() for prop avoidance; the
-	# ground shader's arcs are set separately in Planet._make_ground_material(), so "chalk" has to be
-	# excluded there as well or the smear is still painted and props merely stop avoiding it.
-	if data.biome == "chrome" or data.biome == "violet" or data.biome == "chalk":
+	# ground shader's arcs are set separately in Planet._make_ground_material(), so "chalk" and
+	# "frost" have to be excluded there as well or the smear is still painted and props merely stop
+	# avoiding it.
+	if data.biome == "chrome" or data.biome == "violet" or data.biome == "chalk" or data.biome == "frost":
 		return
 	for bid in data.buildings:
 		var bd := planet.building_dir(bid)
@@ -1161,9 +1167,229 @@ func _chalk_dust() -> void:
 	p.draw_pass_1 = q
 	root.add_child(p)
 
-# ============================================================================================ meshes for the two new worlds
-## Meshes for "flats" and "chalk". They live here rather than in PlanetPropMeshes because the two
-## worlds were built in parallel with that file and neither of these forms existed in it; the cache
+
+# ============================================================================================ frost
+## VELA'S STILL FROST. A 14.5 m ball of deep wind-smoothed powder with NO EDGES ANYWHERE: no water,
+## no craters, no plateaus, no terraces and no trodden path, so `bank_weight()` is zero over the
+## entire sphere and every boundary the other five worlds are read through is simply absent here.
+## MEASURED: 1.78 m of relief across ~2.7 crests per great circle (the largest smooth relief and by
+## far the fewest undulations in the game — Fen 44 crests, home 43, Grig 34 before terracing), mean
+## slope 2.9 deg and a maximum of 14.5 deg, so NOTHING on this planet is refused for slope. The
+## placement survey comes back at 86.6% free at a 0.6 m footprint with slope refusal 0.0% (home
+## 65.3%, Fen 66.8%, Grig 53.5%) — this is at once the quietest world in the game and by a wide
+## margin the most decorable one, which is the right trade for a cosy game: the empty snowfield is
+## the invitation, and the player's own furniture is what is meant to fill it.
+##
+## Three rules follow from that, and they are the whole composition:
+##
+##   * EVERYTHING IS HALF-BURIED. Every prop below is sunk 0.14-0.38 m rather than the usual
+##     0.03-0.12, so the powder swallows its feet and nothing has a visible ground contact edge.
+##     This is free — `sink` is already a parameter on all three spawn helpers — and it is the
+##     single strongest cue that the ground is deep rather than painted.
+##   * THE ONLY WARM COLOUR IS THE LAMPS. The .tres palette is blue from end to end (the first cool
+##     ground in the game); the amber that shows up on the relay masts is Vela's own #d8a25c, the
+##     same colour as the seven rim lamps she talks with. Nothing else here is allowed to be warm,
+##     which is why this world takes no trodden path (a tan arc would break it twice over: it is an
+##     edge, and it is warm).
+##   * SOFT IS FOR WEATHER, HARD IS FOR MACHINERY. R2.3 asks for flat planes and chamfers, not
+##     blobs, and every BUILT thing here obeys it — the masts are faceted shafts with flat panels,
+##     the dishes are struck cones with a hard rim. The drift fins are the deliberate exception:
+##     they ARE the weather, and a wind ridge with a chamfer on it is simply wrong.
+##
+## The sun sits at 78 deg, so every shadow is only 0.21x its caster and shadow reach is a non-issue
+## (Fen's 4.5 m ceiling does not apply). Determinism: Planet.prebuild() builds a throwaway planet
+## WITH props during the rocket cruise and bakes AO from it, so everything here comes off the seeded
+## `rng` or off `_arc_side`, never off the clock.
+func _vela() -> void:
+	# Vela's own AMBER (vela_model.gd:64). Deliberately the same swatch, so the field lamps and the
+	# lamps she speaks with are one colour and the player reads them as hers.
+	var amber := Color("#d8a25c")
+	var metal_mat := PlanetPropMeshes.prop_material()
+	var spawn := data.spawn_dir.normalized()
+	var pad := data.pad_dir.normalized()
+
+	# 1. THE LONG ARRAY. Eight relay masts in ONE straight run down one side of the walk to the
+	# rocket, all the same height and all canted to the same patch of sky. That sameness is the
+	# point and it is the opposite of Fen's colonnade, which alternates sides and grades its heights
+	# 2.4 -> 3.2: a row of IDENTICAL verticals is a measuring stick, and on a world whose only
+	# feature is a 1.78 m swell it is the one thing that makes the ground's rise and fall legible.
+	# Deterministic by construction (_arc_side, not find_free_dir) so the AO prebake matches.
+	#
+	# THE ARITHMETIC. spawn -> pad is 16.72 m and planet.gd reserves SPAWN_FLAT_RADIUS + 0.6 = 3.6 m
+	# and PAD_FLAT_RADIUS + 1.0 = 5.0 m at the ends. Standing the line 5.0 m off the centreline
+	# clears both discs at every t used below (t = 0.06 is 5.10 m from spawn, t = 0.788 is 6.13 m
+	# from the pad) and leaves 1.74 m between neighbours, comfortably past the 1.60 m that a 0.80 m
+	# footprint plus a 0.80 m clearance needs.
+	var mast_h := 3.05
+	var lamp_glow := PlanetPropMeshes.pulse_material(amber, 0.85, 0.9, 0, 0.72, amber.darkened(0.34))
+	for i in 8:
+		var t := 0.06 + 0.104 * float(i)
+		var d := Vector3.ZERO
+		# (metres along the arc, side-offset multiplier). Vela's home disc is 21 m from spawn so it
+		# never touches the run, but a collectible or the neighbour's wander target can, and a hole
+		# in the middle of a row of identical masts is far more visible than a hole in a scatter.
+		for off: Vector2 in [Vector2(0.0, 1.0), Vector2(0.0, 1.22), Vector2(0.75, 1.0),
+				Vector2(-0.75, 1.0), Vector2(0.0, 0.80)]:
+			var c := _arc_side(spawn, pad, t, 5.0 * off.y, off.x)
+			if not planet._is_free(c, 0.80):
+				continue
+			d = c
+			break
+		if d == Vector3.ZERO:
+			continue
+		# Aim every mast along the run and then yaw them all by the SAME 0.55 rad, so the vanes are
+		# three-quarters on to the walk: face-on they would overlap into one wall, edge-on they would
+		# vanish. A random yaw would destroy the whole read.
+		var toward := arc_point(spawn, pad, minf(t + 0.09, 1.0)) - d
+		var mast := _spawn_blocking(_relay_mast(data.rock_color, data.ground_color_low, mast_h, i),
+			[metal_mat, lamp_glow], d, 1.0, 0.80, 0.24, mast_h, 0.30, false, 0.55, toward, null, "RelayMast")
+		# Three real lights, not eight: the amber has to read as a warm accent on a cold world, and
+		# eight overlapping pools would wash the powder between them into a continuous glow. The
+		# other five masts still carry the emissive lamp head, which is a material and costs nothing.
+		if i == 1 or i == 4 or i == 7:
+			_omni(mast, Vector3(0.0, mast_h + 0.08, 0.0), amber, 0.85, 5.5)
+
+	# 2. THE DISHES. Three of them, tipped at three different angles and buried to the rim on the low
+	# side — this is where "everything half-buried" is stated at full size. Vela's dialogue names
+	# "dish four" and "dish nine", so the array she keeps has to exist on the ground; and because SHE
+	# is a parabola, these are deliberately built as struck cones with a hard rim rather than as
+	# copies of her face.
+	#
+	# CLUSTERED, not scattered. A plain find_free_dir samples the whole sphere uniformly, and the
+	# first build put all three 27-30 m from spawn — over the horizon of a 14.5 m world, so the mast
+	# line read as a row of poles leading nowhere and the dishes read as three unrelated props. They
+	# are one INSTALLATION, so they are seeded around a point just beyond the far end of the mast
+	# run, on the opposite side of it from the walk.
+	var array_anchor := _arc_side(spawn, pad, 0.62, 10.5)
+	for i in 3:
+		var d := planet.find_free_dir_near(rng, array_anchor, 8.0, 1.5, 64)
+		if d == Vector3.ZERO:
+			d = planet.find_free_dir(rng, 1.5, 96)
+		if d == Vector3.ZERO:
+			continue
+		_spawn_blocking(_relay_dish(data.rock_color, data.ground_color_low, data.ground_shadow_color, i),
+			[metal_mat], d, 1.0, 1.4, 0.80, 1.20, 0.38, false, NAN, Vector3.ZERO, null, "ArrayDish")
+
+	# 3. DRIFT FINS — the first ALIGNED scatter in the game. Fen's colonnade and pool rings are
+	# patterned but each prop still takes a random yaw; here every fin is turned to the SAME wind
+	# axis, which is what makes a featureless snowfield read as wind-smoothed rather than as a
+	# smooth sphere. Non-blocking and only 0.39 m proud, so they are ground, not scenery.
+	_drift_field(Vector3(0.62, 0.18, -0.76).normalized())
+
+	# 4. HALF-BURIED ERRATICS. _pebbles() would do the job but it sinks its rocks 0.12 m, which on
+	# this world leaves a visible contact edge on the one prop that has the most of them. Same mesh,
+	# same material, 0.30 m of sink.
+	var rock_mat := PlanetPropMeshes.rock_material()
+	for i in _n(data.rock_count, 4):
+		var s := rng.randf_range(0.85, 1.45)
+		var d := planet.find_free_dir(rng, 0.7 * s)
+		if d == Vector3.ZERO:
+			continue
+		_spawn_blocking(PlanetPropMeshes.pebble_rock(data.rock_color, i), [rock_mat], d, s,
+			0.60, 0.42, 0.5, 0.30, true, NAN, Vector3.ZERO, null, "FrostStone")
+
+	# 5. RIME BLOOMS — two patches, and the only chroma on the planet that is not amber.
+	var petal: Color = data.flower_colors[0] if data.flower_colors.size() > 0 else Color("#c6d3e2")
+	_flower_patches(_n(data.flower_patch_count, 2), data.foliage_color_a, petal)
+
+	# 6. THE SPARSEST TUFTS IN THE GAME. `density_m2` is a DIVISOR (area / density), so a BIGGER
+	# number means FEWER: 4.8 puts ~550 on 2642 m² (0.21/m²) against Fen's 0.31 and home's 1.0. They
+	# are rime whiskers, not a lawn.
+	# THE TINT IS THE OPPOSITE OF GRIG'S, AND FOR THE SAME REASON. Grig tints its lichen LIGHTER than
+	# the ground because a dark speck field pinned its luma p05 too LOW. Vela measures the other way
+	# round: it lands at p05 0.303 against a 0.30-0.42 window, i.e. it is short of darkness rather
+	# than short of light, so these are tinted a little DARKER and a good deal more chromatic than the
+	# powder. They read as blue rime instead of as scraps of white paper (which is exactly what a
+	# near-white tint looked like in the first capture), and with no crater, no waterline and no path
+	# they are one of very few sources of fine tonal speckle anywhere on the planet.
+	_grass_tufts(Color("#76849f"), 4.8)
+	_diamond_dust()
+
+## Wind-carved drift ridges, all turned to one axis. A ridge is a soft form on purpose (see the
+## R2.3 note on _vela): the built things on this world carry the flat planes, the weather does not.
+## One MultiMesh per variant, and each fin registers a footprint so the DecorationManager does not
+## seat a chair inside a drift.
+func _drift_field(wind: Vector3) -> void:
+	var count := 22 if _scatter_scale() >= 0.9 else 12
+	var xfs_a: Array[Transform3D] = []
+	var xfs_b: Array[Transform3D] = []
+	var tints_a := PackedColorArray()
+	var tints_b := PackedColorArray()
+	for i in count:
+		var d := planet.find_free_dir(rng, 1.1, 64)
+		if d == Vector3.ZERO:
+			continue
+		# The wind axis projected onto the tangent plane. Near the two points where the axis is
+		# vertical this degenerates, so those fins are simply dropped rather than spun at random —
+		# ONE misaligned ridge is enough to break the read the other fifteen are paying for.
+		var t := wind - d * wind.dot(d)
+		if t.length_squared() < 0.05:
+			continue
+		var xf := planet.surface_transform(d, t.normalized())
+		var s := 0.80 + rng.randf_range(0.0, 0.55)
+		xf.basis = xf.basis.scaled(Vector3(s, 0.85 + rng.randf_range(0.0, 0.35), s * rng.randf_range(0.9, 1.35)))
+		xf.origin -= xf.basis.y.normalized() * 0.16
+		planet.register_prop(d, 0.90)
+		if i % 2 == 0:
+			xfs_a.append(xf)
+			tints_a.append(Color.WHITE)
+		else:
+			xfs_b.append(xf)
+			tints_b.append(Color.WHITE)
+	var mat := PlanetPropMeshes.rock_material()
+	if not xfs_a.is_empty():
+		_multimesh(_drift_fin(data.ground_color_a.lightened(0.10), data.ground_shadow_color, 0),
+			xfs_a, tints_a, mat, _scatter_shadow(true))
+	if not xfs_b.is_empty():
+		_multimesh(_drift_fin(data.ground_color_a.lightened(0.06), data.ground_shadow_color, 1),
+			xfs_b, tints_b, mat, _scatter_shadow(true))
+
+## Diamond dust: airborne ice crystals in still, very cold air. The third member of the suspended-
+## particle family and deliberately the slowest and least turbulent of the three — Zorp's spores
+## swirl (0.08-0.25 m/s, turbulence 0.6), Fen's ashfall drifts (0.02-0.10, 0.25), Grig's chalk dust
+## hugs the treads at radius + 0.4. This hangs at radius + 1.8 at 0.01-0.06 m/s and barely moves at
+## all, which is what "the quietest world in the game" has to look like.
+func _diamond_dust() -> void:
+	var p := GPUParticles3D.new()
+	p.name = "DiamondDust"
+	p.amount = 55
+	p.lifetime = 18.0
+	p.preprocess = 18.0
+	p.local_coords = true
+	p.visibility_aabb = AABB(Vector3.ONE * -(planet.radius + 4.0), Vector3.ONE * (planet.radius + 4.0) * 2.0)
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE_SURFACE
+	pm.emission_sphere_radius = planet.radius + 1.8
+	pm.direction = Vector3.ZERO
+	pm.spread = 180.0
+	pm.initial_velocity_min = 0.01
+	pm.initial_velocity_max = 0.06
+	pm.gravity = Vector3.ZERO
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 0.12
+	pm.turbulence_noise_scale = 1.1
+	pm.scale_min = 0.5
+	pm.scale_max = 1.1
+	var g := Gradient.new()
+	var ice := Color("#e8f0ff")
+	g.set_color(0, Color(ice.r, ice.g, ice.b, 0.0))
+	g.add_point(0.25, ice)
+	g.add_point(0.62, Color("#c2d2ea"))
+	g.set_color(g.get_point_count() - 1, Color(ice.r, ice.g, ice.b, 0.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.05, 0.05)
+	# 0.34 against Fen's 0.45 and Grig's 0.40: on a pale ground a bright particle is the easiest way
+	# there is to push the blown-highlight count, and this world starts closest to that ceiling.
+	q.material = PlanetPropMeshes.sparkle_material(Color(1.0, 1.0, 1.0, 0.34))
+	p.draw_pass_1 = q
+	root.add_child(p)
+# ============================================================================================ meshes for the newer worlds
+## Meshes for "flats", "chalk" and "frost". They live here rather than in PlanetPropMeshes because
+## those worlds were built in parallel with that file and none of these forms existed in it; the cache
 ## below mirrors PlanetPropMeshes._cached() so repeated builds (and Planet.prebuild's throwaway
 ## planet) share one ArrayMesh per key. Everything is flat planes, chamfers, tapers and panel lines
 ## per R2.3 — no blobs, and every prop stays under the ~2k triangle budget in ARCHITECTURE.md.
@@ -1349,6 +1575,126 @@ static func _spindle_tree(trunk: Color, frond: Color, shadow: Color, variant: in
 		return kit.commit()
 	return _cached_mesh(key, build)
 
+
+## Vela's relay mast: a hexagonal tapered shaft, two flat cross-arms with guy struts, a flat
+## reflector vane canted ~60 degrees at the sky, and an amber lamp box on top. The lamp is SURFACE 1
+## so the caller can hand it a pulse material exactly as Grig's lamp posts do. ~1000 tris, most of
+## it in the two rounded boxes — everything structural is `_beam`, which is 24 tris apiece.
+static func _relay_mast(metal: Color, trim: Color, height: float, variant: int) -> ArrayMesh:
+	var key := "vela_mast|%s|%s|%.3f|%d" % [metal.to_html(), trim.to_html(), height, variant]
+	var build := func() -> ArrayMesh:
+		var mesh := ArrayMesh.new()
+		var kit := PlanetMeshKit.new()
+		# Foot plate. It ends up 0.30 m under the powder, which is the point — and is also why this
+		# is the cheapest place on the prop to spend a rounded box.
+		kit.rounded_box(Vector3(0.0, 0.05, 0.0), Vector3(0.62, 0.11, 0.62), 0.03, metal.darkened(0.12))
+		# SIX-SIDED shaft with hard normals, so the sides are real flat planes. Deliberately not
+		# Grig's four (a square shaft is his monolith) and deliberately not a smooth tube.
+		kit.lathe(PackedVector2Array([
+			Vector2(0.0, 0.02), Vector2(0.118, 0.02),
+			Vector2(0.100, height * 0.30),
+			Vector2(0.062, height * 0.88),
+			Vector2(0.0, height * 0.88)]), 6, Transform3D.IDENTITY, metal, false)
+		# Two cross-arms at heights that shift per variant, so a row of identical masts still has a
+		# little joinery variety when the player walks right up to one.
+		var a0 := height * (0.34 + 0.04 * float(variant % 3))
+		var a1 := height * (0.56 + 0.03 * float((variant + 1) % 3))
+		_beam(kit, Vector3(-0.34, a0, 0.0), Vector3(0.34, a0, 0.0), 0.035, 0.035, 0.045, metal.lightened(0.05))
+		_beam(kit, Vector3(-0.27, a1, 0.0), Vector3(0.27, a1, 0.0), 0.030, 0.030, 0.040, metal.lightened(0.05))
+		# Guy struts from the arm ends back down to the shaft. The diagonals are what stop a bare
+		# pole reading as a stick.
+		_beam(kit, Vector3(-0.34, a0, 0.0), Vector3(-0.075, a0 - 0.52, 0.0), 0.022, 0.022, 0.026, metal.darkened(0.08))
+		_beam(kit, Vector3(0.34, a0, 0.0), Vector3(0.075, a0 - 0.52, 0.0), 0.022, 0.022, 0.026, metal.darkened(0.08))
+		# THE VANE: a flat rectangular reflector panel tipped back so its face looks 54-66 degrees up.
+		# A double-sided quad and one spar — four triangles for the largest visual element on the
+		# prop, and the sameness of the angle across all eight masts is what makes them read as ONE
+		# instrument pointed at one patch of sky rather than as eight fence posts.
+		var cant := 0.95 + 0.10 * float(variant % 3)
+		var vc := Vector3(0.0, height * 0.70, -0.15)
+		var vu := Vector3(0.0, cos(cant), sin(cant))
+		var hw := 0.38
+		var hh := 0.27
+		kit.quad(vc - Vector3(hw, 0.0, 0.0) - vu * hh, vc + Vector3(hw, 0.0, 0.0) - vu * hh,
+			vc + Vector3(hw, 0.0, 0.0) + vu * hh, vc - Vector3(hw, 0.0, 0.0) + vu * hh, trim)
+		var spar := vc - vu * 0.03
+		_beam(kit, spar - Vector3(hw, 0.0, 0.0), spar + Vector3(hw, 0.0, 0.0), 0.026, 0.026, 0.020, metal.lightened(0.08))
+		# Feed on a short boom standing off the vane's face. `Basis(RIGHT, cant - PI/2)` maps +Y onto
+		# the panel normal (0, sin(cant), -cos(cant)); a long boom is a thin spike that flickers on a
+		# phone, so it is kept to 0.28 m.
+		var fb := Basis(Vector3.RIGHT, cant - PI * 0.5)
+		kit.cylinder(vc, 0.020, 0.014, 0.28, metal.darkened(0.10), fb, 5)
+		kit.rounded_box(vc + Vector3(0.0, sin(cant), -cos(cant)) * 0.30, Vector3(0.09, 0.09, 0.09),
+			0.022, metal.darkened(0.16), fb)
+		_beam(kit, Vector3(0.0, height * 0.88, 0.0), Vector3(0.0, height - 0.10, 0.0), 0.052, 0.062, 0.052, metal.darkened(0.06))
+		kit.commit(mesh)
+		# Surface 1: the lamp. Small, because it is the only warm thing on the planet and it has to
+		# read as a signal rather than as a floodlight.
+		var glow := PlanetMeshKit.new()
+		glow.rounded_box(Vector3(0.0, height, 0.0), Vector3(0.15, 0.13, 0.15), 0.03, Color.WHITE)
+		glow.commit(mesh)
+		return mesh
+	return _cached_mesh(key, build)
+
+## Vela's array dish: a faceted lens on a hexagonal plinth, tipped so the low rim goes under the
+## powder. ONE closed lathe traversed axis -> rim along the back and rim -> axis along the face, with
+## hard normals, which gives a struck, faceted dish with a genuine cut rim for ~200 tris; a lathed
+## parabola with a lip costs five times that. ~700 tris in total.
+##
+## The traversal order is load-bearing. PlanetMeshKit.lathe derives its normal as (t.y, -t.x) from
+## the segment tangent, so a profile walked COUNTER-CLOCKWISE in (radius, height) — out along the
+## bottom, up the rim, back in along the top — gives outward normals on every band, and the same
+## profile walked the other way lights the dish inside out.
+static func _relay_dish(metal: Color, face: Color, shadow: Color, variant: int) -> ArrayMesh:
+	var key := "vela_dish|%s|%s|%s|%d" % [metal.to_html(), face.to_html(), shadow.to_html(), variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var hub := 0.95
+		# Three genuinely different attitudes: an array that all points one way reads as a repeated
+		# prop, and these are the one thing on this world the player walks between.
+		var tilt := 0.52 + 0.13 * float(variant % 3)
+		var swing := 0.9 * float(variant % 3)
+		kit.cylinder(Vector3.ZERO, 0.44, 0.36, 0.34, shadow.lightened(0.12), Basis.IDENTITY, 6)
+		var basis := Basis(Vector3.UP, swing) * Basis(Vector3.RIGHT, -tilt)
+		var hub_pos := Vector3(0.0, hub, 0.0)
+		# Yoke: two flat struts from the plinth up to the hub.
+		_beam(kit, Vector3(-0.30, 0.28, 0.0), Vector3(-0.10, hub - 0.06, 0.0), 0.055, 0.045, 0.045, metal.darkened(0.10))
+		_beam(kit, Vector3(0.30, 0.28, 0.0), Vector3(0.10, hub - 0.06, 0.0), 0.055, 0.045, 0.045, metal.darkened(0.10))
+		var xf := Transform3D(basis, hub_pos)
+		kit.lathe(PackedVector2Array([
+			Vector2(0.0, -0.02), Vector2(0.52, 0.13), Vector2(1.02, 0.29),   # back, walking outward
+			Vector2(1.02, 0.38),                                             # the cut rim
+			Vector2(0.52, 0.27), Vector2(0.0, 0.10)]),                       # face, walking back in
+			16, xf, face, false)
+		# The underside again, inset a hair so it never z-fights, in the dark tone. Same outward
+		# traversal, so it takes the same downward normals as the band it covers.
+		kit.lathe(PackedVector2Array([Vector2(0.0, -0.028), Vector2(0.51, 0.121), Vector2(1.00, 0.281)]),
+			16, xf, metal.darkened(0.14), false)
+		kit.torus(hub_pos + basis * Vector3(0.0, 0.335, 0.0), 1.02, 0.038, metal.lightened(0.06), basis, 16)
+		# Centre-fed: one short boom up the dish axis to a feed block at the focus.
+		kit.cylinder(hub_pos + basis * Vector3(0.0, 0.09, 0.0), 0.030, 0.022, 0.62, metal.darkened(0.10), basis, 6)
+		kit.rounded_box(hub_pos + basis * Vector3(0.0, 0.74, 0.0), Vector3(0.17, 0.15, 0.17), 0.04,
+			shadow.lightened(0.26), basis)
+		return kit.commit()
+	return _cached_mesh(key, build)
+
+## Vela's drift fin: a long low wind ridge — one soft crest with a shorter lee lobe behind it, never
+## mirror-symmetric, because real sastrugi are not. ~340 tris, instanced through a MultiMesh.
+##
+## THE ONE DELIBERATE R2.3 EXCEPTION on this planet. Everything BUILT here is flat planes, chamfers
+## and cut rims; this is weather, and putting a chamfer on drifted snow is the single most wrong
+## thing it is possible to do to this world.
+static func _drift_fin(powder: Color, shade: Color, variant: int) -> ArrayMesh:
+	var key := "vela_drift|%s|%s|%d" % [powder.to_html(), shade.to_html(), variant]
+	var build := func() -> ArrayMesh:
+		var kit := PlanetMeshKit.new()
+		var long := 1.30 + 0.28 * float(variant % 2)
+		kit.sphere(Vector3.ZERO, 1.0, powder, Vector3(0.42, 0.55, long), 14)
+		# The lee lobe sits downwind (+Z is behind the fin's facing direction) and a touch to one
+		# side. `add_mesh` uses the inverse-transpose basis, so the squashed normals are correct.
+		kit.sphere(Vector3(0.09 * (1.0 if variant % 2 == 0 else -1.0), -0.06, long * 0.52), 1.0,
+			shade.lerp(powder, 0.62), Vector3(0.27, 0.34, long * 0.46), 12)
+		return kit.commit()
+	return _cached_mesh(key, build)
 # ============================================================================================ collectibles
 func _collectibles() -> void:
 	var kinds := data.collectible_kind.split(",", false)

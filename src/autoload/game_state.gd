@@ -3,7 +3,7 @@ extends Node
 ## Everything in here is plain Dictionaries/Arrays/primitives so SaveManager can dump it to JSON.
 ## Never store Nodes or Resources here.
 
-const PLANET_IDS := ["home", "zorp", "bolt", "hub", "fen", "grig"]
+const PLANET_IDS := ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
 const STARTING_STARDUST := 120
 
 var current_planet_id: String = "home"
@@ -16,7 +16,8 @@ var inventory: Dictionary = {}
 
 ## planet_id -> Array of {"id": String, "item": String, "pos": [x,y,z], "basis": [9 floats]}
 ## pos/basis are LOCAL to the planet node.
-var placed_decorations: Dictionary = {"home": [], "zorp": [], "bolt": [], "hub": [], "fen": [], "grig": []}
+var placed_decorations: Dictionary = {"home": [], "zorp": [], "bolt": [], "hub": [], "fen": [], "grig": [],
+	"vela": []}
 
 ## Player look. Astronaut model reads these. Clothing store writes them.
 var player_style: Dictionary = {
@@ -210,7 +211,8 @@ func from_dict(d: Dictionary) -> void:
 	previous_planet_id = str(d.get("previous_planet_id", ""))
 	stardust = int(d.get("stardust", STARTING_STARDUST))
 	inventory = _ints(d.get("inventory", {}))
-	placed_decorations = d.get("placed_decorations", {"home": [], "zorp": [], "bolt": [], "hub": [], "fen": [], "grig": []})
+	placed_decorations = d.get("placed_decorations",
+		{"home": [], "zorp": [], "bolt": [], "hub": [], "fen": [], "grig": [], "vela": []})
 	for pid in PLANET_IDS:
 		if not placed_decorations.has(pid):
 			placed_decorations[pid] = []

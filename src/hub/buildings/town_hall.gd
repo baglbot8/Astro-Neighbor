@@ -399,9 +399,10 @@ func _stats_flow() -> void:
 
 
 ## The Mayor reads out the same neighbours PlanetScore actually averages, so the readout can never
-## drift from the number underneath it. This was two hardcoded names; the list is four now and will
-## grow again, so it LOOPS. Two per dialogue line - a typewriter box chewing through four names at
-## once reads as a wall of text, and the box is sized for about that much.
+## drift from the number underneath it. This was two hardcoded names; the list is five now and will
+## grow again, so it LOOPS. Two per dialogue line - a typewriter box chewing through five names at
+## once reads as a wall of text, and the box is sized for about that much. An odd count simply
+## leaves the last line carrying one name, which is what the `i + 1 < parts.size()` test is for.
 func _trust_lines() -> Array[String]:
 	var parts: Array[String] = []
 	for npc_id: String in PlanetScore.TRUST_NPCS:

@@ -1,10 +1,39 @@
 class_name TwinModel
 extends ChibiModel
-## Pip & Pop — the Cosmo Depot twins (our Timmy & Tommy). 80 % of a normal villager with their face
-## features scaled UP 1.08x, structured green heads with the standard AC face over a muzzle only a
-## shade lighter than the skin, shop aprons with a badge and a bow at the back, and antennae: Pip
-## has one, Pop has two. Their ears are small raked wedges, not the teddy-bear spheres of the first
-## pass. Their idle bounce runs out of phase so the pair always reads as two characters.
+## Pip & Pop — the Cosmo Depot twins (our Timmy & Tommy).
+##
+## R4 (CAST VARIETY). Before this pass the twins were differentiated ONLY above the collar: same
+## `body_scale` 0.80, same torso, same apron, same neckband, hem, badge and rear bow, same eyestalks,
+## same wide toothy grin, same `sd_skin`. The only differences were one stalk 134 mm taller and one
+## extra antenna — which is a head-swap, not a pair of characters, and it is the exact failure the
+## user named. They also shared a LITERAL cached ArrayMesh for the head, because `superellipsoid()`
+## caches on its arguments and both passed (0.3420, 0.2320, 0.2760, 3.2, 44, 22).
+##
+## A twin pair only reads as a pair when the BODIES differ, so the split now starts at the skeleton:
+##
+##            PIP                                 POP
+##   body     0.86, torso (0.94, 1.10, 0.94)      0.76, torso (1.10, 0.90, 1.08)
+##            tall, narrow, high-waisted          wide, low, square, planted
+##   head     0.616 w x 0.536 h, n 2.8            0.712 w x 0.408 h, n 3.0
+##            aspect 1.15, soft, no crown seam    aspect 1.75, hard, crown seam kept
+##   eyes     round pupil in a pale sclera        raked solid almond, no sclera, no iris
+##   crown    ONE curved matte knob feeler        TWO flat matte paddle blades, raked back
+##   mouth    small round toothless slot          straight lipless bar
+##   skin     sd_foliage (soft down)              NOTHING AT ALL
+##   outline  broken by fur at jaw + shoulders    the hardest edge in the cast
+##   garment  long gathered apron, dusty rose     short square waist apron + belly plate
+##   manner   blinks 2.2x as often, 8 % quicker   blinks 0.6x as often, 8 % slower
+##
+## Neither twin gets lashes, brows, horns, tusks or a shoulder yoke: they are CHILDREN, and the
+## standing ruling is that the cast's total of that hard vocabulary must go DOWN, not be re-sorted.
+## Their difference is carried by proportion, head shape, eye shape, palette temperature and manner,
+## which is how Animal Crossing does it and which costs no dialogue edits — `npc_data.gd:228`
+## ("That's my brother Pop. He has two antennae.") stays true word for word.
+##
+## DIALOGUE-LOCKED, DO NOT TOUCH: the antenna COUNT. Six shipped player-facing lines depend on it
+## (npc_data.gd 228, 229, 241, 288, 297, 304 — "One antenna. Best antenna. Fact." / "Two antennae,
+## two opinions. Both mine."). This pass changes the antennae's FORM, never their number, and both
+## twins stop wearing the glowing bulb that made Zorp, Pip, Pop and Bolt read identically up top.
 
 ## R2.6 (PASTEL AND MATTE). Greens are one of the three offenders the user named by hue, and the
 ## twins are entirely green, so they got the biggest pull. Pip #8ed85a S0.58 V0.85 -> #93c169
@@ -13,158 +42,620 @@ extends ChibiModel
 ## case — pastel, not mud. Measured on a real noon frame afterwards: Pip head crop saturation mean
 ## 0.472 / value 0.739, Pop 0.394 / 0.744, 0 % blown, no dominant swatch above S 0.46.
 const APRON := Color("#d6c9a8")
-const APRON_TRIM := Color("#d4b87e")
 const STAR := Color("#d9b96e")
 const EYE := Color("#231e2a")
 const MOUTH := Color("#452c20")
-const NOSE := Color("#2b1d16")
-## R2.3: a near-white muzzle on a green head, under two big glossy eyes, is a Care Bear. This sits
-## only ~10 % lighter than the skin so it reads as a jaw plane instead of a snout patch.
-const MUZZLE := Color("#bcc499")
-const BLUSH := Color("#b2898a")
-const BULB := Color("#b8ff8a")
 const SCLERA := Color("#f2f4e6")     ## pale eyeball; the face's dark oval becomes the pupil
-const GRIN := Color("#3a2118")
-const TOOTH := Color("#f4efe2")
-## R3.2 skin texture — the cellular `skin` kind, same as Zorp. See alien_model.gd for why `rock` was
-## rejected. Slightly finer and weaker than his, so the twins read as smoother-skinned than he does.
-const SURF_HEAD := {"surface": "skin", "surface_scale": 1.9, "surface_strength": 0.95,
-	"surface_spot": 1.2, "surface_scales": 0.25, "surface_spot_radius": 0.34,
-	"surface_near": 9.0, "surface_far": 26.0, "surface_macro": 0.07}
-## MUCH weaker than the head, and with the cell EDGES nearly off. An arm is a small, strongly curved
-## capsule, so the same settings that read as skin on a 680 mm head render as cauliflower on a 90 mm
-## limb — the ridge term is what does it. Spots only here.
-const SURF_LIMB := {"surface": "skin", "surface_scale": 6.5, "surface_strength": 0.75,
-	"surface_spot": 0.9, "surface_scales": 0.12, "surface_spot_radius": 0.30,
-	"surface_near": 7.0, "surface_far": 20.0}
+## R2.6 gate: every new colour below is under S 0.46 and V 0.85, checked at authoring time.
+## PIP is the WARM half of the pair and POP the COOL half — palette temperature is one of the five
+## non-accessory cues carrying them apart, so these must never converge.
+const PIP_TRIM := Color("#c49a9c")   ## dusty rose apron trim  S 0.21 V 0.77
+## THE RUFF MUST NOT BE HER SKIN COLOUR. The first build used #9fbf7e — one step off the body — and
+## rendered as nothing: the fins were there, they simply had no edge to read against, so the only
+## thing visible was a few stray spikes that looked like grass growing out of her jaw. Fur is a
+## SILHOUETTE cue, and a silhouette needs a value step. #c3d3a2 is 0.83 value against the body's
+## 0.76 and 0.24 saturation against 0.46, so the ruff reads as a pale fringe both against the head
+## and against the night sky, which is where the broken outline actually has to work.
+const PIP_FUR := Color("#c3d3a2")    ## S 0.24 V 0.83
+const PIP_KNOB := Color("#c98f74")   ## warm coral feeler tip — matte, NOT an emissive bulb
+const PIP_TONGUE := Color("#cf8490") ## S 0.36 V 0.81; the parent's #e8788f is S 0.48, over the gate
+## POP'S APRON INVERTS THE PAIR'S: tan body with a darker tan edging, against Pip's cream body
+## with a dusty-rose trim.
+## Same shop uniform, opposite way round. The practical reason is that his apron is CUT SHORT to
+## clear the plastron, and a small bright-cream panel low on a wide body rendered as underwear —
+## the tan reads as cloth at that size where the cream did not. His trim then has to go DARKER than
+## the apron rather than lighter: a cream waistband, hem and bow on a small tan panel put three
+## bright bars round his hips and the eye went straight to them instead of to the belly plate.
+const POP_APRON := Color("#d4b87e")
+const POP_TRIM := Color("#a8905e")  ## a DARKER tan, so trim reads as edging and not as bright bands
+const POP_BLADE := Color("#6f8f92")  ## teal-slate paddles  S 0.24 V 0.57 — nothing else wears this
+const POP_PLATE := Color("#7e968b")  ## belly plate  S 0.16 V 0.59 against a V 0.79 body
+const POP_PLATE_RIM := Color("#56675f")
 
-## Body colour (Pip: leaf green, Pop: yellow-green).
-## Which eyestalk silhouette this twin wears. "tall" gives one long stalk and one short one, an
-## asymmetric pair straight off the reference sheet; "closeset" gives two short stalks side by side.
-## The pair must not share a silhouette — half the point of twins is telling them apart at a glance.
-@export var stalk_style: String = "tall"
+## PIP'S SKIN — `sd_foliage`, and the choice of FUNCTION is the point, not the settings.
+## The ruling is that `sd_skin` may appear on at most TWO characters at genuinely opposite settings
+## (Zorp spot-dominant, Grig edge-dominant), because five characters sharing one surface function is
+## half of why the species read as one creature in five colours. sd_foliage is a two-octave
+## tuft-plus-clump fbm whose normal term puffs OUTWARD along the clump, so on a body it reads as
+## soft down rather than as cells — which is the close-range companion to the fur geometry below.
+## Kind 5 is already wired and no character uses it.
+## `surface_scale` 2.6, not the 0.9 the plan asked for: sd_foliage's clump octave runs at
+## 7 * scale cycles/m, so scale 0.9 puts 160 mm blotches on a 616 mm head and it rendered as
+## vertical smears — mould, not down. At 2.6 the clump is 60 mm and the tuft octave 13 mm, which is
+## a fine even nap that survives to conversation range and disappears cleanly at gameplay range.
+const PIP_SURF_HEAD := {"surface": "foliage", "surface_scale": 2.6, "surface_strength": 0.42,
+	"surface_near": 8.0, "surface_far": 22.0}
+## Finer and much weaker on the limbs, for the same reason the old skin preset was: an arm is a
+## small, strongly curved capsule, and a pattern tuned for a 616 mm head renders as cauliflower on
+## a 90 mm limb.
+const PIP_SURF_LIMB := {"surface": "foliage", "surface_scale": 3.6, "surface_strength": 0.34,
+	"surface_near": 6.0, "surface_far": 18.0}
+
+## POP'S SKIN — NONE. Deliberately, and it is the single cheapest thing in this pass.
+## He is the one character in the cast with no surface pattern at all, which is what makes everyone
+## else's pattern read as a CHOICE rather than as the default the engine happens to apply. It is
+## also the user's own "some should have smooth skin" and it buys R2.6 headroom (turning sd_skin on
+## measured +0.099 saturation mean in OPEN_ISSUES 35). An empty dict is not a stylistic shrug here;
+## do not "improve" it by adding a faint grain, because then nobody in the cast is smooth.
+const POP_SURF := {}
+
+## WHICH TWIN THIS IS: "pip" or "pop". Everything structural — body scale, torso proportions, head
+## shape, eye shape, crown, mouth, garment, surface — branches on this ONE value.
+##
+## An empty string RESOLVES from `antenna_count`, which `NpcModels.make()` already sets to 1 for Pip
+## and 2 for Pop. That is deliberate: it makes this file correct on its own, today, with no edit to
+## a file this pass does not own, and an explicit `variant` still wins when one is set.
+@export var variant: String = ""
+## Body colour (Pip: leaf green, Pop: yellow-green). Set by `NpcModels.make()`.
 @export var skin: Color = Color("#93c169")
-## 1 for Pip, 2 for Pop.
+## 1 for Pip, 2 for Pop. DIALOGUE-LOCKED — see the class docstring.
+##
+## THE GEOMETRY NO LONGER READS THIS AS A COUNT. Pip's build makes exactly one antenna and Pop's
+## exactly two, because the count is a fact about WHICH TWIN this is, stated in six shipped lines —
+## it is not a dial. Leaving it as a loop bound meant a stray `antenna_count = 3` would silently
+## make a line of dialogue false. It survives as the `variant` fallback and as documentation.
 @export var antenna_count: int = 1
 ## Idle-bounce phase offset in seconds so the twins never bob in sync.
 @export var bounce_phase: float = 0.0
-
 var _antennae: Array[Node3D] = []
-var _bulb_mats: Array[ShaderMaterial] = []
+var _is_pip := true
 var _t: float = 0.0
 
 
 func _init() -> void:
 	super()
+	# Only what cannot depend on `variant` lives here: `_init()` runs at `.new()`, BEFORE
+	# `NpcModels.make()` assigns the exports. Everything species-specific is in `_resolve_variant`.
+	#
 	# 0.70 with inherited face metrics made the twins two ~3 px dark dots at the 6.5 m camera. Timmy
 	# and Tommy are only a little shorter than Tom Nook and their faces are *not* scaled down with
-	# them, so: a taller body, and face features scaled UP to compensate for the body scale. Their
-	# eyes now render 10.6 px wide at 6.5 m against 12.3 px for a full-size villager (was ~5 px).
-	# Spacing stays a fixed % of head width, so the AC grammar is unchanged; 1.08 is the largest
-	# face_scale that keeps the smile inside the mandated 16-25 % of head width.
-	body_scale = 0.80
+	# them, so their face features are scaled UP to compensate for the body scale. Spacing stays a
+	# fixed % of head width, so the AC grammar is unchanged; 1.08 is the largest face_scale that
+	# keeps the resting mouth inside the mandated 16-25 % of head width.
 	face_scale = 1.08
-	# R3.2 — THEIR OWN HEAD. Wider and much flatter than the shared chibi dome, which they used to
-	# share as a literal cached mesh with Zorp and the Mayor. Exponent held at 3.2 rather than the
-	# 3.6 first proposed: two reviewers built the higher value and rendered a faceted box, because
-	# superellipsoid() samples uniform angular directions and a high exponent packs all the curvature
-	# into a narrow chamfer band.
-	head_semi = Vector3(0.3420, 0.2320, 0.2760)
-	head_n = 3.2
-	# Holds the chin exactly where it rendered before (0.945 - 0.3258 * 0.88 = 0.6583).
-	head_y = 0.8903
+
+
+## `variant` arrives as an @export, so it is only readable AFTER `.new()` returns — which is after
+## `_init()` and before `_ready()`. `rebuild()` reads `body_scale`, `head_y`, `head_semi` and
+## `head_n` before it calls `_build_geometry()`, so resolving inside `_build_geometry` is already
+## too late for four of the six numbers that matter. Hence both hooks:
+##   * `_ready()`, because it reads `blink_hold` for the first blink interval BEFORE calling
+##     `rebuild()`, and blink rate is one of this pair's differentiators;
+##   * `rebuild()`, so a caller that flips `variant` and rebuilds by hand gets the new body too.
+## `_resolve_variant()` is idempotent, so running it twice costs nothing.
+func _ready() -> void:
+	_resolve_variant()
+	super()
+
+
+func rebuild() -> void:
+	_resolve_variant()
+	super()
+
+
+## THE WHOLE SKELETON SPLIT. Everything here is a proportion, not a part — this is the half of the
+## difference that survives being reduced to a black cut-out at 8 m.
+func _resolve_variant() -> void:
+	if variant.is_empty():
+		variant = "pop" if antenna_count >= 2 else "pip"
+	_is_pip = variant != "pop"
+	if _is_pip:
+		# TALL, NARROW, HIGH-WAISTED. head_n 2.8 is the roundest head in the cast.
+		#
+		# HEAD SIZE IS A MEASURED CLIMBDOWN, NOT THE VALUE THE PLAN ASKED FOR. The plan specified
+		# head_semi (0.2560, 0.2380, 0.2500), a 0.512 m head against the twins' shipping 0.684 — a
+		# 25 % reduction — while simultaneously calling for "the largest eyes in the cast". This
+		# file's own history says why that fails: "0.70 with inherited face metrics made the twins
+		# two ~3 px dark dots at the 6.5 m camera", which is the whole reason `face_scale` exists.
+		# 0.616 m splits the twins on head SHAPE at similar overall size instead of on size:
+		# aspect 1.15 (round) against Pop's 1.75 (wide slab), which is two genuinely different
+		# cached meshes without walking back toward the legibility failure.
+		body_scale = 0.86
+		head_semi = Vector3(0.3080, 0.2680, 0.2720)
+		head_n = 2.8
+		# Chin seated 10 mm INTO the torso top. Her torso is 1.10 tall, so its top is at
+		# 0.40 + 0.235 * 1.10 = 0.6585; chin 0.6485 -> head_y = 0.6485 + 0.2680.
+		head_y = 0.9165
+		# A TRUE CIRCLE, and only 12.1 % of head width. R2.3 rejected the baby-doll register at
+		# 12.3 % of head width, so "big round eyes" is bought with SHAPE (circular, in a pale
+		# sclera) and not with area: 0.0345 x 0.0345 at face_scale 1.08 renders 74.5 mm across on a
+		# 616 mm head = 12.1 % wide by 13.9 % of head height, inside the R2.3 band on both axes.
+		# Against every other neighbour's vertical OVAL, a circle is unmistakable at gameplay range.
+		eye_w = 0.0345
+		eye_h = 0.0345
+		eye_d = 0.020
+		mouth_w = 0.047
+		mouth_h = 0.042
+		# 0.45: she crinkles shut better than twice as often as anyone else. This is the whole of
+		# "the cheerful one" and it costs zero triangles — see `blink_hold`'s docstring for why a
+		# resting-happy-arc state does NOT work (a character parked on the arcs never blinks).
+		blink_hold = 0.45
+		anim_time_scale = 1.08
+	else:
+		# WIDE, LOW, SQUARE, PLANTED. The two of them side by side is the cast's clearest
+		# dimorphism, which is the entire point of a twin pair.
+		body_scale = 0.76
+		head_semi = Vector3(0.3560, 0.2040, 0.2900)
+		head_n = 3.0
+		# His torso is 0.90 tall, so its top is at 0.40 + 0.235 * 0.90 = 0.6115; chin 0.6015.
+		head_y = 0.8055
+		# AREA-MATCHED TO R2.3, not width-matched. A raked slit 0.0950 x 0.0734 as rendered has
+		# area pi/4 * 0.0950 * 0.0734 = 0.00548 m2 against the R2.3-approved 0.075 x 0.094 eye's
+		# 0.00554 — the same eye area — even though it is wider across, because it is much shorter
+		# proportionally. Width alone would fail the gate; the gate is about the baby-doll read, and
+		# a wide flat wedge is its opposite.
+		eye_w = 0.0440
+		eye_h = 0.0340
+		eye_d = 0.018
+		mouth_w = 0.062
+		mouth_h = 0.030
+		blink_hold = 1.7
+		anim_time_scale = 0.92
 
 
 func _build_geometry() -> void:
-	var dark := skin.darkened(0.18)
-	_add_torso_bean(skin)
-	_add_arms(skin, skin, 0, SURF_LIMB, SURF_LIMB)
-	_add_legs(dark, skin.darkened(0.34), SURF_LIMB)
-	_add_head_shell(skin, SURF_HEAD)
-
-	# R3 — LESS ANIMAL. The ears, the muzzle, the nose and the blush are all gone: those four are
-	# what made the twins read as green teddy bears rather than as creatures. Against the reference
-	# sheet the eyes go up on stalks and the mouth becomes a wide toothy grin, and the two of them
-	# take DIFFERENT stalk silhouettes so they are still tellable apart at a glance.
-	_add_face(EYE, MOUTH, BLUSH, {"mouth_inner": Color("#7a3941"), "nose": false, "blush": false})
-	for b: Node3D in _brows:
-		b.queue_free()
-	_brows.clear()
-	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
-	if mouth_node != null:
-		_orient_on_head(mouth_node, 0.0, -17.0, 0.004)
-		mouth_node.scale = Vector3(1.75, 1.50, 1.0)
-		_add_wide_grin(mouth_node, GRIN, TOOTH, Vector3(0.078, 0.030, 0.019),
-			[[-0.038, 0.018], [0.004, 0.021], [0.040, 0.015]])
-	var by := head_semi.y * 0.70
-	var specs: Array = []
-	if stalk_style == "closeset":
-		# Two short stalks close together and slightly splayed — the wide-eyed one of the pair.
-		specs = [
-			{"base": Vector3(-0.046, by, -0.035), "tip": Vector3(-0.076, 0.359, -0.046), "r": 0.023, "splay": -0.12},
-			{"base": Vector3(0.046, by, -0.035), "tip": Vector3(0.081, 0.349, -0.046), "r": 0.023, "splay": 0.12},
-		]
+	_antennae.clear()
+	if _is_pip:
+		_build_pip()
 	else:
-		# One long stalk and one short — deliberately lopsided, which no animal is.
-		specs = [
-			{"base": Vector3(-0.086, by, -0.035), "tip": Vector3(-0.132, 0.493, -0.049), "r": 0.024, "splay": -0.22},
-			{"base": Vector3(0.084, by, -0.035), "tip": Vector3(0.116, 0.356, -0.044), "r": 0.024, "splay": 0.18},
-		]
-	_add_eyestalks(specs, skin, SCLERA, 0.048)
-	_build_apron()
-
-	for i in maxi(antenna_count, 1):
-		# +/-0.085, not +/-0.062: Pop's two antennae used to clear his eyestalks by about a
-		# millimetre, and the lower crown would have pushed the bulbs straight through the stems.
-		var sx2 := 0.0 if antenna_count == 1 else (-0.085 if i == 0 else 0.085)
-		var tilt := 0.0 if antenna_count == 1 else (0.38 if i == 0 else -0.38)
-		var a := _add_antenna(_head, Vector3(sx2, head_semi.y - 0.004, -0.030), tilt, skin.darkened(0.28), BULB, 0.15, 0.036)
-		_antennae.append(a)
-		_bulb_mats.append(a.get_meta("bulb_mat") as ShaderMaterial)
-
+		_build_pop()
 	# deterministic (not random) idle phase so the pair bounces visibly out of sync
 	_time = bounce_phase
 
 
-## Cream shop apron with a trim band and a star logo, plus a bow where the strings tie at the back.
-func _build_apron() -> void:
-	_build_apron_bow()
+# ================================================================================== PIP
+func _build_pip() -> void:
+	var dark := skin.darkened(0.18)
+	# TORSO: narrow and tall, and the waist chamfer is OFF. The chamfer is a hard horizontal edge
+	# ringing the bean; keeping it on Pop and dropping it here is a free "soft against hard" cue on
+	# the largest single surface either character has.
+	_add_torso_bean(skin, {"size_mul": Vector3(0.94, 1.10, 0.94), "waist_chamfer": false}
+		.merged(PIP_SURF_HEAD))
+	# Shoulders follow the torso in BOTH axes. `_arm_l`/`_arm_r` are seated by `rebuild()` at the
+	# shared SHOULDER const; only their ROTATION is written per frame, so moving them here is safe.
+	# Left where they were, a 0.94-wide torso would wear its arms 6 % outboard of its own shell.
+	_seat_shoulders(0.94, 1.10)
+	_add_arms(skin, skin, 0, PIP_SURF_LIMB, PIP_SURF_LIMB)
+	_add_legs(dark, skin.darkened(0.34), PIP_SURF_LIMB)
+	# NO CROWN SEAM. The seam is a chamfer band that makes the top of the head read as a PLANE —
+	# exactly right for Pop's slab and exactly wrong for the roundest head in the cast.
+	var head_opts := PIP_SURF_HEAD.duplicate()
+	head_opts["crown_seam"] = false
+	_add_head_shell(skin, head_opts)
+
+	# TWO BIG ROUND EYES ON THE HEAD, low and wide — the eyestalks are gone (-412 tris). yaw 19 /
+	# pitch -5 puts the centres 185 mm apart on a 616 mm head = 30.0 % geometric, inside the
+	# mandated 28-35 % band. The pale sclera is a SIBLING of the dark pupil, not a parent (see
+	# `_build_eye`); at sclera_mul 1.40 the visible eye is 104 mm = 16.9 % of head width, close to
+	# what the twins already showed before this pass — their eyestalks carried 96 mm sclera balls
+	# on a 684 mm head, 14.0 %. "Big round eyes" is therefore bought almost entirely with SHAPE: a
+	# true circle where the whole cast wears vertical ovals, on the roundest head in the cast.
+	#
+	# NO BROWS AND NO LASHES. Brows are the hard vocabulary and lashes are the single most
+	# stereotyped cue available; both twins are children and get neither.
+	var eyes: Array = []
+	for sx: float in [-1.0, 1.0]:
+		eyes.append({"yaw": 19.0 * sx, "pitch": -5.0, "brow": false, "fit_expr": true,
+			"sclera": SCLERA, "sclera_mul": 1.40})
+	_add_face(EYE, MOUTH, PIP_TRIM, {"eyes": eyes, "nose": false, "blush": false, "brows": false,
+		"mouth_inner": Color("#7a3941")})
+	_build_round_slot_mouth()
+
+	_build_fur()
+	_build_pip_apron()
+
+	# EXACTLY ONE ANTENNA, dialogue-locked. Its FORM changes, never its count: a curved matte stem
+	# with a knob cap, in warm coral, instead of the straight capsule and always-emissive ball that
+	# Zorp, Pip, Pop and Bolt all wore. `glow: false` is the load-bearing half — an antenna that
+	# glows is Bolt's organ and Zorp's organ, and three of them is the repetition being fixed.
+	# `curve` bends the stem toward +Z, so the feeler arcs backward over the crown rather than
+	# standing up as another straight spike.
+	_antennae.append(_add_antenna(_head, Vector3(0.0, head_semi.y - 0.012, -0.030), 0.0,
+		skin.darkened(0.28), PIP_KNOB, 0.165, 0.030,
+		{"tip": "knob", "glow": false, "stalk_r": 0.010, "curve": 0.42}))
+
+
+## HER MOUTH: a small ROUND TOOTHLESS SLOT with a tongue. Not a grin, and not a closed arc.
+##
+## The wide toothy grin exists (see `_add_wide_grin`'s own docstring) only to stop a blank
+## STALK-EYED dome reading as an eyeless monster. Her eyes are back on her face, so the exemption
+## no longer applies to her and the grin goes (-252 tris).
+##
+## It is not a `_smile_arc` either. At 8 m a closed arc is ONE DARK LINE, so a cast where six
+## neighbours all wear one is separated only by mouth WIDTH — the weakest possible differentiator on
+## a face you see for two seconds. Closed mouths must differ in KIND: this is a round hole, Pop's is
+## a straight bar with zero curvature, and at most one closed arc survives anywhere in the cast.
+##
+## The slot is assigned to `_mouth_smile` so `_apply_face`'s SMILE_HIDE_AT crossfade still runs: the
+## resting slot fades out as `_mouth_open` widens, instead of a thin line being drawn across a
+## talking mouth (the "two mouths" bug the crossfade exists to prevent).
+func _build_round_slot_mouth() -> void:
+	var fs := face_scale
+	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
+	if mouth_node == null:
+		return
+	_orient_on_head(mouth_node, 0.0, -22.0, 0.004)
+	_free_default_smile()
+	# 0.047 half-width at face_scale 1.08 renders 101.5 mm on a 616 mm head = 16.5 %, just inside
+	# the mandated 16-25 % resting-mouth band.
+	var slot := _node("Slot", mouth_node, Vector3(0.0, 0.0, -0.004))
+	var m_slot := _toon(MOUTH, {"spec": 0.0, "rim": 0.0, "shade": 0.06})
+	_mi(superellipsoid(Vector3(0.047 * fs, 0.031 * fs, 0.013), 2.2, 14, 8), m_slot, slot,
+		Vector3.ZERO, "Cavity")
+	# The tongue sits PROUD of the cavity, not inside it: nested, it pokes through the low-poly
+	# cavity's facets as stray specks (the same failure `_add_mouth` documents for its interior).
+	_mi(sphere(1.0, 10, 5), _toon(PIP_TONGUE, {"spec": 0.0, "rim": 0.0, "shade": 0.12}), slot,
+		Vector3(0.0, -0.012 * fs, -0.010), "Tongue").scale = \
+		Vector3(0.026 * fs, 0.013 * fs, 0.011)
+	# `_apply_face` overwrites this node's SCALE every frame, so nothing here may carry one.
+	_mouth_smile = slot
+
+
+## FUR, AS SILHOUETTE — the user asked for it by name and a shader cannot answer it. She is the only
+## broken outline in the cast: every other neighbour, ours and the robots', is a closed smooth
+## curve, so a ragged edge is the strongest single 8 m read available and nobody else can take it.
+##
+## `fur_ring` fins are three-sided PYRAMIDS at 4 triangles each, never double-sided quads —
+## `toon_soft` is `render_mode cull_back` and MaterialLib has no cull_disabled material, so a quad
+## fringe simply vanishes when the camera walks round the character.
+##
+## THE SHOULDER RINGS ARE THE LOAD-BEARING ONES. A crown-and-jaw-only ruff was rejected: it claims
+## an "inverted teardrop" silhouette while putting nothing at the shoulder, so the cut-out stays a
+## plain bean with a ragged head. Widening her at the shoulders is what makes the taper real.
+func _build_fur() -> void:
+	var m_fur := _toon(PIP_FUR, _matte({"spec": 0.02}))
+	# JAW RUFF. Seated at 62 % of the way down the head, where the shell's own half-width is
+	# head_semi.x * (1 - 0.62^n)^(1/n) = 0.2763; the ring sits just inside that so the fins emerge
+	# from the shell rather than floating off it. The head is 0.308 x 0.272 in plan, so the node is
+	# squashed in Z to match — `fur_ring` builds a CIRCULAR ring and an unsquashed one would stand
+	# 36 mm off the cheeks and bury itself in the chin.
+	var ruff := _node("NeckRuff", _head, Vector3(0.0, -head_semi.y * 0.80, 0.0))
+	# THE FINS HANG, THEY DO NOT STAND. `fur_ring` builds every fin rising slightly along +Y, and
+	# at the jaw line that renders as a ring of upward triangles directly under the mouth — a SAW,
+	# or a row of teeth, which is the opposite of soft. A half turn about X (still a rotation, so
+	# the pyramids' winding is untouched) drops them into a hanging fringe instead. Seated at 80 %
+	# of the way down the head rather than 62 %, so it reads as a neck ruff and not as a beard.
+	ruff.rotation.x = PI
+	ruff.scale = Vector3(1.0, 1.0, head_semi.z / head_semi.x)
+	_mi(fur_ring(0.222, 0.086, 0.038, 30, 0.42), m_fur, ruff, Vector3.ZERO, "Fins")
+	# SHOULDER TUFTS. `arc_deg` 240 leaves the gap centred on the ring's local +Z; the yaw below
+	# turns that gap INBOARD, so no fin is built inside the torso. These ride `_arm_l`/`_arm_r`,
+	# whose rotation is animated and whose children therefore follow the arm for free.
+	for side: Array in [[-1.0, _arm_l], [1.0, _arm_r]]:
+		var tuft := _node("ShoulderTuft", side[1], Vector3(0.0, -0.004, 0.0))
+		tuft.rotation.y = -PI * 0.5 * float(side[0])
+		_mi(fur_ring(0.060, 0.050, 0.040, 18, 0.40, 240.0), m_fur, tuft, Vector3.ZERO, "Fins")
+	# FRINGE — a short 150-degree row of fur hanging over the brow, which is also the only thing
+	# either twin has where a brow would be.
+	#
+	# TWO EARLIER PLACEMENTS RENDERED NOTHING, and both failures are worth writing down.
+	#   * A fur ring only shows if `ring_r` is close to the head's half-width AT THAT HEIGHT. The
+	#     first attempt put a 74 mm ring deep inside a shell whose semi-axes there are 272-308 mm,
+	#     so the fins never reached the surface at all.
+	#   * A ring high on the crown DOES emerge, but its front fins point at the camera and are seen
+	#     end-on: they read as a scatter of white specks on the forehead, not as hair. Fur only
+	#     reads when its fins are broadside to the viewer, which means hanging DOWN across the face
+	#     or standing OUT at the silhouette — the neck ruff and the shoulder tufts respectively.
+	# So: seated at 36 % height, where the shell solves to 0.3016 half-width, with the fins turned
+	# over to hang. `rotation.z`, NOT `rotation.x`: a half turn about Z flips Y (fins drop) while
+	# leaving +Z alone, so the arc's gap stays at the BACK and the 150-degree row lands across the
+	# front. Turning it about X would drop the fins and swing the gap round to the front with them,
+	# which builds the fringe on the back of her head.
+	var lock := _node("Fringe", _head, Vector3(0.0, head_semi.y * 0.36, 0.0))
+	lock.rotation.z = PI
+	lock.scale = Vector3(1.0, 1.0, head_semi.z / head_semi.x)
+	_mi(fur_ring(0.290, 0.048, 0.046, 17, 0.35, 150.0), m_fur, lock, Vector3.ZERO, "Fins")
+
+
+## HER APRON: cut LONG, SOFT and GATHERED, in a dusty-rose trim.
+## Against Pop's stiff square waist apron this is a real garment difference rather than a recolour,
+## and garment cut is one of the cues that survives the character being reduced to a cut-out.
+func _build_pip_apron() -> void:
 	var m_apron := _toon(APRON, _matte({"spec": 0.02}))
-	var m_trim := _toon(APRON_TRIM, _matte({}))
-	# the apron is a flat-fronted bib with a hard edge, not a second bean stuck on the first
-	_mi(superellipsoid(Vector3(TORSO_RX * 0.94, TORSO_RY * 0.80, TORSO_RZ * 0.95), 3.1, 16, 9),
-		m_apron, _torso, Vector3(0.0, TORSO_Y - 0.035, -0.028), "Apron")
-	var band := _mi(torus(0.155, 0.205, 20, 6), m_trim, _torso, Vector3(0.0, TORSO_Y + 0.135, 0.0), "Neckband")
+	var m_trim := _toon(PIP_TRIM, _matte({}))
+	var k := Vector3(0.94, 1.10, 0.94)
+	# Exponent 2.6, not the 3.1 of the old hard-edged bib: a soft-cornered panel hanging low, and it
+	# is sized off HER torso multipliers so it cannot float off a bean it was not cut for.
+	var a_semi := Vector3(TORSO_RX * k.x * 0.90, TORSO_RY * k.y * 0.86, TORSO_RZ * k.z * 0.95)
+	var a_pos := Vector3(0.0, TORSO_Y - 0.062, -0.026)
+	_mi(superellipsoid(a_semi, 2.6, 16, 9), m_apron, _torso, a_pos, "Apron")
+	# GATHERS: four vertical ridges standing proud of the panel, so the fabric reads as folded cloth
+	# rather than as one flat plate.
+	#
+	# A FOLD IS A NARROW COPY OF THE APRON'S OWN PROFILE, NOT A RIB LAID ON TOP OF IT. The first
+	# build used a rib at a fixed z, and it shipped the exact failure `_add_plastron`'s docstring
+	# records for the same mistake, inverted: the apron's front RECEDES toward its top and bottom,
+	# so a fixed-z rib is buried across the middle and pokes THROUGH at both ends. Rendered, it was
+	# a row of white spikes rising out of the hem — a picket fence, not a gather.
+	# Same exponent and the same y and z semi-axes means the identical vertical profile, so the
+	# ridge hugs the panel over its whole length; 1.02 in z is the only thing that lifts it, and
+	# 0.99 in y guarantees it can never reach past the apron's own edge.
+	var m_fold := _toon(APRON.darkened(0.13), _matte({"spec": 0.0}))
+	var f_mesh := superellipsoid(Vector3(0.022, a_semi.y * 0.99, a_semi.z * 1.02), 2.6, 10, 7)
+	for i in 4:
+		_mi(f_mesh, m_fold, _torso, a_pos + Vector3(lerpf(-0.112, 0.112, float(i) / 3.0), 0.0, 0.0),
+			"Fold")
+	var band := _mi(torus(0.140, 0.184, 20, 6), m_trim, _torso,
+		Vector3(0.0, TORSO_Y + 0.152, 0.0), "Neckband")
 	band.scale = Vector3(1.0, 0.6, 1.0)
-	_mi(rounded_box(Vector3(0.30, 0.045, 0.30), 0.014, 12), m_trim, _torso, Vector3(0.0, TORSO_Y - 0.16, 0.0), "Hem")
-	# shop badge — a chamfered plate with an inlay, replacing the six-ball star (R2.3)
-	var logo := _node("Logo", _torso, Vector3(0.0, TORSO_Y - 0.01, -TORSO_RZ - 0.008))
-	var m_star := _toon(STAR, _matte({"spec": 0.05}))
-	_mi(rounded_box(Vector3(0.086, 0.086, 0.016), 0.024, 12), m_star, logo, Vector3.ZERO, "Badge").rotation.z = PI * 0.25
-	_mi(rounded_box(Vector3(0.046, 0.046, 0.018), 0.012, 10), _toon(APRON.darkened(0.24), _matte({})),
+	# A soft rolled hem, not the hard chamfered plate Pop wears.
+	_mi(torus(0.150, 0.196, 18, 6), m_trim, _torso, Vector3(0.0, TORSO_Y - 0.196, -0.010), "Hem") \
+		.scale = Vector3(1.0, 0.45, 1.0)
+	_build_badge(_torso, Vector3(0.0, TORSO_Y - 0.020, -TORSO_RZ * k.z - 0.012), APRON)
+	_build_apron_bow(m_trim, TORSO_RX * k.x, TORSO_RZ * k.z, TORSO_Y - 0.055)
+
+
+# ================================================================================== POP
+func _build_pop() -> void:
+	var dark := skin.darkened(0.18)
+	# TORSO: wide, low and square, with the waist chamfer KEPT so the bean has a hard horizontal
+	# edge round it. NO surface dict anywhere on him — see POP_SURF.
+	_add_torso_bean(skin, {"size_mul": Vector3(1.10, 0.90, 1.08)})
+	_seat_shoulders(1.10, 0.90)
+	_add_arms(skin, skin, 0, POP_SURF, POP_SURF)
+	_add_legs(dark, skin.darkened(0.34), POP_SURF)
+	# FEET PLANTED WIDE. `_apply_pose` rewrites `_leg_l.position` and `_leg_r.position` EVERY FRAME
+	# from the shared HIP_X const, so widening the stance by moving the leg pivots is silently
+	# undone on the next tick. Offsetting the leg's MESH CHILDREN instead is a rigid offset inside
+	# the leg's own frame, which survives the pose and still swings correctly with the walk cycle.
+	for side: Array in [[-1.0, _leg_l], [1.0, _leg_r]]:
+		for c: Node in (side[1] as Node3D).get_children():
+			(c as Node3D).position.x += 0.017 * float(side[0])
+	_add_head_shell(skin, POP_SURF)
+
+	# TWO SLANTED ALMOND WEDGES flat on the head — the stereotypical grey-alien eye the user named
+	# by description. yaw 21 / pitch 4 puts the centres 220 mm apart on a 712 mm head = 30.9 %,
+	# inside the 28-35 % band; yaw 17 would have measured 24.8 % because his head is so much wider
+	# than the one the band was calibrated on. Solid ink, NO sclera and NO iris, one small dull
+	# glint — the hardest, flattest face in the cast against Pip's pale round one.
+	#
+	# NO BROWS: two dark bars over two raked almonds is a scowl, and the almond's own pointed inner
+	# corner already does everything a brow would.
+	var eyes: Array = []
+	for sx: float in [-1.0, 1.0]:
+		# 12 degrees of rake, not the 20 the first build used. RAKE DIRECTION IS FACE GRAMMAR: an
+		# eye whose inner end sits LOW is the angry-brow configuration, and the grey-alien wrap
+		# (inner low, sweeping up and out to the temple) is structurally that same shape. Rendered
+		# at 20 degrees Pop is scowling, on a character who is a child shopkeeper and who
+		# deliberately has no brows precisely to avoid that read. 12 degrees is still visibly
+		# slanted — nobody else in the cast has a raked eye at all — without tipping into a glare.
+		eyes.append({"yaw": 21.0 * sx, "pitch": 4.0, "brow": false, "fit_expr": true,
+			"slant_deg": 12.0 * sx})
+	_add_face(EYE, MOUTH, POP_TRIM, {"eyes": eyes, "nose": false, "blush": false, "brows": false,
+		"mouth_inner": Color("#7a3941")})
+	_cut_almond_eyes()
+	_build_bar_mouth()
+
+	# CROWN: both glowing bulb antennae replaced by TWO FLAT MATTE PADDLE BLADES in teal-slate.
+	# Still exactly two — "Two antennae. Double the listening!" — and nothing else in the game wears
+	# a non-glowing blade, so the count survives while the organ stops being Zorp's and Bolt's.
+	#
+	# THE RAKE IS ON THE SEAT, NOT ON THE ANTENNA. `_crown_row` hands back tilt CHILDREN whose
+	# parents hold the placement with +Y along the head's real outward normal, so rotating them
+	# cannot destroy the seating (writing rotation on an `_orient_on_head`-posed node rebuilds its
+	# basis from euler and throws the placement away — a bug three files here have written by hand).
+	# And `_animate_extras` writes `rotation.z` on the ANTENNA pivot every frame, so a rake written
+	# there would be fighting the animation. rotation.x +0.35 on the seat's child tips the blade
+	# toward +Z, which is backward: raked back, and therefore never readable as an ear.
+	# The stem is 115 mm, not the 85 mm of the first build: at 85 mm the blade sat almost on the
+	# crown and rendered as a teal BLOCK bolted to his head rather than as an antenna, and the rake
+	# had nothing to swing on. 0.52 rad of rake reads unmistakably as "leaning back" in profile;
+	# 0.35 was still close enough to vertical to read as a pair of ears, which is the one thing
+	# these must never be.
+	for sx: float in [-1.0, 1.0]:
+		var seat: Node3D = _crown_row(1, 62.0, 62.0, 52.0 * sx)[0]
+		seat.rotation.x = 0.52
+		_antennae.append(_add_antenna(seat, Vector3.ZERO, 0.0, POP_BLADE.darkened(0.22),
+			POP_BLADE, 0.115, 0.042, {"tip": "paddle", "glow": false, "stalk_r": 0.008}))
+
+	# PLASTRON — a contrasting belly plate with a hard rim, two scute seams and a navel. Six of the
+	# eighteen reference creatures wear one and nothing in this game does: Zorp's badge and the
+	# twins' star are emblems on CLOTHING, which is the opposite statement. This says "this is its
+	# body, not its shirt", and it is a large flat value contrast, so it reads at gameplay distance.
+	# `torso_mul` is not optional — the helper solves the torso's own superellipsoid for the plate's
+	# depth, and passing the wrong bean sinks the plate inside it.
+	# Broad and shallow, to match the build it is on: 0.150 half-width against his 0.244-half torso
+	# is 61 % of the chest. The first build's 0.140 x 0.150 was TALLER than it was wide, which on a
+	# wide low body reads as a bib rather than as a shell, and it also hung down into the apron.
+	# Lifted to y 0.462 so the plate INCLUDING ITS RIM (0.327 -> 0.597) clears the waist apron
+	# (0.147 -> 0.317). The rim is `size3 + rim_w`, 15 mm larger on every side, and forgetting it is
+	# what left the apron's top edge crossing the plate and notching a V out of its bottom corners.
+	# outright: his torso is only 0.90 tall, so there is no room for the two to be approximate.
+	_add_plastron(POP_PLATE, POP_PLATE_RIM, Vector3(0.158, 0.120, 0.022), true,
+		{"torso_mul": Vector3(1.10, 0.90, 1.08), "y": 0.462, "seams": 2, "spec": 0.04})
+	_build_pop_apron()
+
+
+## HIS EYE. `_eye_mesh("almond")` is `superellipsoid(Vector3.ONE, 1.55, ...)`, and an exponent below
+## 2 does NOT draw an almond: it pulls the diagonals in while the axes stay at 1.0, which is a
+## rounded OCTAHEDRON — a four-pointed diamond with points at top, bottom and both ends. It would
+## read as a gemstone, not as an eye, so the shared helper is left alone for whoever wants a diamond
+## and the lens is cut here in two parts:
+##   * the body is a ROUNDED RECTANGLE at n 2.4 — flat top and bottom edges, soft corners, which is
+##     what gives the wedge its hard graphic edge when scaled to 0.044 x 0.030;
+##   * plus one CONE that carries the taper out to a point, so it is an almond and not a lozenge.
+## Both live in the oval's own UNIT space, so `_apply_face`'s per-frame `oval.scale` — including the
+## blink squash and the EYE_WIDE term — carries them correctly with no extra bookkeeping.
+##
+## THE POINT IS ON THE OUTER CORNER, WHICH IS NOT WHAT THE PLAN SAID, AND THE REASON IS IN A RENDER.
+## The plan specified the point at the INNER corner, reasoning from human eye anatomy (the inner
+## canthus). Built that way and rendered, it is a SCOWL: the eye's top edge slopes down toward the
+## midline and terminates in a sharp downward hook right beside the nose, which is the exact shape
+## of an angry eyebrow — and this character deliberately has no brows precisely because "two dark
+## bars over two raked almonds is a scowl". Putting the point outboard instead gives the canonical
+## grey: a fat rounded lobe low and near the nose, tapering up and back to a point at the temple.
+## Same two primitives, same rake, and it reads curious rather than hostile.
+##
+## WHICH WAY IS OUTBOARD: `_orient_on_head` ends in `Basis.looking_at(outward, Vector3.UP)`, and for
+## BOTH eyes that basis's local +X comes out pointing toward the model's own +X. So outboard is
+## local +X for the eye on the model's right and local -X for the one on its left — sign(yaw). The
+## rake is the same sign: `slant_deg` +20 on the right eye rotates local +X up, lifting the pointed
+## outer end and dropping the round inner one.
+func _cut_almond_eyes() -> void:
+	var m_eye := _toon(EYE, {"spec": 0.0, "rim": 0.0, "shade": 0.08})
+	for i in _eye_ovals.size():
+		var oval := _eye_ovals[i]
+		oval.mesh = superellipsoid(Vector3.ONE, 2.4, 16, 9)
+		var outer := 1.0 if _eyes[i].position.x > 0.0 else -1.0
+		# taper_tube grows along +Y, so the cone is turned to lie along the eye's long axis. Its
+		# base is buried well inside the lens (x 0.30) and it runs out to x 1.52, so the two shapes
+		# read as one continuous taper instead of a spike stuck on a blob; the base radius is 0.86
+		# of the lens half-height for the same reason. Total span 2.52 units = 120 mm as rendered,
+		# 16.8 % of a 712 mm head.
+		var tip := _node("Canthus", oval, Vector3(0.30 * outer, 0.0, 0.0))
+		tip.rotation.z = -PI * 0.5 * outer
+		_mi(taper_tube(1.22, 0.86, 0.04, 0.0, 3, 5), m_eye, tip, Vector3.ZERO, "Point")
+
+
+## HIS MOUTH: a straight LIPLESS BAR. Zero curvature is unmistakable against Pip's round hole at any
+## distance, which is the point — closed mouths in this cast differ in KIND, never in width. It is
+## also the deadpan register his ten shipped lines were written in.
+##
+## The tongue is not lost: `_add_mouth` already built Lip / Inner / Tongue underneath as
+## `_mouth_open`, so talking still opens a real mouth with a tongue in it. There are no teeth
+## anywhere on him.
+func _build_bar_mouth() -> void:
+	var fs := face_scale
+	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
+	if mouth_node == null:
+		return
+	_orient_on_head(mouth_node, 0.0, -19.0, 0.004)
+	_free_default_smile()
+	# 0.130 is a FULL width (rounded_box takes full extents) -> 140 mm rendered on a 712 mm head =
+	# 19.7 %, inside the mandated 16-25 % band.
+	var bar := _node("Bar", mouth_node, Vector3(0.0, 0.0, -0.004))
+	_mi(rounded_box(Vector3(0.130 * fs, 0.011 * fs, 0.014), 0.0045, 10),
+		_toon(MOUTH, {"spec": 0.0, "rim": 0.0, "shade": 0.06}), bar, Vector3.ZERO, "Slot")
+	_mouth_smile = bar
+
+
+## HIS APRON: SHORT and SQUARE, cut back to a waist apron so the plastron is not hidden behind it.
+## No neckband — a waist apron has no bib to hang from, and dropping it recovers the strap that
+## would otherwise cross the belly plate.
+func _build_pop_apron() -> void:
+	var m_apron := _toon(POP_APRON, _matte({"spec": 0.02}))
+	var m_trim := _toon(POP_TRIM, _matte({}))
+	var k := Vector3(1.10, 0.90, 1.08)
+	# Exponent 3.6 for hard square corners, with the segment count raised to match: a high
+	# superellipsoid exponent packs all the curvature into a narrow chamfer band, so it needs MORE
+	# segments, not fewer, or the panel ships faceted (the mistake `head_n`'s docstring records).
+	#
+	# IT IS A FRONT PANEL, NOT A WRAP. The first build gave it 96 % of the torso's own half-depth
+	# and sat it on the centre line, so it wrapped the whole lower body and rendered as a big bright
+	# cream mass round his hips — a nappy. Pulling the centre forward with a smaller half-depth puts
+	# its back face INSIDE the bean and its front 18 mm proud of the torso surface at that height
+	# (the torso's own front solves to z -0.1522 at y 0.240), so all that is visible is a square
+	# panel hanging off the front of the waist. That is also what keeps the plastron visible, which
+	# is the whole reason his apron was cut down in the first place.
+	_mi(superellipsoid(Vector3(TORSO_RX * k.x * 0.82, TORSO_RY * k.y * 0.40, 0.125),
+		3.6, 24, 12), m_apron, _torso, Vector3(0.0, TORSO_Y - 0.168, -0.045), "Apron")
+	_mi(rounded_box(Vector3(0.330, 0.040, 0.330), 0.012, 12), m_trim, _torso,
+		Vector3(0.0, TORSO_Y - 0.084, 0.0), "Waistband")
+	# A slim trim ON THE APRON FRONT, not a bar across the whole body. The full-width version
+	# framed the cream panel top and bottom and the result read as a nappy.
+	_mi(rounded_box(Vector3(0.240, 0.024, 0.080), 0.008, 12), m_trim, _torso,
+		Vector3(0.0, TORSO_Y - 0.232, -0.150), "Hem")
+	_build_badge(_torso, Vector3(0.0, TORSO_Y - 0.156, -0.178), POP_APRON)
+	_build_apron_bow(m_trim, TORSO_RX * k.x, TORSO_RZ * k.z, TORSO_Y - 0.084)
+
+
+# ================================================================================== shared parts
+## Moves the arm roots to follow this twin's torso multipliers. The shared SHOULDER const is sized
+## for an unscaled bean, so a 1.10-wide torso wears its arms inside its own shell and a 0.94-wide
+## one wears them floating outboard. `rebuild()` seats these nodes and `_apply_pose` only ever
+## writes their ROTATION, so a position written here survives every frame.
+func _seat_shoulders(kx: float, ky: float) -> void:
+	# SHOULDER.y is 44.7 % of the way up the default bean's half-height; hold that FRACTION so the
+	# arms sit at the same place on the body rather than at the same absolute height.
+	var y := TORSO_Y + TORSO_RY * ky * ((SHOULDER.y - TORSO_Y) / TORSO_RY)
+	_arm_l.position = Vector3(-SHOULDER.x * kx, y, SHOULDER.z)
+	_arm_r.position = Vector3(SHOULDER.x * kx, y, SHOULDER.z)
+
+
+## Drops `_add_mouth`'s default smile ARC and clears the reference before it dies. Order matters:
+## `_apply_face` walks `_mouth_smile` every frame, and `queue_free` does not take effect until the
+## end of the frame, so the node is hidden first and the field nulled BEFORE the free is queued —
+## otherwise `rebuild()`'s own closing `_apply_pose` call touches a node already scheduled to die.
+func _free_default_smile() -> void:
+	if _mouth_smile != null and is_instance_valid(_mouth_smile):
+		var dead := _mouth_smile
+		_mouth_smile = null
+		dead.visible = false
+		dead.queue_free()
+
+
+## The Cosmo Depot badge: a chamfered plate with an inlay, turned 45 degrees. Both twins wear it —
+## it is the shop's mark, not a personal one, and it is the one thing about the uniform that SHOULD
+## be identical on the pair.
+func _build_badge(parent: Node3D, pos: Vector3, base: Color) -> void:
+	var logo := _node("Logo", parent, pos)
+	_mi(rounded_box(Vector3(0.086, 0.086, 0.016), 0.024, 12), _toon(STAR, _matte({"spec": 0.05})),
+		logo, Vector3.ZERO, "Badge").rotation.z = PI * 0.25
+	_mi(rounded_box(Vector3(0.046, 0.046, 0.018), 0.012, 10), _toon(base.darkened(0.24), _matte({})),
 		logo, Vector3(0.0, 0.0, -0.004), "Inlay").rotation.z = PI * 0.25
 
 
 ## Rear detail: the apron's waist strings tied in a bow, so the back view is not a blank green bean.
-func _build_apron_bow() -> void:
-	var m_trim := _toon(APRON_TRIM, _matte({}))
-	var bow := _node("ApronBow", _torso, Vector3(0.0, TORSO_Y - 0.045, TORSO_RZ + 0.010))
-	_mi(rounded_box(Vector3(0.300, 0.048, 0.030), 0.012, 12), m_trim, _torso, Vector3(0.0, TORSO_Y - 0.045, TORSO_RZ * 0.86), "WaistTie")
+## `rx` / `rz` are this twin's own torso half-extents, so the tie sits on the bean each of them
+## actually has.
+##
+## THE TIE MUST BE SIZED FROM THE TORSO, NOT HARDCODED. The shipped 0.300 width was cut for an
+## unscaled bean; on a re-proportioned one it reaches past the torso's own silhouette AT THE DEPTH
+## IT SITS AT and its two ends poke out through the FRONT, where they render as a pair of pale dots
+## either side of the belly. They were visible on both twins and looked like buttons. The torso is a
+## superellipsoid, so its half-width at z = 0.86 * rz is rx * (1 - 0.86^n)^(1/n) = 0.6125 * rx;
+## sizing the tie to 92 % of that keeps it hidden behind the body at any set of multipliers.
+func _build_apron_bow(m_trim: Material, rx: float, rz: float, y: float) -> void:
+	var bow := _node("ApronBow", _torso, Vector3(0.0, y, rz + 0.010))
+	var tie_w := 2.0 * rx * pow(1.0 - pow(0.86, TORSO_N), 1.0 / TORSO_N) * 0.92
+	_mi(rounded_box(Vector3(tie_w, 0.048, 0.030), 0.012, 12), m_trim, _torso,
+		Vector3(0.0, y, rz * 0.86), "WaistTie")
 	for sx: float in [-1.0, 1.0]:
-		var loop := _mi(superellipsoid(Vector3(0.050, 0.036, 0.024), 2.8, 8, 5), m_trim, bow, Vector3(0.052 * sx, 0.010, 0.0), "Loop")
+		var loop := _mi(superellipsoid(Vector3(0.050, 0.036, 0.024), 2.8, 8, 5), m_trim, bow,
+			Vector3(0.052 * sx, 0.010, 0.0), "Loop")
 		loop.rotation.z = 0.42 * sx
-		var tail := _mi(rounded_box(Vector3(0.036, 0.090, 0.024), 0.010, 10), m_trim, bow, Vector3(0.038 * sx, -0.062, 0.0), "Tail")
+		var tail := _mi(rounded_box(Vector3(0.036, 0.090, 0.024), 0.010, 10), m_trim, bow,
+			Vector3(0.038 * sx, -0.062, 0.0), "Tail")
 		tail.rotation.z = 0.26 * sx
-	_mi(rounded_box(Vector3(0.046, 0.040, 0.028), 0.012, 10), _toon(STAR, _matte({"rim": 0.02})), bow, Vector3.ZERO, "Knot")
+	_mi(rounded_box(Vector3(0.046, 0.040, 0.028), 0.012, 10), _toon(STAR, _matte({"rim": 0.02})),
+		bow, Vector3.ZERO, "Knot")
 
 
+# ================================================================================== animation
+## NEITHER TWIN PULSES A BULB ANY MORE, so there is no `emission_strength` loop here.
+## Both crown organs are built with `glow: false`; `_add_antenna` still hands back a `bulb_mat`
+## meta (a matte material with the uniform present) precisely so a caller that kept the old pulse
+## would be inert rather than crashing, but writing to it would be dead code, so it is gone.
+##
+## The visible tell is MOTION instead, and the two of them move differently: Pip's single feeler
+## sways nearly three times as far as Pop's stiff blades, and his two counter-rotate against each
+## other rather than swinging together.
 func _animate_extras(delta: float) -> void:
 	_t += delta
-	var wob := sin(TAU * (_t + bounce_phase) / 1.7)
+	var wob := sin(TAU * (_t + bounce_phase) / (1.5 if _is_pip else 2.1))
+	var amp := 0.17 if _is_pip else 0.06
+	var droop := clampf(-pose(P.EXTRA_A), 0.0, 1.0) * (0.75 if _is_pip else 0.30)
 	for i in _antennae.size():
 		var a := _antennae[i]
 		var rest: float = a.get_meta("rest_tilt", 0.0)
-		var droop := clampf(-pose(P.EXTRA_A), 0.0, 1.0)
-		a.rotation.z = rest + 0.10 * wob * (1.0 if i == 0 else -1.0) - 0.75 * droop
-	for m: ShaderMaterial in _bulb_mats:
-		m.set_shader_parameter("emission_strength", 0.6 + 1.0 * (0.5 + 0.5 * sin(TAU * (_t + bounce_phase) / 2.2)))
+		a.rotation.z = rest + amp * wob * (1.0 if i == 0 else -1.0) - droop

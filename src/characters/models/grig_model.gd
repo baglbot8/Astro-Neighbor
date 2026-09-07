@@ -4,22 +4,43 @@ extends ChibiModel
 ## cast: he has quarried the terraces one riser at a time for longer than he will admit, numbers each
 ## one, and has firm views about where you put your feet.
 ##
-## Built to docs/NEXT_WORLDS.md's "CREATURE grig" section. Five traits nothing shipped has:
-##   1. ONE EYE. A single 0.112 m eyeball on ONE thick central stalk. Every existing neighbour has
+## Built to docs/NEXT_WORLDS.md's "CREATURE grig" section, then widened by R4 (CAST VARIETY), which
+## was raised because five aliens shared one recipe — eyestalks, a wide grin and a spotted `sd_skin`
+## head — and so read as one creature in five colours. Grig is one of the TWO characters allowed to
+## keep the stalk and the grin (they are load-bearing on him, see below); everything else about him
+## moves further away from the other four. Seven traits nothing else in the cast has:
+##   1. ONE EYE. A single 0.112 m eyeball on ONE thick central trunk. Every other neighbour has
 ##      exactly two (Zorp two matched stalks, Pip long+short, Pop two close-set, Mayor Orbit two on
 ##      goggle lenses, Bolt and DJ Nova two on a faceplate).
-##   2. A TALL NARROW HEAD — 0.490 x 0.860 x 0.470 at n 3.2, nearly twice as tall as it is wide. The
-##      geometric inverse of the one cached dome Zorp, Pip, Pop and Mayor Orbit used to share, and a
+##   2. A TALL HEAD — 0.550 x 0.660 x 0.500 at n 3.2. Not the tallest-to-widest ratio the first
+##      build tried (see HEAD_SEMI_GRIG's R3.3 note) but still the tallest head in the cast, and a
 ##      standing stone with a face, which ties him to his planet.
-##   3. SQUARE BLUNT TEETH (three) and a TWO-lobed mitt, against everyone else's pointed rows and
-##      three-or-zero fingers.
+##   3. AN UNDER-BITE. Four blunt near-square teeth hang from the upper jaw and TWO tusks stand up
+##      from the lower one, so the two rows interlock the wrong way round. Everyone else's mouth is
+##      a single top row of points. Plus a TWO-lobed mitt against three-or-zero fingers.
 ##   4. WORN STONE — a tally collar of chalk slabs on a cord, one notched per terrace cut. The rest
 ##      of the cast wears cloth (Zorp's scarf, the twins' aprons, the Mayor's waistcoat).
-##   5. A LAGGING EYE-TRACK. The stalk arrives a beat after the head turns; nothing else in the cast
+##   5. A LAGGING EYE-TRACK. The trunk arrives a beat after the head turns; nothing else in the cast
 ##      has a delayed feature, and on one huge eye it reads instantly as thought.
+##   6. A CAPITAL. One continuous chamfered block of cut stone ringing the top of the head, with the
+##      dome and the eye trunk still rising above it — see `_build_capital`. Every other crown in the
+##      game is a ROW of small parts (antennae, stalks, horns, cups, spikes); his is a single
+##      quarried block, so it shares no primitive with anyone.
+##   7. CRACKED CRAZE AND NOTHING ELSE. His skin runs `sd_skin` with the spot term switched fully
+##      OFF, so he is cell walls only where Zorp is blobs only — see SURF_HEAD.
 ##
-## Plus horizontal STRATA BANDS round the head that mirror the contour rings of his own world — the
-## strongest available statement that the creature and the planet were designed together.
+## The STRATA BANDS round the head are meant to be an eighth, mirroring the contour rings of his own
+## world. THEY DO NOT RENDER AND NEVER HAVE — the mesh is built by a method that cannot produce the
+## shape it asks for. `_add_strata`'s comment has the measurement, the root cause, the fix and the
+## reason the fix is deliberately not applied in this change. Do not cite them as a shipped feature.
+##
+## WHAT HE DELIBERATELY DOES NOT HAVE. R4 caps the hard/heavy vocabulary — brow ridge, heavy lid,
+## horns, tusks, fangs, shoulder yoke — at TWO per character, because the cast's complaint was that
+## everything read male and the fix is a WIDER range of shapes, not a bigger pile of the same ones on
+## the character who already wears them. Grig spends his two on the LID RIDGE and the TUSKS. So: no
+## horn ring around the trunk, no dorsal bump ridge and no shoulder yoke, all three of which were
+## drafted for him and all three of which are deliberately absent. If you are adding hard geometry
+## here, you are over the cap and something else has to come off first.
 
 # ---------------------------------------------------------------------------------- palette
 ## R2.6 (pastel and matte). He must NOT vanish into his own world: the ground is cool grey chalk
@@ -80,21 +101,42 @@ const EYE_LAG_MAX := 0.14
 const EYE_LAG_RATE := 2.8
 
 # ---------------------------------------------------------------------------------- the mouth
-## Small, low and square-toothed, because the head is tall. At the chibi default (-20 deg) the mouth
-## would float in the middle of a 0.86 m blank plane and read as a nose; -46 puts it 0.198 m above
-## the chin. Rendered grin width is 0.062 * 2 * 1.30 = 0.161 m = 33% of the 0.490 m head, which is
-## over the style guide's 16-25% band — see the documented exemption for stalk-eyed neighbours in
-## docs/NEXT_WORLDS.md (Zorp already ships at 44%, and with the eye up on a stalk the grin is the
-## only thing that makes the blank head read as a face at all).
-## Raised from -46: on the shorter head that put the mouth almost under his chin.
+## Low on the face, because the head is tall. At the chibi default (-20 deg) the mouth would float in
+## the middle of a blank plane and read as a nose. Raised from the first build's -46, which on the
+## shortened head put the mouth almost under his chin.
 const MOUTH_PITCH_GRIG := -26.0
-## Widened to fill the face, matching the ruling in docs/OPEN_ISSUES.md 35: on a stalk-eyed
-## neighbour the grin is the ONLY thing on the head, so it has to carry it.
+## DO NOT SHRINK THIS. Rendered grin width is 0.062 * 2 * 1.95 = 0.242 m = 44% of the 0.550 m head,
+## which is over the style guide's 16-25% band — see the documented exemption for stalk-eyed
+## neighbours in docs/NEXT_WORLDS.md, which Zorp also ships under. R4 makes the exemption a
+## STRUCTURAL rule rather than a per-character judgement: exactly the two characters who keep their
+## eyes up on stalks keep the wide grin, because `_add_wide_grin`'s own docstring says the grin
+## exists only to stop a large blank stalk-eyed head reading as an eyeless monster. Put the eyes back
+## on the face and the exemption goes with them. On top of that, docs/OPEN_ISSUES.md 35-36 records
+## that Grig's FIRST build was rejected for exactly "a small mouth on a large blank field"; a
+## narrower grin here walks straight back into a recorded failure.
 const MOUTH_SPREAD := Vector3(1.95, 1.70, 1.0)
 const GRIN_SIZE := Vector3(0.062, 0.026, 0.018)
-## Three teeth, blunt and near-SQUARE (0.020/0.024/0.018 wide against a 0.0161 height) rather than
-## the pointed rows the rest of the cast wears. Odd count and uneven widths, per `_add_wide_grin`.
-const GRIN_TEETH: Array = [[-0.038, 0.022], [-0.002, 0.026], [0.034, 0.020], [0.062, 0.016]]
+## AN UNDER-BITE — R4, and the thing that makes his mouth structurally unmistakable against Fen's
+## from the same helper: hers is wide, shallow and blunt, his is short, heavy and bites the wrong way
+## round. FOUR blunt near-SQUARE uppers (full widths 0.022 / 0.026 / 0.020 / 0.016 against the
+## 0.0161 height `_add_tooth` derives from GRIN_SIZE.y) rather than the pointed rows the rest of the
+## cast wears; even count but uneven widths and uneven spacing, so it still is not a neat row.
+##
+## THE LAST TWO ENTRIES ARE THE TUSKS. `_add_tooth`'s third element is the ROW: +1 hangs from the
+## upper jaw (what every tooth in the game did before R4, when the row was hardcoded), -1 stands up
+## from the LOWER jaw. Fourth is the shape — "point" builds a `taper_tube` cone, turned over for a
+## lower tusk. Two-element entries above still mean exactly what they always did.
+##
+## WHY x = +/-0.048 AND NOT THE CORNERS AT +/-0.062. A "point" tooth is seated at
+## `row * GRIN_SIZE.y * 0.92` = -0.0239, and the cavity is a superellipsoid at n 2.4, so its own half
+## height falls off toward the corners: 0.0228 at x 0.036, 0.0188 at 0.048, 0.0167 at 0.050 and
+## nothing at 0.062. Seated at the true corner a tusk's base would hang ~7 mm clear of the cavity and
+## render as a cream cone floating on the chin — the failure the mouth code already records once, as
+## "two maroon specks that read as nostrils". At 0.048 the base is 5 mm below the cavity edge, which
+## is the tusk EMERGING FROM THE LIP rather than detached from it, and it is far enough out to still
+## read as a corner tusk rather than a pair of fangs under the front teeth. Rendered before shipping.
+const GRIN_TEETH: Array = [[-0.038, 0.022], [-0.002, 0.026], [0.034, 0.020], [0.062, 0.016],
+	[-0.048, 0.020, -1, "point"], [0.048, 0.020, -1, "point"]]
 
 # ---------------------------------------------------------------------------------- skin texture
 ## THE ZERO-SHADER-EDIT SKIN ROUTE, the same one AlienModel proved: `_matte()` duplicates the opts
@@ -111,21 +153,42 @@ const GRIN_TEETH: Array = [[-0.038, 0.022], [-0.002, 0.026], [0.034, 0.020], [0.
 ## `skin` kind, weighted the opposite way from Zorp's: he is spot-dominant (blotches, an animal),
 ## Grig is EDGE-dominant (crazed cell walls, cracked chalk).
 ##
-## FREQUENCY: sd_skin runs at 7 cycles/unit at scale 1.0, so 2.2 puts 15.4 cells/m — about 7.5
-## across the 0.490 m head and 13 down its 0.860 m height. AMPLITUDE IS A PALETTE COST (an A/B on
+## FREQUENCY: sd_skin runs at 7 cycles/unit at scale 1.0, so 2.2 puts 15.4 cells/m — about 8.5
+## across the 0.550 m head and 10 down its 0.660 m height. AMPLITUDE IS A PALETTE COST (an A/B on
 ## one frame moved a head crop's saturation mean by +0.099), so strength stays at 0.9; re-measure in
 ## src/world/world.tscn, never in a showcase, if it is raised.
+##
+## R4 — ZERO SPOTS. `surface_spot` goes 0.30 -> 0.0 and `surface_scales` 1.15 -> 1.35. He was
+## already the only edge-weighted character; this makes him own the treatment OUTRIGHT rather than
+## merely differing from Zorp by a dial setting, which is exactly the "same creature, different
+## parameters" complaint R4 was raised over. Read sd_skin's own line to see how total the switch is:
+##   d = (spot - spot_dc) * spot_amount * 0.6 - (edge - 0.3242) * scale_amount * 0.4
+## `spot_amount` 0.0 multiplies the ENTIRE spot term away, DC included, so there is no residue and no
+## tint to correct — he is cell walls and nothing else, and Zorp is blobs. It is also the cheap half
+## of the palette bargain: the edge term is centred on its own measured mean, so a pure craze costs
+## essentially no mean saturation where the spots cost 4-6%.
+## `surface_spot_radius` is DELIBERATELY ABSENT rather than set to 0: with the amount at 0 the radius
+## feeds nothing, and MaterialLib derives `surface_spot_dc` from it, so leaving a stale radius here
+## would only invite someone to "fix" the pairing later. Set the radius again if you ever set the
+## amount again — MaterialLib.spot_dc() keeps the two consistent for you.
+## `crown_seam: false` — R4. The seam is a flat pancake superellipsoid and is invisible for the same
+## reason the strata bands are (see `_add_strata`), and the capital's rim plate now draws the hard
+## horizontal it was there to draw, in a primitive that actually renders. Skipping it is 110 tris
+## back toward the capital's cost.
 const SURF_HEAD := {"surface": "skin", "surface_scale": 2.2, "surface_strength": 0.9,
-	"surface_spot": 0.30, "surface_scales": 1.15, "surface_spot_radius": 0.30,
+	"surface_spot": 0.0, "surface_scales": 1.35,
 	"surface_near": 9.0, "surface_far": 26.0, "surface_macro": 0.10, "surface_macro_cycles": 2.2,
-	"seam_color": SKIN_DEEP}
+	"crown_seam": false, "seam_color": SKIN_DEEP}
 ## Limbs are far smaller than the head (a mitt is ~150 mm), so the head's setting would put barely
 ## one cell on a hand, and texture that stops at the jaw looks like a mask. But this is NOT the head
 ## preset scaled down: OPEN_ISSUES item 35 records that the head setting rendered the twins' arms as
 ## CAULIFLOWER, and names the culprit — the cell-EDGE term on a small, strongly curved capsule.
 ## Grig's head is deliberately edge-dominant, so his limbs are the one place that has to invert his
-## own identity: edges nearly off (0.18 against the head's 1.15), spots carrying what little is
-## there, finer and much weaker.
+## own identity: edges nearly off (0.18 against the head's 1.35), spots carrying what little is
+## there, finer and much weaker. THE SPOTS STAY HERE even though the head's are now switched off —
+## with the edge term this low something has to carry the texture, and at 0.35 amount on a 150 mm
+## mitt it is a faint mottle at conversation range, not the blotchy hide the head used to share with
+## Zorp. Do not "tidy" this to match SURF_HEAD; matching it renders the arms as cauliflower.
 const SURF_LIMB := {"surface": "skin", "surface_scale": 6.5, "surface_strength": 0.55,
 	"surface_spot": 0.35, "surface_scales": 0.18, "surface_spot_radius": 0.30,
 	"surface_near": 7.0, "surface_far": 20.0}
@@ -187,11 +250,19 @@ func _build_geometry() -> void:
 	_add_legs(SKIN_DEEP, FOOT, SURF_LIMB)
 	_add_head_shell(SKIN, SURF_HEAD)
 	_add_strata()
+	_build_capital()
 
-	# `blush: false` and `nose: false` are the switches the robots already use. Passing a TRANSPARENT
-	# blush colour instead does not work — the toon material is opaque, so an alpha-0 colour renders
-	# as two BLACK ovals on the cheeks. The colour below is inert; the flag is what matters.
-	_add_face(EYE, GRIN, SKIN_DEEP, {"mouth_inner": Color("#5a3a2e"), "nose": false, "blush": false})
+	# `blush: false`, `nose: false` and `brows: false` are switches on `_add_face`. Passing a
+	# TRANSPARENT colour instead does not work — the toon material is opaque, so an alpha-0 blush
+	# renders as two BLACK ovals on the cheeks. The colour below is inert; the flags are what matter.
+	#
+	# `brows: false` is R4 and replaces a hand-rolled deletion loop that used to run inside
+	# `_make_cyclops`. With the eye up on a trunk, two brow bars left on the head read as a second
+	# pair of eyes and put the generic animal face straight back; the lid ridge is his one brow and
+	# it lives on the trunk with the eye it belongs to. Not building them is also cheaper than
+	# building and freeing them, and it means nothing can reach `_brows` holding a dead node.
+	_add_face(EYE, GRIN, SKIN_DEEP,
+		{"mouth_inner": Color("#5a3a2e"), "nose": false, "blush": false, "brows": false})
 	_make_cyclops()
 	_build_stalk()
 	_build_mouth()
@@ -201,61 +272,43 @@ func _build_geometry() -> void:
 
 # ================================================================================= the one eye
 ## CYCLOPS SURGERY — spelled out because getting it wrong is a crash and not a cosmetic bug. The
-## warning is in `_add_eyestalks`' own docstring (chibi_model.gd:903-910) and in the completeness
-## critic's note on Fen in docs/NEXT_WORLDS.md: an eye that is not in the arrays is invisible to the
-## whole expression system, and an INDEX that outlives its node is worse.
+## warning is in `_add_eyestalks`' own docstring and in the completeness critic's note on Fen in
+## docs/NEXT_WORLDS.md: an eye that is not in the arrays is invisible to the whole expression system,
+## and an INDEX that outlives its node is worse.
 ##
-## `_add_face()` always builds exactly TWO eyes (`for i in 2`, chibi_model.gd:718) and appends one
-## entry per eye to FOUR parallel arrays — `_eyes`, `_eye_ovals`, `_eye_happy`, `_eye_round` — plus
-## one brow per eye to `_brows`. `_apply_face()` walks every one of those arrays EVERY FRAME to drive
-## blink, squint, the happy "^" and the surprise "O". So it is not enough to free the second eye:
-## an index left pointing at a freed node is a dangling reference that fires on the very next blink.
+## `_add_face()` builds one eye per entry in its `eyes` list, defaulting to TWO, and `_build_eye`
+## appends one entry per eye to FIVE parallel arrays — `_eyes`, `_eye_ovals`, `_eye_happy`,
+## `_eye_round` and `_eye_size`. `_apply_face()` walks all five EVERY FRAME to drive blink, squint,
+## the happy "^" and the surprise "O". So it is not enough to free the second eye: an index left
+## pointing at a freed node is a dangling reference that fires on the very next blink.
 ##
-## The order below is deliberate:
-##   1. Free the brows FIRST, while their parents are still alive, and clear `_brows`. Brow 0 belongs
-##      to the SURVIVING eye, so it has to go explicitly — it cannot be left to die with eye 1. With
-##      the eye up on a stalk the brow bars are the only marks left on the head and they read as a
-##      second pair of eyes, which puts the animal face straight back; the lid ridge replaces them.
-##   2. Drop index 1 from all four eye arrays BEFORE anything is freed, so there is never a window
-##      in which an array holds a freed node. `_eye_flat` is guarded too: `_add_face` never fills it
-##      (only the robots' `_add_flat_eyes` does), but a guard costs nothing and a future base-class
-##      change that starts filling it would otherwise take this model down silently.
-##   3. Detach the dead eye from the tree and THEN queue_free it. `remove_child` is immediate, so it
-##      stops rendering this frame rather than at the end of the idle frame; `queue_free` alone is
-##      deferred and would leave a visible second eye for one frame at spawn.
-## Its children (Oval, Glint, Happy, Round) are freed with it, which is why they must already be out
-## of the arrays.
+## THIS USED TO BE HAND-ROLLED AND WAS A LATENT CRASH. It dropped index 1 from FOUR arrays, which was
+## correct until R4 added the fifth (`_eye_size`, the array that makes per-eye sizes survive
+## `_apply_face`'s every-frame rewrite). A five-array structure taken apart by four-array code leaves
+## `_eye_size` one entry long against `_eyes` zero — and `_apply_face` indexes them together. So the
+## teardown is now `_drop_eye()`, which is the base class's own single point of removal and cannot
+## fall out of step with the arrays again. DO NOT re-inline it here, whatever it is replaced with.
+##
+## `_drop_eye` also erases the dead eye's brow from `_brows` — a no-op for Grig, who is built with
+## `brows: false` and never has any (see `_build_geometry`), but it is what makes the helper safe for
+## a model that does.
 func _make_cyclops() -> void:
-	for b: Node3D in _brows:
-		# Detached, not just queued: `queue_free` alone runs at the END of the frame, so the brow bar
-		# would render for one frame on a face that is not supposed to have one — and on Grig it
-		# would render up on the STALK, because the surviving eye gets re-parented there next.
-		var bp := b.get_parent()
-		if bp != null:
-			bp.remove_child(b)
-		b.queue_free()
-	_brows.clear()
 	if _eyes.size() < 2:
 		return
-	var dead: Node3D = _eyes[1]
-	_eyes.remove_at(1)
-	_eye_ovals.remove_at(1)
-	_eye_happy.remove_at(1)
-	_eye_round.remove_at(1)
-	if _eye_flat.size() > 1:
-		_eye_flat.remove_at(1)
-	var parent := dead.get_parent()
-	if parent != null:
-		parent.remove_child(dead)
-	dead.queue_free()
-	# The surviving eye's happy arc and surprise ball are authored at chibi defaults (0.042 ring,
-	# 0.043 x 0.048 ball) and are NOT scaled by eye_w/eye_h, so on a pupil this size both expressions
-	# would visibly SHRINK the eye at the moment it is meant to be most readable. Scale their parent
-	# nodes — not the meshes — so the states land at the resting pupil's width.
+	_drop_eye(1)
+	# The surviving eye's happy arc and surprise ball are authored at fixed chibi sizes (a 0.042 ring
+	# and a 0.043 x 0.048 ball), so on a pupil this size both expressions would visibly SHRINK the
+	# eye at the exact moment it is meant to be most readable. These two numbers are tuned by eye at
+	# the gameplay camera and are NOT the ratio arithmetic — `_build_eye`'s `fit_expr` opt would
+	# derive 0.088/0.0375 = 2.35 and 0.092/0.0470 = 1.96, which overshoots the arc. Grig therefore
+	# stays opted OUT of `fit_expr` and keeps the measured values.
+	# MULTIPLIED, not assigned: `_build_eye` has already written the per-eye ratio into these nodes.
+	# For Grig that ratio is exactly (1, 1, 1) — he sets no per-eye size — so this is identical to
+	# the assignment it replaces, but it stays correct if he is ever given one.
 	if not _eye_happy.is_empty():
-		_eye_happy[0].scale = Vector3(1.85, 1.85, 1.0)
+		_eye_happy[0].scale *= Vector3(1.85, 1.85, 1.0)
 	if not _eye_round.is_empty():
-		_eye_round[0].scale = Vector3(2.05, 1.92, 1.0)
+		_eye_round[0].scale *= Vector3(2.05, 1.92, 1.0)
 
 
 ## One thick central stalk, one huge eye, and a heavy lid ridge over it — all re-parented under a
@@ -309,13 +362,13 @@ func _adopt(n: Node3D, pivot: Node3D, origin: Vector3) -> void:
 
 
 # ================================================================================= head detail
-## PANEL GROOVES as horizontal STRATA — thin bands that wrap the WHOLE head, mirroring the contour
-## rings of Grig's own planet.
+## PANEL GROOVES as horizontal STRATA — thin bands intended to wrap the WHOLE head, mirroring the
+## contour rings of Grig's own planet.
 ##
 ## docs/NEXT_WORLDS.md specifies three `arc_tube`s placed with `_orient_on_head`, but an arc_tube
 ## sweeps in the tangent plane at one point, so it draws a stripe across the FRONT of the face and
-## stops — it cannot wrap. The band below is the same trick `_add_head_shell` already uses for the
-## crown seam, and it wraps 360 degrees for the same 110 tris.
+## stops — it cannot wrap. The band below uses the same trick `_add_head_shell` uses for its crown
+## seam. That trick does not work, for either of them.
 ##
 ## The arithmetic: on the head superellipsoid, the horizontal half-extents at height `frac * semi.y`
 ## are `semi.xz * (1 - |frac|^n)^(1/n)`. Building the band at that size times `STRATA_PROUD` welds it
@@ -323,32 +376,143 @@ func _adopt(n: Node3D, pivot: Node3D, origin: Vector3) -> void:
 ## head's own exponent keeps the band's cross-section identical to the shell's, which the crown
 ## seam's fixed 2.8 only approximates.
 ##
-## THE NUMBERS ARE SET BY WHAT SURVIVES 7.4 m, not by taste. A band of y-semi `t` oversized by `s`
-## shows over the height where `(1 - (dy/t)^n)^(1/n) > 1/s`, i.e. `|dy| < t * (1 - s^-n)^(1/n)`. The
-## first build used t 0.009 / s 1.008 and measured a 5.7 mm visible line — 0.67 px at the gameplay
-## camera's ~117 px/m, which is below Nyquist and would shimmer rather than read. t 0.024 / s 1.035
-## gives a 23.7 mm band standing 8.6 mm proud: ~2.8 px tall and ~1 px of relief, which holds. It is
-## also 3.5% of the head's half-width, almost exactly the 2.9% his planet's 0.279 m risers are of its
-## 9.5 m radius — the creature banded at his own world's proportion.
+## ===== READ THIS BEFORE TOUCHING THE NUMBERS: THE BANDS DO NOT CURRENTLY RENDER. =====
+## They have never rendered. The comment that used to sit here derived a "23.7 mm band standing
+## 8.6 mm proud, ~2.8 px at the gameplay camera" from the IDEAL superellipsoid surface. The MESH is
+## not that surface, and at this aspect ratio it is nowhere near it.
 ##
-## Heights: 0.50 / 0.20 / -0.12 of the y semi-axis, which lands them at 0.215 / 0.086 / -0.052
-## head-local. With the crown seam at 0.351 that is four lines at an even ~0.133 m pitch down the
-## face, and the lowest still clears the mouth at -0.232. Grading a stack of horizontals at a
-## constant pitch is exactly what his terraces do.
+## `superellipsoid()` warps a `SphereMesh` by radially projecting each unit vertex direction onto the
+## implicit surface (`se_point`), so the mesh can only reach the equatorial radius if some vertex row
+## actually lies ON the equator. Godot places `SphereMesh`'s latitude rows at `v = j / (rings + 1)`,
+## so an EVEN ring count has no equator row at all. `_segs(5, 4)` is 4 — even — putting the rows at
+## 0, 36, 72, 108, 144 and 180 degrees. On a 4:1-flat superellipsoid the 72-degree ray runs out of
+## the thin Y axis long before it reaches the wide X one, so the outermost row lands at 66% of the
+## intended radius. The whole band therefore sits INSIDE the head shell and draws nothing.
+##
+## MEASURED, NOT DEDUCED. The frac 0.50 band asks for x-semi 0.2918; the built mesh's own
+## `get_aabb()` reports half-x 0.193374, and a row-by-row model of the above predicts 0.193374.
+## Rendering all three bands in pure #ff0000 produces a head with no red on it anywhere.
+##
+## THE FIX, WHEN SOMEONE PICKS THIS UP, IS TWO CHANGES AND IT IS NOT A TUNING PASS:
+##   1. NEVER BUILD A FLAT SUPERELLIPSOID. Build the band NEAR-ROUND — `(rx, rx, rz)`, where the
+##      outermost row reaches 99% of the equator instead of 66% — and squash it to a band with a
+##      NODE SCALE (`band.scale = Vector3(1, STRATA_T / rx, 1)`). Same 110 tris, same cache, and the
+##      cross-section at y = 0 is still exactly the head's own plan, which is what lets it hug a
+##      rounded-square head where a circular torus or a `rounded_box` cannot. It is also robust
+##      rather than lucky: picking a ring count that happens to land on the equator works today and
+##      breaks silently the next time `ChibiModel.DETAIL` moves.
+##   2. MATCH THE HEAD'S RADIAL COUNT. At `STRATA_SEGS` 18 the band resolves to an 11-gon against the
+##      head's 23-gon, so it pokes out at its vertices and sinks between them and renders as a DASHED
+##      line. 30 (-> 18 segments) is the smallest count that wraps cleanly at PROUD 1.04.
+##
+## WHY IT IS NOT FIXED IN THIS CHANGE, WHICH IS A DELIBERATE CALL AND NOT AN OVERSIGHT. I built all
+## of that, rendered it, and it makes him WORSE. Three visible horizontals on a rounded vertical form
+## read as BARREL HOOPS, and with the R4 craze underneath them the head reads as woven wicker — a
+## beehive with a plate on top. That is structural, not a tuning problem: the band pitch (0.099 m)
+## and the craze cell size (0.065 m) are close enough to interfere, and I could not separate them by
+## thinning the bands (t 0.020), softening them (proud 1.036) or refining the craze (scale 3.4).
+## Making them visible is therefore a DESIGN change needing its own pass and its own review, not a
+## side effect of the skin change — and the character shipped and passed review looking exactly as he
+## does now. So the geometry below is byte-for-byte the shipped build, and this comment is the fix.
+## Whoever takes it: the strongest lead is FEWER bands (one heavy line low on the face reads as a
+## stratum; three read as a barrel), and re-measure with the craze on, never in isolation.
+##
+## THE SAME TRAP IS LIVE ON EVERY CHARACTER IN THE GAME — see the report's `needs_from_others`.
+## `_add_head_shell`'s crown seam (y-semi 0.10 of the head's, `rings` 6 -> 4) and `_add_torso_bean`'s
+## waist chamfer (y-semi 0.085, `rings` 6 -> 4) are the same flat-pancake-at-an-even-ring-count
+## shape. Do not copy this pattern into a new part.
+##
+## Heights: 0.50 / 0.20 / -0.12 of the y semi-axis, which lands them at 0.165 / 0.066 / -0.040
+## head-local — an even 0.099 m pitch down the face, and the lowest still clears the mouth. Grading a
+## stack of horizontals at a constant pitch is exactly what his terraces do.
 const STRATA_FRACS: Array = [0.50, 0.20, -0.12]
 const STRATA_T := 0.024
+const STRATA_SEGS := 18
 const STRATA_PROUD := 1.035
 
 func _add_strata() -> void:
 	var m := _toon(SKIN_DEEP, _matte({"rim": 0.02}))
 	for frac: float in STRATA_FRACS:
 		var k: float = pow(maxf(1.0 - pow(absf(frac), head_n), 1e-4), 1.0 / head_n)
-		var semi := Vector3(head_semi.x * k * STRATA_PROUD, STRATA_T, head_semi.z * k * STRATA_PROUD)
-		_mi(superellipsoid(semi, head_n, 18, 5), m, _head,
+		# The head's own half-extents at this height, oversized so a rim of the band SHOULD clear the
+		# shell. It does not — the mesh only reaches 66% of `rx`. See the note above.
+		var rx: float = head_semi.x * k * STRATA_PROUD
+		var rz: float = head_semi.z * k * STRATA_PROUD
+		# THIS IS THE SHIPPED BUILD AND IT IS THE BROKEN ONE — a flat superellipsoid, kept byte for
+		# byte so this change stays a skin/crown/mouth change and nothing else. The working form is
+		# `superellipsoid(Vector3(rx, rx, rz), ...)` plus `band.scale = Vector3(1, STRATA_T / rx, 1)`
+		# at STRATA_SEGS 30; do not apply it without re-judging the barrel-hoop read. See above.
+		_mi(superellipsoid(Vector3(rx, STRATA_T, rz), head_n, STRATA_SEGS, 5), m, _head,
 			Vector3(0.0, head_semi.y * frac, 0.0), "Strata")
 
 
-## The grin, dropped to the bottom of the tall face and given three blunt square teeth.
+# --------------------------------------------------------------------------------- the capital
+## THE CAPITAL — R4's answer to "every alien has the same crown". A thick chamfered block of cut
+## stone that the head widens into near the top, with a hard dark rim line bedded under it, and the
+## head's own dome and eye trunk still rising above it. A quarried thing on a creature who cuts stone
+## for a living and whose head is already a standing stone.
+##
+## WHY A BLOCK AND NOT A RING OF HORNS. A ring of four short banded horns was drafted for him and was
+## rejected twice over. First on variety: Mayor Orbit already wears horns and Pip and Fen were both
+## being given crown ROWS, so a fifth row of small repeated cones is the eyestalk problem rebuilt
+## with a new part number — at 8 m a row of nubs and a row of spikes and a row of stems are one
+## shape. Second on the hard-vocabulary cap: horns plus his existing lid ridge plus the new tusks is
+## three, and the cap is two. So his crown is ONE CONTINUOUS PIECE, which is a topology nobody else
+## in the cast has at all — every other crown in the game is a row of small parts.
+##
+## WHY `rounded_box` AND NOT `superellipsoid`. A flat superellipsoid cannot make a slab. Its vertex
+## rows sit at fixed latitudes and collapse onto the top plane within a few centimetres of the axis,
+## so it renders as a shallow double cone; the strata note above has the full measurement, and it is
+## why those bands are invisible. `rounded_box` places every vertex as `n * r + sign(n) * (half - r)`,
+## so the flat faces are exactly flat and the corner radius is exactly the bevel — which is what
+## "chamfered with a hard rim" means, and it is immune to the ring count. It is also rectangular in
+## plan, which agrees with the head: at head_n 3.2 the horizontal cross-section is a rounded square.
+##
+## THE THREE THINGS THE FIRST BUILDS GOT WRONG, ALL FOUND BY RENDERING, NONE BY ARITHMETIC:
+##   1. A THIN WIDE SLAB IS A PLANK. 0.598 across by 0.070 thick is 8.5:1, and the head at that
+##      height is only 0.380 wide, so it read as a shelf cantilevered out of nothing. The shipping
+##      block is 0.536 by 0.124 — 4.3:1 — and its BASE is flush with the head (0.268 against the
+##      head's 0.263 at y 0.176) so it grows out of the shell instead of being stuck on it.
+##   2. THE SAME COLOUR *AND* THE SAME TEXTURE AS THE HEAD MERGES; THE SAME COLOUR ALONE DOES NOT.
+##      Carrying SURF_HEAD onto the slab let the craze run straight over it and the eye read one
+##      object. But a CONTRASTING pale dressed-stone tone was worse: under the gameplay camera's
+##      28-degree downward pitch the top face is fully exposed and a large bright plane up there is
+##      the single brightest thing on him, which R2.6 exists to prevent. Shipping answer: the head's
+##      OWN skin tone, SMOOTH and unpatterned, with SKIN_DEEP under it. The texture break separates
+##      the two forms at conversation range; the dark rim and the overhang carry it at 6.5 m.
+##   3. IT RINGS THE TOP OF THE HEAD, IT DOES NOT CAP IT. Seated as a cap, with its top face the
+##      highest thing on the skull, it read as a mortarboard from every gameplay angle — and a hat is
+##      Mayor Orbit's. Dropped so it spans 0.176-0.300 against a crown at 0.330, the dome and the eye
+##      trunk still stand above it, and a horizontal that has head above it is a cornice, not a brim.
+##
+## THE OVERHANG IS THE READ. Surface detail cannot carry identity at the 7.4 m gameplay camera — the
+## library's own header puts a 10% albedo change at ~1.5% on screen — so this has to be silhouette.
+## The head is 0.181 half-wide at the block's top face and the block is 0.268, so it stands 87 mm
+## proud there and breaks the outline from every angle. The rim plate is wider still (0.282) and much
+## thinner, so the profile is light over dark over crazed: the same trick the strata bands were meant
+## to play, on a part that actually renders.
+##
+## CLEARANCE: the block's top is 0.300, the eye trunk's base is 0.257 and its tip 0.560, so the trunk
+## rises THROUGH the block and out of the head's crown — intended, and it gives the lagging eye-track
+## somewhere to hinge. `marker_clearance()` is unchanged: 1.673 still dwarfs the block's 1.301.
+const CAPITAL_RIM := Vector3(0.564, 0.026, 0.514)   ## FULL size — `rounded_box` halves it
+const CAPITAL_RIM_Y := 0.168                        ## 0.155-0.181, bedded under the block's base
+const CAPITAL_RIM_BEVEL := 0.010
+const CAPITAL_SLAB := Vector3(0.536, 0.124, 0.488)
+const CAPITAL_SLAB_Y := 0.238                       ## 0.176-0.300, against a crown at 0.330
+const CAPITAL_SLAB_BEVEL := 0.028
+
+func _build_capital() -> void:
+	# Rim first and slightly larger, so it shows as a hard dark lip all the way round the block's
+	# underside rather than as a separate plate. Same order `_add_plastron` uses for the same reason.
+	_mi(rounded_box(CAPITAL_RIM, CAPITAL_RIM_BEVEL, 18), _toon(SKIN_DEEP, _matte({"rim": 0.02})),
+		_head, Vector3(0.0, CAPITAL_RIM_Y, 0.0), "CapitalRim")
+	# NO surface opts: the block is a DRESSED face against a weathered one. See point 2 above.
+	_mi(rounded_box(CAPITAL_SLAB, CAPITAL_SLAB_BEVEL, 18), _toon(SKIN, _matte({"rim": 0.03, "spec": 0.03})),
+		_head, Vector3(0.0, CAPITAL_SLAB_Y, 0.0), "CapitalSlab")
+
+
+## The grin, dropped to the bottom of the tall face, four blunt square uppers and two upward tusks.
 func _build_mouth() -> void:
 	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
 	if mouth_node == null:

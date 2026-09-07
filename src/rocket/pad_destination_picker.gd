@@ -31,15 +31,25 @@ signal chosen(planet_id: String)
 signal cancelled()
 
 const EDGE := 22.0
+## The tile size at FIVE destinations, and the ceiling at any count - `_tile_width()` only ever
+## shrinks it. Six tiles at this width overflow the viewport by 106 px (see the arithmetic there).
 const TILE := Vector2(196.0, 236.0)
 const TILE_GAP := 14.0
 const DISC := 84.0
-## THE ROW FITS FIVE TILES AND NO MORE. Standing on any world, every OTHER world is a tile, so a
-## six-planet system puts five in the row: 5 x TILE.x + 6 x TILE_GAP (the HBox separations either
-## side of the two chevrons included) + 2 x 34 px of chevron = 1132 px, plus the card's 22 px of
-## padding each side = 1176 px inside a 1280 px viewport. A seventh world would add another
-## 196 + 14 = 210 px and overflow by 106 px, so world #7 needs a different layout, not another entry.
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
+## Chevron column width, and the card's own horizontal padding - both feed `_tile_width()`.
+const CHEVRON_W := 34.0
+const CARD_PAD := 22.0
+## Design width of the viewport. `window/stretch/mode` is canvas_items at 1280 x 720 with aspect
+## "expand", so the virtual width is 1280 on a 16:9 screen and only ever GROWS on a wider one -
+## 1280 is the honest worst case to fit inside.
+const VIEWPORT_W := 1280.0
+## Breathing room left at each end of the card, so the row never touches the frame edge.
+const ROW_MARGIN := 24.0
+## Below this a tile is too narrow for an 84 px globe with a two-line world name under it. If the
+## arithmetic in `_tile_width()` ever asks for less, the row genuinely does not fit and the layout
+## has to change (a scroll, or paging) rather than the tile shrinking further.
+const TILE_MIN_W := 150.0
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
 ## One line of flavour per world - the same copy the map card used.
 const BLURB := {
 	"home": "Home sweet orbit.",
@@ -48,6 +58,7 @@ const BLURB := {
 	"hub": "Starport Plaza. Shops & town hall.",
 	"fen": "Fen's long dusk. Mirror pools, huge sun.",
 	"grig": "Grig's chalk steps. All the way up.",
+	"vela": "Vela's long array. Cold, quiet, listening.",
 }
 ## Seconds `interact` is ignored after the card opens. The player just pressed E to board; without
 ## this, pressing it again — the most natural thing in the world — launches before they have read
@@ -58,6 +69,8 @@ const ARM_SECONDS := 0.5
 const SCRIM := Color(0.06, 0.05, 0.16, 0.46)
 
 var _options: Array[String] = []
+## Resolved once in `_ready()` from the number of destinations. See `_tile_width()`.
+var _tile_size: Vector2 = TILE
 var _index := 0
 var _tiles: Array[PanelContainer] = []
 var _discs: Array[Control] = []
@@ -96,6 +109,7 @@ func _ready() -> void:
 		cancelled.emit.call_deferred()
 		queue_free.call_deferred()
 		return
+	_tile_size = Vector2(_tile_width(_options.size()), TILE.y)
 	var root := Control.new()
 	root.name = "Root"
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -189,11 +203,31 @@ func _ready() -> void:
 	UIStyle.pop_in(_card, 0.32)
 
 
+## THE ROW HAS TO FIT, AND THE TILE IS THE ONLY THING THAT MAY GIVE. Standing on any world every
+## OTHER world is a tile, so a seven-planet system puts SIX in the row. At the authored 196 px that
+## is 6 x 196 + 7 x TILE_GAP (the HBox separations either side of the two chevrons included)
+## + 2 x 34 of chevron + 2 x 22 of card padding = 1386 px in a 1280 px viewport: 106 px of
+## overflow, and a PanelContainer does not scroll — it clips, and the outermost world quietly
+## stops being choosable. So the width is SOLVED for the count instead of authored:
+##
+##     w = (VIEWPORT_W - 2*ROW_MARGIN - 2*CARD_PAD - 2*CHEVRON_W - (n+1)*TILE_GAP) / n
+##
+## which gives 207 at five (capped back to the authored 196, so the shipped five-tile card is
+## pixel-identical) and 170 at six — 1218 px of card inside 1280. Eight worlds would ask for 145
+## and hit TILE_MIN_W, which is the point at which this stops being a width problem.
+func _tile_width(count: int) -> float:
+	if count <= 0:
+		return TILE.x
+	var usable := VIEWPORT_W - 2.0 * ROW_MARGIN - 2.0 * CARD_PAD - 2.0 * CHEVRON_W \
+		- float(count + 1) * TILE_GAP
+	return clampf(floorf(usable / float(count)), TILE_MIN_W, TILE.x)
+
+
 ## A destination tile: painted globe, name, and — on the selected one — the launch verb itself.
 func _make_tile(id: String, index: int) -> PanelContainer:
 	var tile := PanelContainer.new()
 	tile.name = "Tile_" + id
-	tile.custom_minimum_size = TILE
+	tile.custom_minimum_size = _tile_size
 	tile.mouse_filter = Control.MOUSE_FILTER_STOP
 	# The card is keyboard/pad driven, but a player who reads this as a menu may well reach for the
 	# mouse, so a click selects and launches. Deliberately NOT on hover: the Director drives every
@@ -222,7 +256,8 @@ func _make_tile(id: String, index: int) -> PanelContainer:
 	var label := UIStyle.make_label(Hud.planet_display_name(id), "", HORIZONTAL_ALIGNMENT_CENTER)
 	label.add_theme_font_size_override("font_size", 19)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size = Vector2(TILE.x - 26.0, 52.0)
+	# Tracks the tile, so a narrower row wraps "Zorp's Violet Hollow" instead of overflowing it.
+	label.custom_minimum_size = Vector2(_tile_size.x - 26.0, 52.0)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	inner.add_child(label)
 	_names.append(label)
@@ -251,7 +286,7 @@ func _make_chevron(glyph: String) -> Label:
 	var l := UIStyle.make_label(glyph, "", HORIZONTAL_ALIGNMENT_CENTER)
 	l.add_theme_font_size_override("font_size", 30)
 	l.add_theme_color_override("font_color", UIStyle.TEXT_SOFT)
-	l.custom_minimum_size = Vector2(34.0, 0.0)
+	l.custom_minimum_size = Vector2(CHEVRON_W, 0.0)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return l
 

@@ -45,6 +45,10 @@ const BIOME_DUST := {
 	"flats": Color("#d69f8e"),
 	# The palest dust in the dict, which is correct for a world that kicks up chalk powder.
 	"chalk": Color("#d6c9b4"),
+	# The only COOL dust in the dict (hue 218 against everyone else's 20-40), because the one thing
+	# a frost world must not share with Grig is a warm limb band. S 0.236 keeps it inside the
+	# 0.22-0.32 window above; this is ice fog, not a blue sky (R2.1 forbids the dome).
+	"frost": Color("#9fb4d0"),
 }
 ## Per-biome tint mixed into the deep-space stops (10%) so Zorp's sky is faintly violet etc.
 const BIOME_DEEP := {
@@ -56,6 +60,9 @@ const BIOME_DEEP := {
 	# measurably warmer and darker than anyone else's, and a near-black rust does the same for Grig.
 	"flats": Color("#2e1c30"),
 	"chalk": Color("#2a1f1c"),
+	# A near-black glacial teal - the coldest deep in the dict, and the only one on the cyan side
+	# of the navy the other five sit around.
+	"frost": Color("#132e33"),
 }
 
 ## Night fill light. Strongly blue on purpose: the reference night grade washes the whole world in

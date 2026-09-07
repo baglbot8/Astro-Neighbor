@@ -235,17 +235,42 @@ vec3 sd_hash3(vec3 p) {
 // ALIEN SKIN — round spots sitting on a scaly cell ground.
 //
 // Why this is not sd_rock: rock is fbm, which is MOTTLING. Spots and scales are CELLULAR, so this
-// runs one 3x3x3 cellular pass and reads two things out of it — distance to the nearest feature
-// point (f1) gives round spots, and the gap to the second nearest (f2 - f1) gives the ridge between
-// neighbouring cells, which is what reads as scales.
+// runs one 3x3x3 cellular pass and reads two things out of it — a spot wherever a PICKED feature
+// point is within `spot_radius`, and the gap between the two nearest points (f2 - f1) as the ridge
+// between neighbouring cells, which is what reads as a scaly ground.
 //
-// Only some cells get a spot (`pick`), so the skin is blotchy like the reference sheet's creatures
-// rather than a regular polka dot.
+// Only some cells get a spot (`step(0.52, h.x)`, so 47.8% of them), which makes the skin blotchy
+// like the reference sheet's creatures rather than a regular polka dot.
+//
+// SPOTS ARE ACCUMULATED INSIDE THE LOOP, NOT READ OFF f1 AFTERWARDS. Reading the spot off the
+// nearest point only lets each point paint inside its OWN Voronoi cell, so every spot was clipped
+// flat against its cell wall once the radius grew past the cell. Measured over 600k samples, the
+// clipped form loses 6% of the spot mass at radius 0.55, 19% at 0.74 and 42% at 1.20 — and the
+// missing mass is exactly the outside of each blob, which is the part that made it read as round.
+// Below radius 0.5 the two agree to within 4%, which is why the shipping cast barely moved.
+//
+// spot_dc / THE DC TERM. `d` must average zero or this stops being a pattern and becomes a flat
+// albedo shift. THE SPOT MEAN DEPENDS ON spot_radius AND MUST BE PASSED IN TO TRACK IT — it is not
+// a constant. This used to be a hardcoded 0.22, which is ~6x the true mean at the shipping radius
+// 0.34, so alien skin was a flat 6% DARKENING with a faint pattern on top (the +0.099 saturation
+// cost in docs/OPEN_ISSUES.md item 35); above radius ~0.70 the same constant flips sign and
+// LIGHTENS the character instead. Measured means of the accumulated spot term:
+//
+//     radius  0.10   0.20   0.30   0.34   0.40   0.50   0.60   0.74   0.90   1.00   1.20
+//     mean    .001   .007   .024   .035   .057   .109   .183   .320   .500   .610   .789
+//
+// fitted to within 0.001 over the whole range by
+//     dc(r) = 1 - exp(-(0.74343*r^3 + 0.52963*r^4 - 0.33228*r^5))
+// which is what `MaterialLib.spot_dc()` evaluates for callers. The r^3 lead term is just the
+// kernel volume times the 0.478 pick rate; the rest is blob overlap saturating toward 1.
+//
+// The edge term's DC was audited the same way and is a true constant (f2 - f1 does not depend on
+// any uniform): measured mean 0.3242 over 600k samples, against the 0.30 that was assumed here.
 //
 // `tint` and `height` deliberately share the same signed `d` — every other sd_* function in this
 // file pairs them that way, and a version where they disagreed made the lighting fight the albedo.
 SdSurface sd_skin(vec3 objpos, vec3 n, float lod, float strength, float scale,
-		float spot_amount, float scale_amount, float spot_radius) {
+		float spot_amount, float scale_amount, float spot_radius, float spot_dc) {
 	SdSurface s = sd_none();
 	if (lod <= 0.001) { return s; }
 	vec3 p = objpos * (7.0 * scale);
@@ -253,28 +278,103 @@ SdSurface sd_skin(vec3 objpos, vec3 n, float lod, float strength, float scale,
 	vec3 fp = p - ip;
 	float f1 = 8.0;
 	float f2 = 8.0;
-	float id = 0.0;
+	float spot = 0.0;
 	for (int k = -1; k <= 1; k++) {
 		for (int j = -1; j <= 1; j++) {
 			for (int i = -1; i <= 1; i++) {
 				vec3 g = vec3(float(i), float(j), float(k));
 				vec3 h = sd_hash3(ip + g);
 				float dd = length(g + h - fp);
-				if (dd < f1) { f2 = f1; f1 = dd; id = h.x; }
+				// EVERY picked point paints, not just the nearest one, so a blob crosses its own
+				// cell wall and stays round. Above radius 1.0 a point two cells away can reach
+				// this fragment and this 3x3x3 window will clip it — that is the practical ceiling
+				// behind `surface_spot_radius`'s 1.20 hint_range.
+				spot = max(spot, (1.0 - smoothstep(spot_radius * 0.5, spot_radius, dd)) * step(0.52, h.x));
+				if (dd < f1) { f2 = f1; f1 = dd; }
 				else if (dd < f2) { f2 = dd; }
 			}
 		}
 	}
-	float pick = step(0.52, id);
-	float spot = (1.0 - smoothstep(spot_radius * 0.5, spot_radius, f1)) * pick;
 	float edge = 1.0 - smoothstep(0.03, 0.16, f2 - f1);
-	// Centred on roughly zero so the skin is textured without being tinted: the spot term averages
-	// about 0.22 of its amplitude at the shipping radius and the edge term about 0.30 of its own.
-	float d = (spot - 0.22) * spot_amount * 0.6 - (edge - 0.30) * scale_amount * 0.4;
+	// Centred on zero so the skin is TEXTURED without being TINTED. See the DC note above.
+	float d = (spot - spot_dc) * spot_amount * 0.6 - (edge - 0.3242) * scale_amount * 0.4;
 	s.tint = vec3(1.0 + d * 0.42 * strength * lod);
 	s.height = d * strength * lod;
-	s.rough = edge * 0.18 * strength * lod;
+	// Gated on scale_amount with the rest of the scale term. Without this a character who asked for
+	// smooth skin (scale_amount 0) still carried the full cell-wall pattern in ROUGHNESS, and
+	// toon_soft's light() widens its spec lobe by ROUGHNESS, so the ghost walls were visible.
+	s.rough = edge * 0.18 * strength * lod * scale_amount;
 	s.bump = vec3(d) * 0.10 * strength * lod;
+	return s;
+}
+
+// SCALES — true overlapping shingle rows, for a reptile neighbour. Distinct from sd_skin's
+// `scale_amount`, which only draws the WALLS between cells: that is a mosaic of abutting tiles,
+// and at 8 m it collapses into the same speckle as everything else. A shingle needs one scale to
+// pass IN FRONT OF the one below it, which a Voronoi partition can never express because its cells
+// tile the space exactly once.
+//
+// HOW THE OVERLAP IS BUILT — three things, none of which is a plain cellular read:
+//  1. STAGGERED LATTICE. Odd rows have their feature point pushed half a cell along X
+//     (`fract(h.x + 0.5 * mod(cell.y, 2.0))`), so rows sit in running bond like brickwork instead
+//     of lining up into a square grid. The offset is applied to the POINT, keyed off the integer
+//     cell index, NOT by shearing the sampling coordinate (`p.y += floor(p.x) * 0.5`). A coordinate
+//     shear is discontinuous at every integer plane and draws a hard vertical break line through
+//     the pattern once per cell — rendered, measured and rejected; see the note in the return value
+//     of the shader pass. Keying off the cell index is continuous everywhere and staggers the same.
+//  2. LOBES, NOT CELLS. Each point paints a squashed ellipsoid that is far wider than its cell
+//     (0.95 across, 0.76 tall against a 1.0 pitch), so neighbouring scales genuinely overlap.
+//  3. A PAINTER'S ORDER. Among every lobe covering a fragment, the one from the HIGHEST row wins
+//     (`float(j) * 4.0 + lobe` as the sort key), so a scale is drawn over the row beneath it. The
+//     winner's height therefore steps discontinuously at the free edge — that step IS the shingle
+//     edge — and `under - top` measures how deeply the losing scale is buried, which gives the
+//     occlusion crease that sells the overhang.
+//
+// The lobe extents are chosen so a point two cells away is always outside the lobe
+// ((1 - 0.20) * 1.25 = 1.00 >= 0.95 along Y, 1.0 >= 0.95 along X and Z), i.e. this 3x3x3 window is
+// EXACT, not truncated: verified against a 5x5x5 window over 80k samples at max |diff| 0.000000.
+// If you widen the lobes, widen the loop with them.
+//
+// DC: measured mean of (top - occl * 0.55) is 0.4442 over 500k samples. It is a genuine constant
+// here (no uniform feeds the lobe geometry), unlike sd_skin's spot DC.
+SdSurface sd_scales(vec3 objpos, vec3 n, float lod, float strength, float scale) {
+	SdSurface s = sd_none();
+	if (lod <= 0.001) { return s; }
+	vec3 p = objpos * (9.0 * scale);
+	vec3 ip = floor(p);
+	vec3 fp = p - ip;
+	float top = 0.0;    // the covering scale's height at this fragment
+	float under = 0.0;  // the best-covered scale hidden beneath it
+	float best = -1e9;
+	for (int k = -1; k <= 1; k++) {
+		for (int j = -1; j <= 1; j++) {
+			for (int i = -1; i <= 1; i++) {
+				vec3 g = vec3(float(i), float(j), float(k));
+				vec3 cell = ip + g;
+				// Jitter narrowed to 0.62 of a cell: scales are a grown, ordered structure, and at
+				// full jitter the rows dissolve into the same blob field sd_skin already gives.
+				vec3 h = 0.5 + (sd_hash3(cell) - 0.5) * 0.62;
+				h.x = fract(h.x + 0.5 * mod(cell.y, 2.0));  // running-bond row stagger
+				vec3 rv = g + h - fp;
+				// Shift and squash along Y: the lobe hangs BELOW its own row, over the row under it.
+				rv.y = (rv.y + 0.20) * 1.25;
+				float lobe = 1.0 - smoothstep(0.30, 0.95, length(rv));
+				// Higher row wins outright; within a row the nearer lobe wins.
+				float key = (lobe > 0.0) ? (float(j) * 4.0 + lobe) : -1e9;
+				if (key > best) { best = key; under = max(under, top); top = lobe; }
+				else { under = max(under, lobe); }
+			}
+		}
+	}
+	// Where a buried scale is much higher than the one covering it, we are under an overhanging
+	// free edge. That is the crease, and it is the whole reason this reads as overlap.
+	float occl = smoothstep(0.05, 0.40, under - top);
+	float d = (top - occl * 0.55) - 0.4442;
+	s.tint = vec3(1.0 + d * 0.32 * strength * lod);
+	s.height = d * strength * lod;
+	// Creases hold grime; the domed face of a scale is the smooth part.
+	s.rough = (0.05 + occl * 0.16) * strength * lod;
+	s.bump = vec3(d) * 0.11 * strength * lod;
 	return s;
 }
 

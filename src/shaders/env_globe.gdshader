@@ -1,6 +1,6 @@
 // NEIGHBOURING WORLDS hanging in the sky of a tiny planet (STYLE_GUIDE R2.1).
 //
-// This is the ground-level twin of the solar-system map's src/rocket/globe.gdshader: same six
+// This is the ground-level twin of the solar-system map's src/rocket/globe.gdshader: same seven
 // biome modes, same noise grammar, same soft toon terminator, so the green world you see over the
 // hill is recognisably the green world you fly to. That shader belongs to the rocket builder and is
 // referenced read-only; this is an independent implementation with three deliberate differences:
@@ -23,10 +23,11 @@ render_mode unshaded, cull_back, depth_draw_opaque, shadows_disabled, fog_disabl
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 
 /// 0 meadow (green + seas), 1 violet (glowing rivers), 2 chrome (plate grid + seams), 3 plaza,
-/// 4 flats (pale salt rings round dark pools), 5 chalk (quantised contour terraces).
+/// 4 flats (pale salt rings round dark pools), 5 chalk (quantised contour terraces),
+/// 6 frost (polar caps, dark fracture veins, a sparse scatter of station lights).
 /// 3 IS ALSO THE FALLBACK: sky_bodies.gd reads `BIOME_MODE.get(biome, 3)`, so a biome with no mode
 /// of its own hangs in every sky as the green-and-cream hub, silently.
-uniform int mode : hint_range(0, 5) = 0;
+uniform int mode : hint_range(0, 6) = 0;
 uniform vec3 land_a : source_color = vec3(0.30, 0.55, 0.26);
 uniform vec3 land_b : source_color = vec3(0.22, 0.44, 0.21);
 uniform vec3 low_color : source_color = vec3(0.86, 0.80, 0.62);
@@ -168,6 +169,29 @@ void fragment() {
 		float edge = min(band, 1.0 - band);
 		float riser = 1.0 - smoothstep(0.06, 0.14, edge);
 		col = mix(col, low_color, riser * 0.80);
+	} else if (mode == 6) {
+		// Frost: an ice world read by LATITUDE. Every other mode here is isotropic 3D noise, so
+		// "poles" is the one structural cue none of them can say - bright caps over a darker
+		// fractured belt, which is what keeps Vela from reading as Grig's bone-white ball in a
+		// cooler tint on a body only 2-4 deg across. Identical to src/rocket/globe.gdshader
+		// mode 6 so Vela in the sky is Vela on the map.
+		float cap = smoothstep(0.44, 0.80, abs(obj_dir.y));
+		float n = fbm3(p * 1.5);
+		col = mix(land_b, land_a, smoothstep(0.40, 0.66, n));
+		// Melt ponds in the low ground of the belt, never on the caps.
+		float melt = 1.0 - smoothstep(sea_level - 0.030, sea_level + 0.020, n);
+		col = mix(col, mix(sea_color, sea_deep, melt * 0.75), melt * (1.0 - cap) * 0.85);
+		// Fracture veins: the SAME ridge construction as mode 1's rivers, deliberately inverted -
+		// thin and DARK instead of thin and glowing, so the two never read as the same world.
+		float r = fbm3(p * 0.95 + 43.0);
+		float ridge = 1.0 - abs(r * 2.0 - 1.0);
+		float crack = smoothstep(0.90, 0.99, ridge);
+		col = mix(col, sea_deep, crack * 0.50);
+		col = mix(col, low_color, cap * 0.90);
+		// The Long Array: a sparse scatter of station lights on the belt, never on the ice cap.
+		// ~11 cells across the diameter and a 0.955 cut, so it is a handful of pinpricks on the
+		// night side rather than the hub's whole lit town.
+		em = smoothstep(0.955, 0.988, hash13(floor(obj_dir * 11.0))) * (1.0 - cap);
 	} else {
 		// Plaza: cream tiles and broad green lawns.
 		float n = fbm3(p * 1.15);

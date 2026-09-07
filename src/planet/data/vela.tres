@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="PlanetData" load_steps=2 format=3 uid="uid://cplanetdatavela0"]
+
+[ext_resource type="Script" path="res://src/planet/planet_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "vela"
+display_name = "Vela's Still Frost"
+radius = 14.5
+biome = "frost"
+seed = 137
+hill_amplitude = 2.40000
+hill_frequency = 0.16
+detail_amplitude = 0.00600
+crater_count = 0
+ground_ao = 0.80
+water_level = -99.00000
+mesh_subdivisions = 6
+terrace_step = 0.00000
+terrace_band = 0.12
+terrace_bank = 0.0
+plateau_count = 0
+plateau_height = 0.00000
+plateau_radius = 3.20000
+ground_shadow_color = Color(0.2745, 0.3137, 0.4235, 1)
+bank_color = Color(0.4863, 0.5255, 0.5922, 1)
+foliage_shadow_color = Color(0.3098, 0.3725, 0.4000, 1)
+ground_color_a = Color(0.6196, 0.6627, 0.7412, 1)
+ground_color_b = Color(0.4549, 0.5020, 0.6039, 1)
+ground_color_low = Color(0.7020, 0.7412, 0.8000, 1)
+rock_color = Color(0.4824, 0.5294, 0.6000, 1)
+surface_color = Color(0.6824, 0.7412, 0.8157, 1)
+water_color = Color(0.4353, 0.5765, 0.6588, 1)
+water_deep_color = Color(0.2471, 0.3608, 0.4471, 1)
+foliage_color_a = Color(0.4980, 0.5725, 0.5961, 1)
+foliage_color_b = Color(0.6039, 0.6706, 0.6863, 1)
+trunk_color = Color(0.3608, 0.3922, 0.4392, 1)
+flower_colors = PackedColorArray(0.8627, 0.9020, 0.9490, 1, 0.6157, 0.6980, 0.8000, 1, 0.4980, 0.6196, 0.7608, 1)
+sun_color = Color(0.9098, 0.9333, 0.9804, 1)
+ambient_color = Color(0.4902, 0.5490, 0.7059, 1)
+has_ring = false
+ring_color = Color(0.8, 0.8471, 0.9098, 1)
+moon_count = 1
+cloud_density = 0.0
+sun_peak_elev_deg = 78.0
+sun_disc_size = 0.011
+moon_size = 0.032
+star_density = 2.6
+spawn_dir = Vector3(0.454, 0.766, -0.454)
+pad_dir = Vector3(-0.5299, 0.4, -0.7477)
+npcs = PackedStringArray("vela")
+buildings = PackedStringArray()
+music_track = "frost"
+tree_count = 0
+rock_count = 12
+flower_patch_count = 3
+collectible_count = 8
+collectible_kind = "crystal_chunk,moon_flower"

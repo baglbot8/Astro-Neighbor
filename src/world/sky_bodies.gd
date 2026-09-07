@@ -2,10 +2,10 @@ class_name SkyBodies
 extends Node3D
 ## Every OTHER world, always hanging in the sky (STYLE_GUIDE R2.1).
 ##
-## From every planet you can see the other five as small, distinct, correctly-lit bodies that
+## From every planet you can see the other six as small, distinct, correctly-lit bodies that
 ## drift slowly across the sky: home's green world with its seas, Zorp's violet world with its
 ## glowing rivers, Bolt's chrome world WITH ITS RING, Starport Plaza, Fen's pool-pocked terracotta
-## pan and Grig's banded chalk ball with its razor ring. They are the strongest
+## pan, Grig's banded chalk ball with its razor ring and Vela's capped ice world. They are the strongest
 ## "I am in space" cue in the game and they double as navigation - the world you are looking at is
 ## the world you can fly to.
 ##
@@ -31,7 +31,7 @@ extends Node3D
 ## moons' framing with it. Anchoring to the opening view instead means the three worlds are always
 ## in the establishing shot on every planet whatever the player builder picks for spawn_dir, and
 ## they still slide out of frame normally as the player turns, because the anchor is captured once
-## and then held. The five offsets are spread across the frame and dodge the HUD chips; each
+## and then held. The six offsets are spread across the frame and dodge the HUD chips; each
 ## drifts on a slow, bounded oscillation so the sky is alive without any body wandering out of the
 ## playable band.
 ##
@@ -55,7 +55,7 @@ const BODY_DISTANCE := 140.0
 ## Planet ids in system order. New worlds are APPENDED, never inserted: the slot a world gets is its
 ## index in this list once the viewer is skipped, so reordering would re-frame every shipped planet's
 ## sky.
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
 ## Mirror of src/rocket/space_travel.gd LAYOUT (globe radius, orbit radius, orbit angle, height).
 ## Duplicated rather than imported so the environment never depends on the rocket scene; it is only
 ## used to derive plausible RELATIVE angular sizes, so small drift between the two is harmless.
@@ -66,6 +66,7 @@ const SYSTEM_LAYOUT := {
 	"hub": {"r": 3.2, "orbit": 47.0, "angle": 318.0, "y": -0.9},
 	"fen": {"r": 2.0, "orbit": 24.0, "angle": 71.0, "y": 1.9},
 	"grig": {"r": 1.6, "orbit": 42.0, "angle": 262.0, "y": 2.4},
+	"vela": {"r": 2.1, "orbit": 32.5, "angle": 166.0, "y": -2.5},
 }
 ## Map units -> degrees of angular diameter. Tuned so the nearest neighbour reads ~4.6 deg across
 ## (about 73 px tall at 720p, still clearly smaller than the 6.3 deg moon) and the furthest ~2.3 deg
@@ -81,18 +82,29 @@ const ANGULAR_MAX_DEG := 4.6
 ## hub's town hall fills the middle of the plaza skyline (so the centre slot rides high) and the
 ## arrival banner covers x 595-1160 / y 85-180 for its first few seconds (so the right slot rides
 ## above it rather than behind it).
-## SIX WORLDS NEED FIVE SLOTS. `setup()` stops once the slots run out, so a three-slot table on a
-## six-planet system would silently hide two neighbours - a straight violation of R2.1 ("other
-## planets are ALWAYS in the sky"). Slots 3 and 4 thread between the original three rather than
-## beside them: sorted by azimuth the five read -27 / -14 / +4 / +17 / +30 with heights
-## 0.74 / 0.20 / 0.88 / 0.58 / 0.34, so no two neighbouring bearings share a height and the discs
-## never stack. Slots are APPENDED so the shipped worlds keep the framing they have today.
+## SEVEN WORLDS NEED SIX SLOTS. `setup()` stops once the slots run out, so a short table silently
+## hides the tail of ORDER - a straight violation of R2.1 ("other planets are ALWAYS in the sky").
+## Every slot past the original three threads BETWEEN its predecessors rather than beside them:
+## sorted by azimuth the six read -27 / -20.5 / -14 / +4 / +17 / +30 with heights
+## 0.74 / 0.46 / 0.20 / 0.88 / 0.58 / 0.34, so no two neighbouring bearings share a height and the
+## discs never stack. Slots are APPENDED so the shipped worlds keep the framing they have today.
+##
+## SLOT 5 IS THE TIGHT ONE, and the numbers are chosen rather than guessed. The only gaps left
+## were -27..-14 and +17..+30, both 13 deg wide, and the right-hand one sits behind the arrival
+## banner (x 595-1160), so the sixth world goes LEFT at -20.5 (x ~311 at 720p, well clear of it).
+## 6.5 deg of azimuth is not much when a disc can be 4.6 deg across, so this slot carries the
+## SMALLEST drift in the table (0.6 / 0.35) and borrows slot 0's 27 h PERIOD: sharing a period
+## phase-LOCKS the pair, so the -27 and -20.5 bodies sway together and their gap never closes
+## below 6.5 - (2.5 - 0.6) = 4.6 deg instead of the 2.8 deg two independent drifts would allow.
+## A SEVENTH slot has nowhere left to thread. World #8 needs a different sky layout - two
+## staggered bands, or slots resolved from the count - not another row here.
 const SLOTS := [
 	[-27.0, 0.74, 2.5, 1.4, 27.0],
 	[4.0, 0.88, 2.5, 1.1, 34.0],
 	[30.0, 0.34, 3.0, 1.3, 41.0],
 	[17.0, 0.58, 2.2, 1.2, 30.0],
 	[-14.0, 0.20, 2.6, 1.5, 37.0],
+	[-20.5, 0.46, 0.6, 0.35, 27.0],
 ]
 ## Degrees of spin per second. Slow: at 2-3 deg across, anything faster reads as a spinning marble.
 const SPIN_DEG_PER_SEC := 1.1
@@ -106,12 +118,17 @@ const BIOME_ANCHOR := {
 	"plaza": [Color("#7ec46a"), 0.14],
 	"flats": [Color("#c49a76"), 0.30],
 	"chalk": [Color("#b9b09a"), 0.40],
+	# The only COOL anchor in the dict. Vela's world is the ice world, and pulling its albedo 34%
+	# toward a pale glacial blue is what stops it reading as another bone-white ball beside Grig.
+	"frost": [Color("#b9cddb"), 0.34],
 }
 ## A MISSING KEY HERE IS SILENT: `_apply_biome` reads `BIOME_MODE.get(data.biome, 3)`, so a world
 ## whose biome is not listed draws as the green-and-cream hub in every sky, with no error anywhere.
-## Modes 4 (flats: pale salt rings round dark pools) and 5 (chalk: quantised contour terraces) are
-## real branches in env_globe.gdshader - see its `mode` uniform, which runs 0..5.
-const BIOME_MODE := {"meadow": 0, "violet": 1, "chrome": 2, "plaza": 3, "flats": 4, "chalk": 5}
+## Modes 4 (flats: pale salt rings round dark pools), 5 (chalk: quantised contour terraces) and
+## 6 (frost: polar caps and dark fracture veins) are real branches in env_globe.gdshader - see its
+## `mode` uniform, which runs 0..6.
+const BIOME_MODE := {"meadow": 0, "violet": 1, "chrome": 2, "plaza": 3, "flats": 4, "chalk": 5,
+	"frost": 6}
 
 ## One entry per visible world.
 class Body:
@@ -367,6 +384,22 @@ func _apply_biome(mat: ShaderMaterial, data: PlanetData) -> void:
 			# Mode 5 draws every riser in `low_color`, and on Grig the riser tone is `bank_color`
 			# (the warm ochre cut stone) - `ground_color_low` is inert on a world with no water.
 			mat.set_shader_parameter("low_color", data.bank_color.darkened(0.06))
+		"frost":
+			# Vela from orbit: a pale ice ball read by LATITUDE - bright caps over a darker
+			# fractured belt. Every other mode is isotropic 3D noise, so the caps are the one
+			# structural cue in the set that survives at 2-3 deg across.
+			# `sea_level` is mode 6's melt threshold on the belt field, not a real waterline.
+			mat.set_shader_parameter("sea_level", 0.40)
+			mat.set_shader_parameter("pattern_scale", 2.1)
+			# Vela's rim lamps, and the array's own lights: the only warm thing on the world.
+			mat.set_shader_parameter("accent", Color("#ffb768"))
+			mat.set_shader_parameter("accent_glow", 0.34)
+			mat.set_shader_parameter("cloud_amount", 0.0)
+			mat.set_shader_parameter("rim_color", Color("#bfe0f2"))
+			mat.set_shader_parameter("rim_strength", 0.32)
+			# Mode 6 paints the CAPS in `low_color`, so on a frost world `ground_color_low` is the
+			# frost tone rather than a shore tone - see the note in vela.tres's contract.
+			mat.set_shader_parameter("low_color", data.ground_color_low.lightened(0.06))
 		_:
 			mat.set_shader_parameter("pattern_scale", 1.7)
 			mat.set_shader_parameter("accent", Color("#ffd98a"))

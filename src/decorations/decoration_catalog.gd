@@ -71,6 +71,11 @@ func get_items() -> Array:
 			"A whole ringed world, spinning politely on your lawn."],
 		["gravity_fountain", "Gravity Well Fountain", "tech", "legendary", 0, 1.0, "#7fe9ff",
 			"Water spirals upward here. The physicists have stopped asking."],
+		# Vela's signature gift. The fifth price-0 legendary, added because the other four were
+		# already spoken for (Zorp, Bolt, Fen, Grig) and FavorSystem.SIGNATURE_REWARD silently skips
+		# any neighbour with no entry — Vela's "thanks" line promised a gift nothing could grant.
+		["whisper_array", "Whisper Array", "tech", "legendary", 0, 0.62, "#cfd9e4",
+			"Three little dishes, all listening to the same quiet sky."],
 		# ---------------------------------------------------------------- signs
 		["star_flag", "Star Flag", "signs", "common", 160, 0.5, "#ff7a59",
 			"Plant it and the place is officially yours."],

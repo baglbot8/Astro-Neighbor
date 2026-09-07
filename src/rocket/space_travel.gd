@@ -1,7 +1,7 @@
 extends Node3D
 ## The middle leg of the rocket journey, and (when nothing is in flight) the solar-system map.
 ##
-## A warm sun at the origin, four miniature globes on fixed orbits (styled from their PlanetData),
+## A warm sun at the origin, seven miniature globes on fixed orbits (styled from their PlanetData),
 ## dotted orbit rings and a shader starfield sky.
 ##
 ## JOURNEY MODE (docs/STYLE_GUIDE.md R2.5) is what normally happens. The pad has already asked
@@ -99,11 +99,23 @@ const LAYOUT := {
 	# sits between Bolt's 36.5 and the hub's 47, angle 262 between 214 and 318.
 	"grig": {"radius": 1.6, "orbit": 42.0, "angle_deg": 262.0, "y": 2.4,
 		"desc": "Grig's chalk steps. All the way up."},
+	# INTERLEAVED, NOT APPENDED. Orbit 32.5 goes in the widest interior gap (Zorp 28.5 -> Bolt 36.5)
+	# rather than outside the hub's 47, for two reasons: `_orbit_showcase_camera` flies a fixed
+	# r = 62.0 circle around the origin, so a world much past 47 starts passing close to the
+	# showcase camera; and `SkyBodies.ANGULAR_SCALE` is tuned against this spread, so an outlier
+	# clamps to ANGULAR_MIN_DEG in every sky and reads as a dot. Angle 166 is the middle of the
+	# only big angular gap left (Zorp 118 -> Bolt 214) and y -2.5 is the lowest slot on the map,
+	# so Vela does not stack with anyone from the showcase camera's height of 20.
+	# Radius 2.1 says "a ~13 m world", between Fen's 13.0 and home's 12.0 — SEE THE RETURN NOTE:
+	# if vela.tres ships a radius that is not ~12.5-13.5 m, this and SkyBodies.SYSTEM_LAYOUT both
+	# need re-deriving, because they are what make the relative sizes honest.
+	"vela": {"radius": 2.1, "orbit": 32.5, "angle_deg": 166.0, "y": -2.5,
+		"desc": "Vela's long array. Cold, quiet, listening."},
 }
 ## Every id here MUST also be in LAYOUT: `_build_orbits()` indexes LAYOUT[id] with no guard at all
 ## (`_build_globes()` is protected by the .tres existence check ahead of it, this one is not), so an
 ## id in ORDER and missing from LAYOUT is a hard crash on entering the space map.
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig"]
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
 
 ## Planet the rocket is docked at (empty = read GameState.previous_planet_id, then "home").
 @export var origin_id: String = ""

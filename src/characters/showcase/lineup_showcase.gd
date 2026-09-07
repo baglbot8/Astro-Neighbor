@@ -43,11 +43,11 @@ const DEFAULT_HOUR := 10.5
 ## check, the face-metric gate and the silhouette pass until it is added here. Registering the id
 ## in NpcModels.make() is necessary but not sufficient.
 const ORDER: Array[String] = ["zorp", "bolt", "pip", "pop", "stella", "mayor_orbit", "dj_nova",
-	"fen", "grig"]
+	"fen", "grig", "vela"]
 const LABELS := {
 	"zorp": "Zorp", "bolt": "Bolt", "pip": "Pip", "pop": "Pop",
 	"stella": "Stella", "mayor_orbit": "Mayor Orbit", "dj_nova": "DJ Nova",
-	"fen": "Fen", "grig": "Grig",
+	"fen": "Fen", "grig": "Grig", "vela": "Vela",
 }
 
 var _models: Array[CharacterModel] = []

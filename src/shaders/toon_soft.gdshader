@@ -15,7 +15,12 @@ global uniform float astro_night;
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
 // R2.9 surface detail. `surface_kind`: 0 none, 1 cloth, 2 metal, 3 wood, 4 rock, 5 foliage,
-// 6 rubber.
+// 6 rubber, 7 skin, 8 scales. Keep this list, MaterialLib.SURFACE_KINDS and the if-chain in
+// fragment() in step.
+//
+// WARNING — THE CHAIN'S FINAL `else` IS sd_foliage, NOT sd_none. A kind id with no branch of its
+// own does not fall back to "no detail", it silently renders as GRASS. Every new kind needs an
+// explicit `else if`.
 // Off by default so nothing changes until a material opts in. See docs/STYLE_GUIDE.md R2.9 -
 // this adds material character through roughness/normal/albedo variation, never by raising
 // specular into a hotspot, so it does not undo R2.6 (pastel and matte).
@@ -42,7 +47,7 @@ global uniform float astro_night;
 // `planet_common.gdshaderinc` already has the correct helper: `pc_light_term` + `pc_albedo_floor`.
 // ---------------------------------------------------------------------------------------------
 
-uniform int surface_kind : hint_range(0, 7) = 0;
+uniform int surface_kind : hint_range(0, 8) = 0;
 /// hint_range is advisory in Godot, not clamping. Values above 2 are legitimate: a near-white
 /// surface sits on the ACES shoulder, so a boulder needed 3.2 to move its albedo at all.
 uniform float surface_strength : hint_range(0.0, 4.0) = 1.0;
@@ -55,10 +60,21 @@ uniform float surface_scale : hint_range(0.05, 8.0) = 1.0;
 /// Low-frequency tonal drift. The only band that survives past ~20 m on a large surface.
 uniform float surface_macro : hint_range(0.0, 0.6) = 0.0;
 uniform float surface_macro_cycles : hint_range(0.2, 12.0) = 2.6;
-/// Weights knots against rings for wood. 0.55 reads as marbling; 0.15-0.25 gives combed lines.
+/// "skin" only. `surface_spot_amount` weights the blobs, `surface_scale_amount` the cell walls.
 uniform float surface_spot_amount : hint_range(0.0, 2.0) = 1.0;
 uniform float surface_scale_amount : hint_range(0.0, 2.0) = 1.0;
-uniform float surface_spot_radius : hint_range(0.05, 0.60) = 0.34;
+/// Blob size, in cells (sd_skin's lattice is 7 cells per unit at surface_scale 1.0). Was capped at
+/// 0.60, which is roughly one cell - anything that reads as a BIG spot rather than a freckle needs
+/// more. 1.20 is the honest ceiling: past ~1.0 a blob can reach a fragment from two cells away and
+/// sd_skin's 3x3x3 window starts clipping it.
+uniform float surface_spot_radius : hint_range(0.05, 1.20) = 0.34;
+/// The mean of sd_skin's spot term, subtracted so the pattern averages out instead of tinting the
+/// character. IT TRACKS surface_spot_radius AND IS WRONG IF YOU CHANGE ONE WITHOUT THE OTHER —
+/// dc(r) = 1 - exp(-(0.74343*r^3 + 0.52963*r^4 - 0.33228*r^5)), tabulated in surface_detail's
+/// sd_skin header. MaterialLib.spot_dc() computes it, and MaterialLib.toon() sets both together;
+/// this default is the value for the default radius 0.34.
+uniform float surface_spot_dc : hint_range(0.0, 1.0) = 0.0342;
+/// Weights knots against rings for wood. 0.55 reads as marbling; 0.15-0.25 gives combed lines.
 uniform float surface_knot : hint_range(0.0, 1.0) = 0.55;
 
 varying float v_sheen;
@@ -130,7 +146,10 @@ void fragment() {
 		else if (surface_kind == 4) { sd = sd_rock(wpos, onrm, lod, surface_strength, surface_scale); }
 		else if (surface_kind == 6) { sd = sd_rubber(wpos, onrm, lod, surface_strength, surface_scale); }
 		else if (surface_kind == 7) { sd = sd_skin(wpos, onrm, lod, surface_strength, surface_scale,
-			surface_spot_amount, surface_scale_amount, surface_spot_radius); }
+			surface_spot_amount, surface_scale_amount, surface_spot_radius, surface_spot_dc); }
+		else if (surface_kind == 8) { sd = sd_scales(wpos, onrm, lod, surface_strength, surface_scale); }
+		// 5, and anything unrecognised, lands here on FOLIAGE - not on "no detail". A new kind
+		// without its own branch above renders as grass. Add the branch.
 		else { sd = sd_foliage(wpos, onrm, lod, surface_strength, surface_scale); }
 		// The macro band uses its own generous fade: it is the term that must survive the distance.
 		v_detail = sd.height;

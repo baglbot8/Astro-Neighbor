@@ -454,6 +454,14 @@ Shipped amplitude is about 30% lower than the first pass, at **+0.073**. **Re-me
 about +0.10 higher than the documented world figure, so a showcase number cannot be compared against
 the gate at all.
 
+> **SUPERSEDED 2026-09-07 (see item 37).** Most of that **+0.099** was not amplitude, it was a BUG:
+> `sd_skin`'s spot term carried a DC offset that did not track `surface_spot_radius`, so raising the
+> radius applied a flat 1–6% albedo DARKENING to the whole material — and darkening is exactly what
+> raises HSV saturation. `MaterialLib` now derives the DC from the radius (`spot_dc()`), and the
+> eight shipped skin materials measure within ±0.0003 of neutral. **The saturation figure above
+> should be re-measured rather than trusted**; the cost of the pattern itself is much lower than
+> +0.099. Do NOT set `surface_spot_dc` by hand — set the radius and let the DC follow.
+
 **Limbs need their own preset.** The head setting rendered the twins' arms as cauliflower: an arm is
 a small, strongly curved capsule, and the cell-EDGE term is what does it. Limbs run finer, weaker,
 and with the edges nearly off — spots only. `_add_arms` / `_add_legs` take `hand_opts` /
@@ -579,3 +587,206 @@ pre-existing and untouched by this work.
 **A build agent was flagged by a security classifier.** Its diff was reviewed line by line before
 anything was committed: every change is in game source, there are no network calls, no credential
 access, no writes outside the project and no `OS.execute`. The finding appears to be a false positive.
+
+
+## 37. [2026-09-07] Cast variety pass — five aliens that were one creature, a robot neighbour, and four silent rendering bugs
+
+### What the user asked for
+> "Too many of the alien characters fundamentally look the same (Zorp, pip, pop, grig and fen). Eye
+> stalks, rocky texture skin with spots, same open mouth, all have more male attributes than female.
+> They need to vary more across the board. [...] We also need to add another neighbour that's a
+> robotic like being and planet, just to balance out aliens to robots."
+
+All five called the same three helpers — `_add_eyestalks`, `_add_wide_grin`, `{"surface": "skin"}` —
+so the species read as one creature in five colours.
+
+### What the cast looks like now, against the six binding rulings
+| ruling | cap | shipped |
+|---|---|---|
+| eyestalks | at most 2 | 2 — Grig (one, cyclops) and Fen (three, graded) |
+| wide toothy grin | at most 2 | 2 — Grig and Fen |
+| `sd_skin` | at most 2, at opposite settings | 2 — Zorp (`surface_scales` 0.0, `spot_radius` 0.74: smooth, big spots) and Grig (`surface_scales` 1.35, `spot` 0.0: craze, no spots) |
+| no surface at all | exactly 1 | Pop |
+| lashes | at most 1 character | **zero** across the cast |
+| hard vocabulary {brow ridge, heavy lid, horns, tusks, fangs, shoulder yoke} | ≤2 each, and one elder with none | Fen and Vela carry **none**; every reworked model passes `brows: false` |
+| closed mouths differing in KIND | at most 1 closed arc | Zorp holds the single arc; Pop is a straight lipless bar, Vela has `mouth: false` (none), Grig is an under-bite |
+
+Vela is the new robot-like neighbour (`vela_model.gd`, 5832 tris) on the new frost world
+`src/planet/data/vela.tres` — a dish-headed listener whose eyes sit in a hoop at the dish's focus.
+
+### Four bugs that every numeric test passed and only a render caught
+1. **Flat superellipsoids do not render, and two shared helpers built them on every character.**
+   `superellipsoid()` projects SphereMesh vertex *directions* radially, so the mesh only reaches its
+   equatorial radius if a vertex row lies ON the equator — and Godot puts rows at `v = j/(rings+1)`,
+   so an EVEN ring count has none. `_segs(6, 4)` resolves to 4. Measured: the crown seam asked for
+   half-x 0.203600 and built **0.076166 (37.4%)**; the waist chamfer asked 0.214300 and built
+   **0.066913 (31.2%)**. Both sat buried inside their own shells, so **every character in the game
+   was missing both of its documented hard edges** — which is part of why heads read rounder than
+   R2.3 asks for. Fixed with `ChibiModel._se_slab()`: build near-round, squash with a node scale,
+   force the resolved ring count ODD so one row lands on the equator, inherit the parent's exponent
+   and radial count, and sit `SEAM_PROUD` (2%) out so it cannot z-fight into a dashed line.
+2. **`sand_band = 0.0` floods a dry world with `sand_color` instead of removing the beach.** On a dry
+   world `wr = radius - 50`, so the shader test becomes `smoothstep(-49.88, -50.00, h)` — edge0 above
+   edge1, an inverted ramp that clamps to 0 for every `h`, leaving `sand_t = 1` everywhere. **Grig
+   shipped as a featureless tan ball**: `color_a`/`b`/`c` and the ochre `bank_color` terrace risers
+   were never drawn. Fixed to 0.30. Palette barely moves (saturation mean 0.194 → 0.193) and luma
+   range improves 0.606 → 0.647.
+3. **Fen's `sd_scales` read as a blackberry, not a reptile.** `sd_scales` tints and bump-perturbs
+   EVERY fragment where `sd_skin`'s spot term fires on ~5%, so the two are not comparable at equal
+   `surface_strength`. 0.85 was rejected, 0.45 shipped, and 0.45 was still bubbles at both the 6.5 m
+   gameplay distance and in close-up. Now 3.10/0.24 (~13 scales across the head).
+4. **`_eye_mesh("almond")` is not an almond.** An exponent below 2 pulls the diagonals in while the
+   axes stay at 1.0, so it is a rounded OCTAHEDRON — a four-pointed diamond, not a lens. Nothing
+   used it; the comment and the `shape` docs now say what it actually builds, and point at Pop's
+   `_cut_almond_eyes()` for the real lens recipe.
+
+### `tools/capture.sh` IS NOT DETERMINISTIC — this invalidates before/after pixel diffs
+Two captures of the same scene with **identical code** differ by **~55,000 pixels**
+(`--face=dj_nova --freeze`, 1280x720): neither the idle animation phase nor the framing is pinned.
+Any A/B smaller than that is invisible to the harness, and a pixel-diff number from it means nothing.
+This was found the hard way while testing the `arc_tube` winding, where an apparent "72,037 changed
+pixels" turned out to be mostly capture noise. **Pinning the capture seed and pose would make
+render-based review actually reviewable, and is the single highest-value tooling fix available.**
+
+### `arc_tube` is wound inside-out, and is deliberately left that way
+Confirmed by signed volume in one deterministic run: `arc_tube` (360° sweep) **+0.15783** against
+`TorusMesh` −0.19582, `BoxMesh` −1.00000, `superellipsoid` −4.75974, `taper_tube` −0.04161. Under
+`cull_back` every smile, brow, lid ridge and headband draws its FAR wall. Silhouettes are unaffected
+and normals still point outward, so nothing renders as a hole. Flipping it repaints a feature on all
+nine shipped neighbours at once, and — per the point above — **it cannot currently be A/B reviewed**.
+It needs a deterministic capture first and then its own review pass; it is not integration cleanup.
+
+### Also shipped
+* A `frost` music track (`tools/gen/audio/music.py`), because `vela.tres` asked for one that did not
+  exist and `AudioManager` degrades to silence with only a `push_warning`.
+* **The audio budget is now effectively full.** `build_all.py` gates each track at 6 MiB and all of
+  `assets/audio` at 60 MB; the other ten tracks already spend 57.0 MB. The first `frost` build (8
+  bars at 54 bpm, 35.5 s, 6.31 MB) failed BOTH gates. It ships at 4 bars / 58 bpm — 16.6 s, 2.9 MB —
+  and the directory now sits at **59.9 MB of 60**. An eighth world cannot have a music track without
+  raising that budget deliberately.
+* `deco_whisper_array` — a fifth price-0 legendary, because the other four were already assigned and
+  `FavorSystem.SIGNATURE_REWARD` silently skips a neighbour with no entry, so Vela's `thanks` line
+  promised a gift nothing could grant.
+* `showcase/surface_detail.gd` now covers `skin` and `scales` (7 kinds, row geometry derived).
+
+### Still open
+* **Mayor Orbit is 6352 triangles against a 6000 budget** (was 6130 before this pass; the crown seam
+  and waist chamfer are now real geometry and cost him ~220). Stella is 8176. Both were already over
+  and both are out of this pass's scope, but the seam fix moved every character up by ~200–430 tris,
+  so the budget is tighter than it was. All eight in-scope neighbours pass: zorp 5318, bolt 5176,
+  pip 4940, pop 5450, dj_nova 5884, fen 5854, grig 5304, vela 5832.
+* **Grig and Fen hold BOTH remaining eyestalk slots AND both wide-grin slots.** That is inside every
+  cap, but it means the two characters who kept the old vocabulary kept all of it. They read as
+  clearly different creatures today (a one-stalk cyclops with a quarried crown against a
+  three-stalk scaled elder in a shawl), so this is recorded rather than changed — but if the cast
+  ever reads uniform again, that pairing is where to look first.
+* **The strata bands on Grig have never rendered**, for bug 1's reason. The working version was
+  built and deliberately reverted: three visible horizontals on a rounded form read as barrel hoops,
+  and with the R4 craze underneath, as woven wicker. Making them visible is a design pass with its
+  own review, not a side effect. Lead for whoever takes it: fewer bands — one heavy line low on the
+  face reads as a stratum, three read as a barrel.
+* **A headless boot does not catch a broken character model.** `godot --headless --quit-after N` only
+  loads what the boot scene reaches, so an unregistered `class_name`, a parse error in a model file,
+  or a model that renders as garbage all pass it silently. The checks that actually bite are
+  `--import` (class registration), `tools/check.sh` (load errors) and `tools/capture.sh` (anything
+  visual). Every real bug in this pass was invisible to every numeric test and visible in the first
+  render.
+* **TENTACLES AND HORNS ARE THE ONE NAMED TRAIT NOBODY SHIPPED.** The user listed five: smooth
+  skin with big spots (Zorp), just scaly (Fen), antennae with eyes on the head (Pop), a furry body
+  (Pip) — and *"maybe they have tentacles or horns around their head"*. `grep '_add_tendril_ring('`
+  and `grep '_add_horn('` across `src/characters/models/` return **zero call sites**: both helpers
+  were built for this pass and neither was ever called. The critic rated it `[high]` and said it
+  "does more for the silhouette axis than any crown in the three plans".
+  It was NOT added during integration, deliberately, and here is the honest reason: there is no
+  cheap home for it. Horns are capped by the hard-vocabulary ruling. Tentacles are not capped, but
+  a 2-joint barbel is ~80 tris each (`taper_tube` at 4x5, two joints), so a modest four-barbel jaw
+  is ~320 — and the only character it suits thematically is **Fen, who has 146 tris of headroom**
+  (5854 of 6000). The characters with room are the wrong homes: Zorp is the deliberate control that
+  spends none of the vocabulary budget, Grig is mineral and quarried, Pop is the grey-alien
+  archetype, Pip is the furry one. Adding it therefore means either paying down triangles somewhere
+  first, or the critic's own suggestion — a tentacled LOWER body replacing a bean-on-two-stubs,
+  which needs `_apply_pose` handling (it writes `_leg_l`/`_leg_r` every frame; hide the leg meshes
+  and hang two tendrils off each so the walk cycle still drives them). Both are a design pass with a
+  render review, not integration cleanup. **This is the top candidate for the next pass.**
+* **Nothing in the cast reads as YOUNG** (critic, `[low]`, also unclaimed). The twins are the only
+  characters proportioned as children. It costs no geometry — `head_semi`, `body_scale`,
+  `face_scale`, `anim_time_scale` — and it is a stronger 8 m cut-out difference than any crown.
+* **`docs/CAST_VARIETY.md` was never written.** Nine build agents were told to read it as their plan
+  and all nine reported it absent; they worked from the six rulings quoted in their briefs and from
+  `synthesis.md` / `critic.md` in the session scratchpad. Whatever step was meant to write that file
+  did not run, and the judged plan is not in the repo.
+
+
+## 37. [2026-09-07] The five aliens were one creature in five colours — fixed, and a second robot added
+The user: "Too many of the alien characters fundamentally look the same (Zorp, pip, pop, grig and
+fen). Eye stalks, rocky texture skin with spots, same open mouth, all have more male attributes than
+female." True at the code level: all five model files called the same three helpers —
+`_add_eyestalks`, `_add_wide_grin`, `{"surface": "skin"}` — and only the numbers differed.
+
+### The four-axis rule that now holds
+No two characters share an eye arrangement, a crown, a skin treatment or a mouth. Enforced caps:
+eyestalks on exactly TWO (Fen, Grig), the wide grin on exactly TWO (Fen, Grig), `sd_skin` on exactly
+TWO at genuinely opposite settings (Zorp spot-only, Grig edge-only), and ONE character with no
+surface pattern at all (Pop) — which is what makes everyone else's pattern read as a choice.
+
+| | eyes | crown | skin | mouth |
+|---|---|---|---|---|
+| Zorp | on the head, amber iris | one tall antenna | smooth, big soft spots | small closed lip |
+| Pip | big round, on the head | fur ruff + her one antenna | fuzzy | round, toothless, tongue |
+| Pop | raked almond | two flat paddle antennae | none at all | flat slot, no teeth |
+| Fen | 3 graded stalks, all animated | — | overlapping shingle scales | wide grin |
+| Grig | one eye on a trunk | stone capital | cracked craze, no spots | grin + under-bite tusks |
+| Vela | lenses in a joined hoop | dish head | brushed metal | no mouth |
+
+### On "more male attributes than female"
+The reframe that made this tractable, and it came from an adversarial critic rather than from the
+design pass: what reads as male here is a SHAPE VOCABULARY — heavy brows, lid ridges, toothy grins,
+blunt jaws, broad wedges — not a set of declared sexes. Every design proposal opened by promising
+"proportion and manner, not accessories" and then reached for EYELASHES on two or three characters
+each. Lashes are an accessory and the most stereotyped cue available.
+
+The rules that shipped instead: **lashes on zero characters cast-wide**; no character wears more than
+TWO of {brow ridge, heavy lid, horns, tusks, fangs, shoulder yoke}; at least one of the three elders
+wears none (Fen); and **no code comment declares a character's sex**. Exactly one neighbour's gender
+is stated in shipped text (npc_data.gd:228 — Pop is Pip's brother) and everything else being unmarked
+is an asset, not a gap.
+
+Also rejected: all three proposals made the new robot a legless floating bell skirt AND designated her
+female. Making the only character denied legs the one woman is the genie/mermaid trope. **Vela walks.**
+
+### Two real bugs found underneath
+* **`sd_skin`'s DC constant was ~6x too large, and it is a function of `spot_radius`, not a constant.**
+  The measured mean of the spot term is 0.035 at the shipping radius against a hardcoded 0.22, so the
+  alien skin was a flat ~6% albedo DARKENING rather than a pattern — that darkening is exactly the
+  +0.099 saturation cost recorded in item 35. It is now a uniform derived by `MaterialLib.spot_dc()`
+  from a fitted curve. Every shipped skin material now centres to within +/-0.0003 of 1.0, with the
+  pattern amplitude untouched. Spots above radius ~0.55 also used to shatter into polygonal shards,
+  because the spot was read off `f1` after the cellular loop and so was clipped by its own cell.
+* **Flat superellipsoids never rendered their hard edges**, so every character in the game was missing
+  both of the chamfers its own comments document.
+* **Per-eye size was impossible**: `_apply_face` rewrites `oval.scale` every frame from the single
+  model-wide `eye_w`/`eye_h`, so anything authored per-eye was overwritten on frame 1. A fifth
+  parallel array `_eye_size` fixes it — and `GrigModel._make_cyclops()` has to drop index 1 from that
+  one too, or the next blink is a dangling index.
+
+### Verified
+All SEVEN worlds boot clean. All ten neighbours render with distinct triangle counts, so no id is
+silently falling back to a generic `AlienModel` (that fallback is why an unregistered id ships as a
+duplicate Zorp). `tools/check.sh` passes.
+
+### STILL OPEN
+1. **The three robot files were not touched.** `mayor_model.gd`, `robot_model.gd` and `dj_model.gd`
+   are byte-identical to the pre-pass copies, so Bolt and DJ Nova are still the same robot to within
+   5 mm on every shared number. Cast-wide that leaves FOUR closed smile arcs against a cap of one and
+   FIVE characters with no surface pattern against a cap of one, and the hard-vocabulary cast TOTAL
+   went 7 -> 8 rather than down. The five aliens the user named are fixed; the robots are the same
+   problem one room over.
+2. **Tentacles and horns were named by the user and did not ship.** Of the five traits asked for,
+   three did (smooth-with-big-spots on Zorp, just-scaly on Fen, antennae-with-eyes-on-the-head on
+   Pop) and fur did on Pip. A tentacle fringe and a horn crown are still unclaimed — and a horn ring
+   was deliberately vetoed mid-build because Fen and Grig would then have worn the same part.
+3. **Mayor Orbit is 6352 triangles against a 6000 budget**, up from 6130. He was already over; the
+   shared hard-edge fix added ~220 to him. Stella is 8176, unchanged.
+4. **`tools/capture.sh` is not deterministic** — two captures of the same scene with identical code
+   differ by ~55,000 pixels at 1280x720, because neither the idle animation phase nor the framing is
+   pinned. Every render-based review in this project is quietly weaker than it looks.

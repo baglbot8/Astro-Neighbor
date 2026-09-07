@@ -45,9 +45,13 @@ const BEST_FRIEND_STARDUST_BONUS := 0.4
 ## Every id here must exist in the Catalog with a real scene, or the block at `_award()` grants a
 ## decoration the player can never place. Fen and Grig take the two remaining price-0 legendaries:
 ## the Gravity Well Fountain for the pan of mirror pools, the Ring-Planet Globe for the ringed world.
+## Vela takes the Whisper Array, which was ADDED for her: the four legendaries above were already
+## spoken for, and a neighbour missing from this dict is skipped in silence at `_award()` — her
+## "thanks" line promised a gift the system had no item for.
 const SIGNATURE_REWARD := {
 	"zorp": "deco_wish_star", "bolt": "deco_robot_dog",
 	"fen": "deco_gravity_fountain", "grig": "deco_ring_globe",
+	"vela": "deco_whisper_array",
 }
 
 var _rng := RandomNumberGenerator.new()

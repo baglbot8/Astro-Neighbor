@@ -52,7 +52,15 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 ## HOME_RADII above.
 @export var radius: float = 16.0
 ## "meadow" (home), "violet" (Zorp, alien), "chrome" (Bolt, robot), "plaza" (hub),
-## "flats" (Fen, salt pan), "chalk" (Grig, terraced stone)
+## "flats" (Fen, salt pan), "chalk" (Grig, terraced stone), "frost" (Vela, ice)
+##
+## ADDING ONE IS NOT A ONE-LINE CHANGE. A biome is a key in a dozen tables that mostly FAIL SILENTLY
+## when it is missing — SkyBodies.BIOME_MODE and BIOME_ANCHOR, SpaceGlobe's two match arms plus the
+## `mode` branches in both globe shaders, EnvPalette.BIOME_DUST/BIOME_DEEP, RocketPad.TRAIL_COLORS,
+## Npc._surface_for_biome, PlanetProps' match and Planet's shader arms. Most fall through to a
+## default and render the new world as the hub. The two that do NOT degrade quietly are
+## SpaceTravel.LAYOUT and SkyBodies.SYSTEM_LAYOUT, which are indexed without a guard and crash on
+## entering the space map. Grep an existing biome string across src/ before you ship a new one.
 @export var biome: String = "meadow"
 @export var seed: int = 1
 

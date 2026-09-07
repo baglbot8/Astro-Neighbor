@@ -534,15 +534,16 @@ static func synthesise(origin_id: String, dest_id: String) -> void:
 	var inv := cam_basis.inverse()
 	focus_dir = (inv * -up_ref).normalized()
 	focus_angle = deg_to_rad(CLIMB_SEAM_DEG)
-	# Every neighbour spread across the frame at plausible ground-sky sizes. FIVE slots, because six
-	# worlds means five neighbours and R2.1 says the others are ALWAYS in the sky - a three-slot cap
-	# here would drop two of them out of the seam frame and they would pop in on the space side.
+	# Every neighbour spread across the frame at plausible ground-sky sizes. SIX slots, because
+	# seven worlds means six neighbours and R2.1 says the others are ALWAYS in the sky - a short
+	# table here drops the tail of `ids` out of the seam frame and they pop in on the space side.
 	# The directions mirror src/world/sky_bodies.gd SLOTS (same azimuth spread, same height order),
-	# so the synthesised departure frames the sky the way a real planet does.
+	# so the synthesised departure frames the sky the way a real planet does. Slot 5 is Vela's
+	# -20.5 deg / 0.46 band slot: x = -sin(20.5) and a y between the +30 and +17 entries.
 	bodies = []
 	var slots := [Vector3(-0.42, 0.10, -0.90), Vector3(0.06, 0.22, -0.97), Vector3(0.50, -0.06, -0.86),
-		Vector3(0.29, 0.07, -0.95), Vector3(-0.24, -0.13, -0.96)]
-	var ids := ["home", "zorp", "bolt", "hub", "fen", "grig"]
+		Vector3(0.29, 0.07, -0.95), Vector3(-0.24, -0.13, -0.96), Vector3(-0.35, 0.01, -0.94)]
+	var ids := ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
 	var i := 0
 	for id in ids:
 		if id == origin_id or i >= slots.size():

@@ -1,4 +1,4 @@
-// Miniature planet surfaces for the solar-system map. One shader, six biome modes, all driven from
+// Miniature planet surfaces for the solar-system map. One shader, seven biome modes, all driven from
 // the planet's PlanetData so the globe you see in space matches the world you land on:
 //   0 meadow  green land + small blue seas with a sand shore
 //   1 violet  muted violet land with thin glowing river lines
@@ -6,6 +6,7 @@
 //   3 plaza   cream/green patchwork with a few lit windows
 //   4 flats   a dry terracotta pan pocked with dark pools, each ringed in pale salt crust
 //   5 chalk   a bone-white ball cut into quantised contour terraces, risers in the bank tone
+//   6 frost   a pale ice ball with bright polar caps, dark fracture veins and a scatter of lights
 //
 // 3 IS ALSO THE FALLBACK. The final `else` is plaza, so a biome with no mode of its own renders as
 // the green-and-cream hub with no error anywhere - see space_globe.gd::_apply_biome, which must
@@ -17,7 +18,7 @@
 shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 
-uniform int mode : hint_range(0, 5) = 0;
+uniform int mode : hint_range(0, 6) = 0;
 uniform vec4 land_a : source_color = vec4(0.30, 0.55, 0.26, 1.0);
 uniform vec4 land_b : source_color = vec4(0.22, 0.44, 0.21, 1.0);
 uniform vec4 low_color : source_color = vec4(0.86, 0.80, 0.62, 1.0);
@@ -160,6 +161,30 @@ void fragment() {
 		float riser = 1.0 - smoothstep(0.06, 0.14, edge);
 		col = mix(col, low_color.rgb, riser * 0.80);
 		rough = 0.90;
+	} else if (mode == 6) {
+		// Frost: an ice world read by LATITUDE. Every other mode here is isotropic 3D noise, so
+		// "poles" is the one structural cue none of them can say - bright caps over a darker
+		// fractured belt, which is what keeps Vela from reading as Grig's bone-white ball in a
+		// cooler tint. Kept identical to src/shaders/env_globe.gdshader mode 6 so the world in
+		// another planet's sky is the world on the map.
+		float cap = smoothstep(0.44, 0.80, abs(obj_dir.y));
+		float n = fbm3(p * 1.5);
+		col = mix(land_b.rgb, land_a.rgb, smoothstep(0.40, 0.66, n));
+		// Melt ponds in the low ground of the belt, never on the caps.
+		float melt = 1.0 - smoothstep(sea_level - 0.030, sea_level + 0.020, n);
+		col = mix(col, mix(sea_color.rgb, sea_deep.rgb, melt * 0.75), melt * (1.0 - cap) * 0.85);
+		// Fracture veins: the SAME ridge construction as mode 1's rivers, deliberately inverted -
+		// thin and DARK instead of thin and glowing, so the two never read as the same world.
+		float r = fbm3(p * 0.95 + 43.0);
+		float ridge = 1.0 - abs(r * 2.0 - 1.0);
+		float crack = smoothstep(0.90, 0.99, ridge);
+		col = mix(col, sea_deep.rgb, crack * 0.50);
+		col = mix(col, low_color.rgb, cap * 0.90);
+		// The Long Array: a sparse scatter of station lights on the belt, never on the ice cap.
+		float lights = smoothstep(0.955, 0.988, hash13(floor(obj_dir * 11.0))) * (1.0 - cap);
+		em = accent.rgb * lights * accent_glow;
+		// Wet ice reads specular; the frost cap and the crust do not.
+		rough = mix(0.86, 0.28, melt) + cap * 0.06;
 	} else {
 		// Plaza: cream tiles and lawn patches with a scatter of warm lit windows.
 		// Cream plaza tiles with broad green lawns; the town lights are real meshes (space_globe.gd),

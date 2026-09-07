@@ -13,16 +13,16 @@ static func make(npc_id: String) -> CharacterModel:
 			return RobotModel.new()
 		"pip":
 			var pip := TwinModel.new()
+			pip.variant = "pip"
 			pip.skin = Color("#93c169")
 			pip.antenna_count = 1
-			pip.stalk_style = "tall"
 			pip.bounce_phase = 0.0
 			return pip
 		"pop":
 			var pop := TwinModel.new()
+			pop.variant = "pop"
 			pop.skin = Color("#c1ca70")
 			pop.antenna_count = 2
-			pop.stalk_style = "closeset"
 			pop.bounce_phase = 0.85
 			return pop
 		"stella":
@@ -35,6 +35,8 @@ static func make(npc_id: String) -> CharacterModel:
 			return FenModel.new()
 		"grig":
 			return GrigModel.new()
+		"vela":
+			return VelaModel.new()
 		_:
 			# NOTE: an unregistered id lands here silently, so a typo in an npc id or a new
 			# neighbour whose case was never added ships as a generic alien with no error.

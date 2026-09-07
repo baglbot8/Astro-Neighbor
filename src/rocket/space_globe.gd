@@ -88,6 +88,13 @@ func setup(planet_data: PlanetData, globe_radius: float) -> void:
 			# One tight near-edge-on band and two moons, one big and bone-white.
 			_build_ring()
 			_build_moons(2)
+		"frost":
+			# ONE moon and nothing else. No clouds (an ice world's air is thin - R2.1 gives it
+			# dust filaments in the sky shader, not white puffs) and no ring, so the accessory
+			# layer alone still separates Vela from Zorp's two moons and Grig's ring-plus-two.
+			# THE COUNT MUST MATCH `vela.tres`'s `moon_count`, the way Zorp's 2 and Grig's 2 do:
+			# these moons are the map-scale stand-in for the ones the ground sky builds.
+			_build_moons(1)
 
 
 func _process(delta: float) -> void:
@@ -169,6 +176,8 @@ const BIOME_ANCHOR := {
 	"plaza": [Color("#7ec46a"), 0.14],
 	"flats": [Color("#c49a76"), 0.30],
 	"chalk": [Color("#b9b09a"), 0.40],
+	# The only COOL anchor in the dict, and it has to be: Grig already owns "pale ball".
+	"frost": [Color("#b9cddb"), 0.34],
 }
 
 
@@ -258,6 +267,24 @@ func _apply_biome() -> void:
 			# Mode 5 paints every riser in `low_color`, and on Grig the riser tone is `bank_color`
 			# (warm ochre cut stone); `ground_color_low` is inert on a world with no water.
 			_material.set_shader_parameter("low_color", data.bank_color.darkened(0.04))
+		"frost":
+			# Vela: a pale ice ball with bright caps, dark fracture veins and the Long Array's
+			# lights scattered across the night side. `sea_level` is mode 6's melt threshold on
+			# the belt field, not a real waterline.
+			_material.set_shader_parameter("mode", 6)
+			_material.set_shader_parameter("sea_level", 0.40)
+			# 2.1, between Fen's 2.6 and the hub's 1.7: the caps are a latitude term and do not
+			# care, but the fracture veins need enough cycles to be veins and few enough to stay
+			# lines rather than the speckle that mode 5 was first rejected for.
+			_material.set_shader_parameter("pattern_scale", 2.1)
+			_material.set_shader_parameter("accent", Color("#ffb768"))
+			# Well under the hub's 2.4: this is a research array, not a town.
+			_material.set_shader_parameter("accent_glow", 0.90)
+			_material.set_shader_parameter("rim_color", Color("#bfe0f2"))
+			_material.set_shader_parameter("rim_strength", 0.32)
+			# Mode 6 paints the CAPS in `low_color`, so on a frost world `ground_color_low` is the
+			# frost tone rather than a shore tone - see the note in vela.tres's contract.
+			_material.set_shader_parameter("low_color", data.ground_color_low.lightened(0.04))
 		_:
 			_material.set_shader_parameter("mode", 3)
 			_material.set_shader_parameter("pattern_scale", 1.7)

@@ -17,7 +17,27 @@ const STAR_SHADER := preload("res://src/shaders/star.gdshader")
 static var _cache: Dictionary = {}
 
 ## R2.9 surface kinds, matching the `surface_kind` uniform in toon_soft.gdshader.
-const SURFACE_KINDS := {"none": 0, "cloth": 1, "metal": 2, "wood": 3, "rock": 4, "foliage": 5, "rubber": 6, "skin": 7}
+## A kind only exists if that shader has an explicit `else if` branch for it — its chain ends in
+## `else -> sd_foliage`, so an id with no branch silently renders as GRASS rather than as nothing.
+## hub_surface.gdshader and astro_shell.gdshader carry their own shorter lists; "skin" and "scales"
+## are toon_soft only, which is where every character material is built.
+const SURFACE_KINDS := {"none": 0, "cloth": 1, "metal": 2, "wood": 3, "rock": 4, "foliage": 5, "rubber": 6, "skin": 7, "scales": 8}
+
+## Mean of sd_skin's spot term at a given `surface_spot_radius`, which `toon()` feeds to the
+## `surface_spot_dc` uniform so the spot pattern averages out instead of tinting the character.
+##
+## THIS IS NOT A CONSTANT AND USED NOT TO BE TREATED AS ONE. sd_skin hardcoded 0.22, while the true
+## mean is 0.035 at the shipping radius 0.34 - so alien skin was a flat ~6% albedo DARKENING with a
+## faint pattern riding on it, which is the saturation cost recorded in docs/OPEN_ISSUES.md item 35.
+## Past radius ~0.70 that same constant flips sign and LIGHTENS the character instead.
+##
+## The curve is the kernel volume times the 0.478 spot pick rate, saturating as blobs overlap.
+## Fitted to a 600k-sample measurement of the shader's own cellular pass to within 0.001 absolute
+## across the whole 0.05-1.20 range; the measured table is in sd_skin's header comment.
+static func spot_dc(radius: float) -> float:
+	var r := clampf(radius, 0.0, 1.30)
+	var r3 := r * r * r
+	return 1.0 - exp(-(0.74343 * r3 + 0.52963 * r3 * r - 0.33228 * r3 * r * r))
 
 static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 	var key := "toon|%s|%s" % [color.to_html(), str(opts)]
@@ -43,9 +63,13 @@ static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 		m.set_shader_parameter("emission_color", opts["emission"])
 		m.set_shader_parameter("emission_strength", opts.get("emission_strength", 1.5))
 	# R2.9 surface detail (docs/STYLE_GUIDE.md). Opt in with {"surface": "cloth"|"metal"|"wood"|
-	# "rock"|"foliage"}. Adds material character through roughness/normal/albedo variation, never
-	# by raising specular, so it does not undo R2.6 (pastel and matte). Fine detail fades with
-	# distance automatically - a high-frequency pattern with no mip chain moires otherwise.
+	# "rock"|"foliage"|"rubber"|"skin"|"scales"}. Adds material character through roughness/normal/
+	# albedo variation, never by raising specular, so it does not undo R2.6 (pastel and matte). Fine
+	# detail fades with distance automatically - a high-frequency pattern with no mip chain moires.
+	#
+	# "skin" is blobs on a cell ground; "scales" is genuine overlapping shingle rows, which is a
+	# different silhouette rather than a different speckle - a skin with "surface_scales" turned up
+	# only draws the WALLS between abutting cells and still collapses into speckle at 8 m.
 	# Optional: "surface_strength" (default 1.0), "surface_near"/"surface_far" fade distances in
 	# metres, and "grain_dir" (a Vector3, wood only - the plank's long axis in model space).
 	if opts.has("surface"):
@@ -64,10 +88,16 @@ static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 		m.set_shader_parameter("surface_macro", opts.get("surface_macro", 0.0))
 		m.set_shader_parameter("surface_macro_cycles", opts.get("surface_macro_cycles", 2.6))
 		m.set_shader_parameter("surface_knot", opts.get("surface_knot", 0.55))
-		# "skin" only: spot vs scale-edge weighting and the spot size.
+		# "skin" only: spot vs scale-edge weighting and the spot size. "surface_spot_radius" now
+		# runs to 1.20 (it was capped at 0.60, roughly one cell) so a character can have BIG spots
+		# rather than freckles. The DC that stops the pattern from tinting the whole character is
+		# DERIVED from the radius by spot_dc() - never set the two independently unless you have
+		# measured the mean yourself.
+		var spot_r: float = float(opts.get("surface_spot_radius", 0.34))
 		m.set_shader_parameter("surface_spot_amount", opts.get("surface_spot", 1.0))
 		m.set_shader_parameter("surface_scale_amount", opts.get("surface_scales", 1.0))
-		m.set_shader_parameter("surface_spot_radius", opts.get("surface_spot_radius", 0.34))
+		m.set_shader_parameter("surface_spot_radius", spot_r)
+		m.set_shader_parameter("surface_spot_dc", opts.get("surface_spot_dc", spot_dc(spot_r)))
 	if opts.has("texture"):
 		m.set_shader_parameter("albedo_texture", opts["texture"])
 		m.set_shader_parameter("use_texture", true)

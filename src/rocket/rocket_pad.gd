@@ -191,6 +191,9 @@ const TRAIL_COLORS := {
 	# off a `: Array` assignment, so a bare Color here hard-errors on the pad the first time you land.
 	"flats": [Color("#cfbb9c"), Color("#ff9a4d")],
 	"chalk": [Color("#c8bfa8"), Color("#e0a45c")],
+	# Vela's ice: a cold pale stone with a warm amber chevron, which is both the only warm thing
+	# on the world and the colour of her own rim lamps - the trail reads as array signage.
+	"frost": [Color("#c3d2dc"), Color("#ffc46a")],
 }
 ## Stepping stones every this many metres along the spawn->pad great circle.
 const TRAIL_STEP_M := 2.0

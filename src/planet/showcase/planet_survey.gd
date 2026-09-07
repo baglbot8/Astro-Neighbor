@@ -15,13 +15,13 @@ const SAMPLES := 4000
 const FOOTPRINTS: Array[float] = [0.6, 0.9]
 
 func _ready() -> void:
-	for id in ["home", "hub", "zorp", "bolt", "fen", "grig"]:
+	for id in ["home", "hub", "zorp", "bolt", "fen", "grig", "vela"]:
 		_survey(id)
 	get_tree().quit()
 
 func _survey(id: String) -> void:
 	var path := "res://src/planet/data/%s.tres" % id
-	# The roster is the six-world list, but a world under construction may not have its .tres yet,
+	# The roster is the seven-world list, but a world under construction may not have its .tres yet,
 	# and a bare load() of a missing path errors out and takes the whole survey with it.
 	if not ResourceLoader.exists(path):
 		print("SURVEY %-6s  no PlanetData yet - skipped" % id)

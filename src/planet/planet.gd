@@ -853,8 +853,19 @@ func _make_ground_material() -> ShaderMaterial:
 				# settings below exist to keep everything else out of the way of that.
 				m.set_shader_parameter("color_c", data.ground_color_a.lightened(0.06))
 				m.set_shader_parameter("crater_color", data.bank_color.lightened(0.10))
-				# Dry world: no waterline, so no beach. Explicit rather than relying on water_radius.
-				m.set_shader_parameter("sand_band", 0.0)
+				# Dry world: no waterline, so no beach. `sand_band` MUST NOT BE 0 TO SAY THAT — 0 is
+				# the one value that does the exact opposite and floods the whole planet with
+				# `sand_color`. On a dry world `_make_ground_material` sets wr = radius - 50, so wl
+				# is -50 and the shader's test is
+				#     sand_t = 1.0 - smoothstep(wl + 0.12 + edge_n, wl + sand_band + edge_n, h)
+				# With sand_band 0 that is smoothstep(-49.88, -50.00, h): edge0 ABOVE edge1, an
+				# inverted ramp, which clamps to 0 for every h and leaves sand_t = 1 everywhere.
+				# `color_a`, `color_b`, `color_c` and the ochre `bank_color` risers were then never
+				# drawn anywhere, and Grig shipped as a FEATURELESS TAN BALL — none of the concentric
+				# shelves this arm's own comment describes were visible. Captured before and after.
+				# Any value above 0.12 restores it; 0.30 matches the "frost" arm below, where this
+				# trap was originally found and written up.
+				m.set_shader_parameter("sand_band", 0.30)
 				# A raking dapple is what turns flat chalk into a lit staircase — every riser picks up
 				# a shadow line. sun_patch_lo is low so the lit patches are narrow and bright.
 				m.set_shader_parameter("sun_patch", 2.10)
@@ -881,6 +892,115 @@ func _make_ground_material() -> ShaderMaterial:
 				# stone is wrong, and it would cut straight across the contour rings. This is HALF the
 				# job — the other half is excluding "chalk" from PlanetProps._collect_paths(), which
 				# only handles prop avoidance and does not stop the shader drawing the arc.
+			elif data.biome == "frost":
+				# VELA — deep wind-smoothed powder with NO EDGES ANYWHERE. Every other world in the game
+				# gets its ground read from a boundary of some kind: a triangle grid, a waterline, a crater
+				# rim, a terrace riser, a trodden path. Frost has none of them, on purpose, so the first
+				# half of this branch is a list of things switched OFF and the second half is the small set
+				# of gradients left to carry the whole world. MEASURED on a real noon showcase frame under
+				# the gameplay rig (docs/AGENT_WORKFLOW.md's "showcase lit by a lie" rule): ground crop
+				# value mean 0.757, luma p05 0.303, range 0.439, blown 0.0%; whole frame saturation mean
+				# 0.461, p90 0.646. Against Fen and Grig measured on the IDENTICAL crop (Fen 0.777 / 0.380 /
+				# 0.415, Grig 0.790 / 0.600 / 0.224) this is the darkest mean and the widest range of the
+				# three. Do not re-tune any number below without re-capturing; the first four passes here
+				# were all wrong for a reason that is written out under `sand_band`.
+				#
+				# 1. NO PATTERN. tri_density 0 makes `step(h3, density)` fail for every cell, so
+				#    pc_tri_pattern returns 0 AND pc_tri_avg returns 0 — `grass` collapses to exactly
+				#    color_a at every distance. `cell_size`, `tri_radius`, `color_b` and `color_c` are
+				#    therefore INERT here and are deliberately left alone; the .tres still authors
+				#    ground_color_b because sky_bodies / space_globe sample it for the orbital view, which
+				#    is the only place that colour is ever seen.
+				m.set_shader_parameter("tri_density", 0.0)
+				# 2. NO BEACH — AND `sand_band` MUST NOT BE 0 TO SAY SO. This one is a trap and it cost four
+				#    tuning passes to find. On a dry world `_make_ground_material` sets `wr = radius - 50`,
+				#    so the shader's `wl` is -50 and its sand test is
+				#      sand_t = 1.0 - smoothstep(wl + 0.12 + edge_n, wl + sand_band + edge_n, h)
+				#    With sand_band 0 that is smoothstep(-49.88, -50.00, h) — edge0 ABOVE edge1, an inverted
+				#    ramp, which clamps to 0 for every h on the planet and leaves sand_t = 1. The result is
+				#    the exact opposite of "no beach": the ENTIRE sphere renders in `sand_color` and
+				#    `color_a` is never drawn at all. Verified by setting ground_color_a to pure red and
+				#    capturing a frame that came back unchanged. Any value over 0.12 puts the band 50 m
+				#    below the ground where it belongs; 0.30 is well clear.
+				#    NOTE FOR THE NEXT READER: the "chalk" arm above still has sand_band 0.0, so Grig is
+				#    drawing entirely in its ground_color_low. Left alone deliberately — Grig's palette was
+				#    measured with that active, so the one-line fix has to be re-measured by whoever owns
+				#    that world rather than slipped in from here.
+				m.set_shader_parameter("sand_band", 0.30)
+				# 3. NO CLIFF FACE, NO CRATER DUST. crater_count 0 + plateau_count 0 + terrace_bank 0 means
+				#    bank_weight() is zero over the whole sphere, so COLOR.g and COLOR.b are flat zero and
+				#    `bank_color` / `crater_color` paint nothing at all. That is the INTENDED state here —
+				#    it is the documented Umbo failure mode, used on purpose — which is why neither uniform
+				#    is set: there is no riser anywhere on this planet to paint.
+				#
+				# What is left is the only thing that can draw form on a featureless snowfield: three broad
+				# fbm terms. Measured, this world has 1.78 m of relief across ~2.7 crests per great circle —
+				# the largest smooth relief and the fewest undulations in the game — so it is one enormous
+				# soft swell at a time and the shading has to grade across a swell rather than break it into
+				# shapes. `shadow_patch` over a deep blue `ground_shadow_color` (V 0.42) is the wind hollow,
+				# and on a world with no crater, no waterline, no riser and a sun almost overhead it is the
+				# only broad dark tone there is.
+				m.set_shader_parameter("patch_strength", 0.14)
+				m.set_shader_parameter("shadow_patch", 0.34)
+				# A NARROW, STRONG DAPPLE — Zorp's lesson, applied to the opposite problem. The violet arm
+				# records that "a narrow, strong sunlit patch buys the top of the range where a broad lift
+				# cannot", and that is exactly what this world needs: a gentle wide lift (1.34 at amt 0.44)
+				# measured luma range 0.399 against a 0.50 gate, because the tonemapper compresses hard near
+				# the top and a broad lift raises the MEAN as fast as it raises p95. Pushing the strength up
+				# and the threshold up with it (1.85 at lo 0.64) lights a smaller fraction of the ground much
+				# harder and bought 0.04 of range for 0.004 of mean. Blown highlights stayed at 0.0%.
+				m.set_shader_parameter("sun_patch", 1.85)
+				m.set_shader_parameter("sun_patch_lo", 0.64)
+				m.set_shader_parameter("sun_patch_amt", 0.70)
+				m.set_shader_parameter("sun_patch_tint", Color(0.98, 1.0, 1.05))
+				# With the sun nearly overhead every cast shadow is only 0.21x its caster, so the limb and
+				# the macro hollow have to carry this world's dark end between them. Cold navy, matching a
+				# sky thin enough to keep the stars out at noon.
+				m.set_shader_parameter("limb_darken", 0.76)
+				m.set_shader_parameter("limb_tint", Color(0.50, 0.56, 0.74))
+				# Frost glitter: Zorp's per-cell spot generator at a fraction of its strength, in two cold
+				# whites. Kept low because these carry EMISSION, and a sparkle on a pale ground is the
+				# cheapest way there is to fail `blown < 5%`.
+				m.set_shader_parameter("speck_strength", 0.16)
+				m.set_shader_parameter("speck_color_a", Color("#e6eeff"))
+				m.set_shader_parameter("speck_color_b", Color("#c2d2ea"))
+				# THE CRISP-SHADOW WORLD. `ramp_softness` has sat at its 0.35 default on all six shipped
+				# planets; this is the first world to move it, and it is the right lever for a thin
+				# atmosphere — little skylight means a hard terminator, which is what makes a SHORT shadow
+				# read as sharp rather than as merely small.
+				m.set_shader_parameter("ramp_softness", 0.22)
+				m.set_shader_parameter("shade_strength", 0.38)
+				m.set_shader_parameter("shade_floor", 0.30)
+				m.set_shader_parameter("shade_tint", Color(0.60, 0.66, 0.90))
+				m.set_shader_parameter("shadow_fill_color", Color("#8fa4cf"))
+				m.set_shader_parameter("shadow_fill", 0.23)
+				# `pastel_dark` is the number that decides whether this world reads as snow or as paper: the
+				# default 0.45 desaturates anything under mx 0.52 toward neutral, and on Vela that is the
+				# shaded side of every swell and the whole wind hollow — the exact place the blue lives. Held
+				# at 0.30 rather than the default so those stay blue; taken as low as 0.14 in an earlier pass
+				# it took the ground crop's saturation mean to 0.595 and the whole frame past the p90 ceiling,
+				# so this is a two-sided limit and not a "lower is better" knob.
+				m.set_shader_parameter("pastel_max", 0.34)
+				m.set_shader_parameter("pastel_dark", 0.30)
+				# THE ONE NUMBER THAT IS NOT ABOUT ART. R2.9 fine detail should be near zero on powder, and
+				# it was (0.20 / 0.06) until the capture showed why it cannot be: with no triangle grid, no
+				# sand-band noise and no cliff strata, this ground is the only perfectly uniform surface in
+				# the game, and a uniform surface shows the RENDERER. Axis-aligned stair-stepped blocks —
+				# the low-power Compatibility profile's shadow/attenuation quantisation — were plainly
+				# visible across the mid-ground and are invisible on every other world only because their
+				# ground noise hides them. 1.10 is a fine powder mottle that hides the blocks and still reads
+				# as snow, and it costs nothing measurable (value mean moved 0.004). `detail_rock` is INERT
+				# here and is not set: the shader gates the rock bands on
+				# `mineral = max(sand_t, path_t, bank_t) + crater`, all four of which are zero on this world,
+				# so the ground runs entirely on the foliage bands `detail_grass` drives.
+				m.set_shader_parameter("detail_grass", 1.10)
+				m.set_shader_parameter("detail_bump", 0.14)
+				m.set_shader_parameter("detail_light", 0.90)
+				# NO PATH: pa2/pb2 stay empty, so path_count is 0 below. A trodden tan smear is an EDGE, and
+				# this world's one claim is that it has none — it would also be the only warm thing on a
+				# planet whose one warm colour is reserved for Vela's relay lamps. Same two-place rule Grig
+				# records above: the other half is "frost" in PlanetProps._collect_paths()'s early return,
+				# which only handles prop avoidance and does not stop the shader drawing the arc.
 			else:
 				m.set_shader_parameter("crater_color", data.bank_color.lightened(0.12))
 				m.set_shader_parameter("sun_patch", 1.30)

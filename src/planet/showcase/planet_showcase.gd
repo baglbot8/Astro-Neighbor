@@ -19,7 +19,7 @@ const CAM_ELEVATION_DEG := 28.0
 const CAM_FOV := 45.0
 const ENV_SCENE := "res://src/world/environment.tscn"
 
-@export var planet_ids: PackedStringArray = PackedStringArray(["home", "zorp", "bolt", "hub", "fen", "grig"])
+@export var planet_ids: PackedStringArray = PackedStringArray(["home", "zorp", "bolt", "hub", "fen", "grig", "vela"])
 @export var cycle_seconds: float = 3.0
 @export var orbit_mode: bool = false
 @export var orbit_seconds: float = 8.0

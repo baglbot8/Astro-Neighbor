@@ -697,6 +697,114 @@ const DATA := {
 			],
 		},
 	},
+	# ==========================================================================================
+	## Vela — the listener of the Long Array, and the cast's second robot neighbour.
+	##
+	## HER VOICE, and why it is not one of the eight already here. Bolt is clipped and literal
+	## ("Systems nominal"), DJ Nova is loud, Mayor Orbit is a fond old politician, Fen is terse and
+	## weathered, Grig is blunt. Vela is FORMAL AND WARM: whole courteous sentences, gentle humour,
+	## and everything framed in terms of SOUND rather than sight, because she is a dish. She is the
+	## only neighbour with no mouth, so several of her lines quietly acknowledge that her rim lamps
+	## do the talking — which is also how a player learns to read them.
+	##
+	## FAVOUR FORMAT STRINGS. `FavorSystem.request_lines()` branches on what a line CONTAINS:
+	## both %d and %s -> `% [count, item]`; a bare %s -> `% npc_name`; neither -> `%%` unescaped to
+	## a literal percent. So "fetch" and "bring" each carry exactly one line with BOTH, "deliver"
+	## carries exactly one line with a BARE %s, and no other line here contains a percent at all.
+	"vela": {
+		"planet": "vela",
+		"display_name": "Vela",
+		"voice_profile": "robot",
+		"accent": "#a98a9e",
+		"home_dir": Vector3(-0.3607, 0.7214, 0.5912),
+		"wander_radius_m": 8.0,
+		"intro": [
+			"Good day. You have arrived in a quiet window.",
+			"I am Vela. I keep the array and its records.",
+			"Nine thousand hours of sky, all of it filed.",
+		],
+		"greet": {
+			"low": [
+				"Good day to you. Mind the cable runs.",
+				"Welcome. The dishes are listening. Do speak up.",
+				"A visitor. How very agreeable.",
+				"Good day. I have set a chair out for you.",
+			],
+			"mid": [
+				"Ah, you. The array noted your approach.",
+				"Welcome back. I kept the quiet window for you.",
+				"Good day, neighbour. Sit, if you would.",
+				"You return. My records are pleased to say so.",
+			],
+			"high": [
+				"My friend! The sky is being generous today.",
+				"Ah, you. I saved a signal to play for you.",
+				"Welcome, dear friend. Sit anywhere you like.",
+				"You! Today's best hum is filed in your name.",
+			],
+		},
+		"small_talk": [
+			"The array hears further than it sees. So do I.",
+			"I record everything and understand about half.",
+			"Dish nine hums in the cold. I find it soothing.",
+			"Politeness costs nothing and carries very far.",
+			"I keep a file marked 'unexplained'. It is thick.",
+			"Sound behaves oddly here. Do speak plainly.",
+			"My rim lights say what my voice cannot. Watch.",
+			"I do not sleep. I lower my gain and drift.",
+			"The wind tunes the dishes. Badly, but sincerely.",
+			"I heard a whole song once and lost the middle.",
+			"A good antenna is patient. So is a good friend.",
+			"I have no mouth. I manage. Lights are eloquent.",
+			"Every hour I sweep the sky. Every hour, once.",
+			"My knees click on cold mornings. I do not mind.",
+		],
+		"time_lines": {
+			"dawn": ["Dawn. The array is at its most sensitive.", "Good morning. The sky is quiet and clean."],
+			"day": ["Midday. A great deal of noise from the sun.", "Good day. The dishes are warm to the touch."],
+			"dusk": ["Dusk. This is when the far signals arrive.", "Evening. My favourite hour on the field."],
+			"night": ["Night. The whole sky speaks at once. Lovely.", "Late. I am still listening, if you need me."],
+		},
+		"deco_lines": {
+			"none": ["Your planet is unfurnished. A clean signal.", "Nothing placed yet. There is time, and plenty."],
+			"few": ["A few pieces placed, and tastefully spaced.", "You have begun. I noted it in the log."],
+			"many": ["Your planet is beautifully appointed. Truly.", "So many pieces. I counted, then admired."],
+		},
+		"favor": {
+			"fetch": [
+				"A small request, if your day allows it.",
+				"Might you gather %d %s for the array?",
+			],
+			"bring": [
+				"I am repairing dish four. I lack materials.",
+				"Bring me %d %s and I will tune it properly.",
+			],
+			"deliver": [
+				"I have written something out for %s.",
+				"Would you carry it over? It is not fragile.",
+			],
+			"progress": [
+				"Coming along. There is no hurry in this.",
+				"Good progress. The array will wait. So will I.",
+			],
+			"thanks": [
+				"Precisely right. Thank you, most sincerely.",
+				"Take this, with my thanks. It served me well.",
+			],
+			"decline": [
+				"Of course. The request will keep. So will I.",
+				"Quite all right. Another day, then.",
+			],
+			"remind": [
+				"My small errand still stands. At your leisure.",
+				"No hurry. The dish has waited nine years.",
+			],
+			"gift": [
+				"A parcel, for me? How very kind. How lovely.",
+				"I shall log it, then open it. In that order.",
+			],
+		},
+	},
 }
 
 

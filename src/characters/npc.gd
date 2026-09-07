@@ -404,9 +404,11 @@ func _surface_for_biome() -> String:
 		"chrome":
 			return "metal"
 		# AudioManager.FOOTSTEP_SURFACES is only ["grass", "stone", "metal"] and anything else is
-		# silently coerced to grass, so there is no "sand" set to reach for: Fen's salt crust and
-		# Grig's cut chalk both take stone, which is the closer of the three.
-		"plaza", "flats", "chalk":
+		# silently coerced to grass, so there is no "sand" set to reach for: Fen's salt crust,
+		# Grig's cut chalk and Vela's packed ice all take stone, the closer of the three. (An
+		# "ice" set would be new wavs plus .import files, and Player.FOOTSTEP_CANDIDATES is
+		# grass-only regardless of biome, so it would only ever change the NPC's step anyway.)
+		"plaza", "flats", "chalk", "frost":
 			return "stone"
 		_:
 			return "grass"
