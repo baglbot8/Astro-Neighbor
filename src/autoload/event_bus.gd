@@ -80,6 +80,42 @@ func _on_node_added(node: Node) -> void:
 		reset_modals()
 
 ## Clears all modal state. Called automatically on every scene change.
+## STUCK-PLAYER WATCHDOG. `RocketPad._freeze_player` disables the player's physics AND process
+## for the landing cutscene, and `_thaw_player` puts them back. If anything interrupts that
+## sequence the astronaut can look around but never walk again, which strands the player on
+## the planet — reported twice from a real iPhone as "coming out of the spaceship on a new
+## planet doesn't let me move".
+##
+## The pad has its own watchdog, but it runs in the PAD's `_process`, so it cannot help if the
+## pad is gone or not processing. The player cannot watch itself either: the freeze is exactly
+## what stops its `_physics_process` running. So the last line of defence lives here, in an
+## autoload that always processes.
+##
+## Triggers ONLY on physics being disabled, never on `input_enabled` alone — dialogue clears
+## `input_enabled` for as long as the player reads, and that is legitimate.
+const STUCK_GRACE := 12.0
+var _stuck_timer := 0.0
+
+
+func _process(delta: float) -> void:
+	var p := get_tree().get_first_node_in_group("player") if get_tree() != null else null
+	if p == null or not is_instance_valid(p) or not p.is_inside_tree():
+		_stuck_timer = 0.0
+		return
+	if p.is_physics_processing() or get_tree().paused:
+		_stuck_timer = 0.0
+		return
+	_stuck_timer += delta
+	if _stuck_timer < STUCK_GRACE:
+		return
+	_stuck_timer = 0.0
+	push_warning("EventBus: player frozen for %.0f s with no cutscene running — restoring control." % STUCK_GRACE)
+	p.set_physics_process(true)
+	p.set_process(true)
+	p.set("input_enabled", true)
+	p.visible = true
+
+
 func reset_modals() -> void:
 	if _modal_count != 0:
 		push_warning("EventBus: clearing %d stale modal(s) on scene change: %s" % [_modal_count, str(_modal_names.keys())])

@@ -190,6 +190,21 @@ func _omni(parent: Node3D, pos: Vector3, color: Color, energy: float, range_m: f
 	l.light_specular = 0.3
 	parent.add_child(l)
 
+## MOBILE / BROWSER PROP BUDGET. A phone draws every one of these instances and pays for the
+## planet-build that creates them, and the player reported the game running hot. Small
+## scatter (grass tufts, flower patches) is the one thing here that can be thinned without
+## changing the composition of a planet — the trees, rocks, houses and landmarks that make
+## a planet recognisable are NOT touched.
+func _scatter_scale() -> float:
+	return 0.35 if (Platform.is_compatibility_renderer() or Platform.is_mobile()) else 1.0
+
+
+## Tiny scatter does not need to cast a shadow on a phone: each instance is drawn again into
+## the shadow map, and a 12 cm flower contributes a shadow a few pixels across.
+func _scatter_shadow(want: bool) -> bool:
+	return want and not (Platform.is_compatibility_renderer() or Platform.is_mobile())
+
+
 ## One MultiMesh for many small foliage instances (flowers/tufts) tinted via custom data.
 func _multimesh(mesh: ArrayMesh, xfs: Array[Transform3D], tints: PackedColorArray, material: Material, shadow: bool) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
@@ -339,12 +354,13 @@ func _flower_patches(count: int, stem: Color = Color("#3d7f38"), center: Color =
 			tints.append(_vary(col_a if rng.randf() < 0.6 else col_b, 0.06))
 	if xfs.is_empty():
 		return
-	_multimesh(mesh, xfs, tints, PlanetPropMeshes.foliage_material(0.02, 0.35, true, 2.0), true)
+	_multimesh(mesh, xfs, tints, PlanetPropMeshes.foliage_material(0.02, 0.35, true, 2.0), _scatter_shadow(true))
 
 ## Thousands of tiny swaying tufts on grass only (not sand, water, paths, tiles, or inside props).
 func _grass_tufts(color: Color, density_m2: float) -> void:
 	var area := 4.0 * PI * planet.radius * planet.radius
-	var target := mini(int(area / density_m2), 6000)
+	# 6000 tufts per planet is a desktop number. See _scatter_scale().
+	var target := int(mini(int(area / density_m2), 6000) * _scatter_scale())
 	var xfs0: Array[Transform3D] = []
 	var xfs1: Array[Transform3D] = []
 	var tints0 := PackedColorArray()
@@ -699,7 +715,7 @@ func _plaza() -> void:
 	_spawn_blocking(bunting_mesh, [prop_mat], pd, 1.0, 1.9, 0.1, 2.7, 0.05, false, 0.0, (data.pad_dir.normalized() - pd).normalized(), null, "Bunting")
 
 	if not flower_xfs.is_empty():
-		_multimesh(PlanetPropMeshes.flower(Color("#3d7f38"), Color("#e0b34f"), 0), flower_xfs, flower_tints, PlanetPropMeshes.foliage_material(0.02, 0.35, true, 2.0), true)
+		_multimesh(PlanetPropMeshes.flower(Color("#3d7f38"), Color("#e0b34f"), 0), flower_xfs, flower_tints, PlanetPropMeshes.foliage_material(0.02, 0.35, true, 2.0), _scatter_shadow(true))
 
 	# Lawn life outside the paved areas.
 	var trees := _n(data.tree_count, 4)

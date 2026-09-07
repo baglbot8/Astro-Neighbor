@@ -55,10 +55,13 @@ func _apply_quality_profile() -> void:
 		# setting here on mobile hardware.
 		vp.msaa_3d = Viewport.MSAA_DISABLED
 		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
-	# Soft shadows at filter quality 4 take many taps per pixel. Hard shadows keep the shape
-	# (which is what reads on a small screen) at a fraction of the cost.
-	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
-	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
+	# Filter quality 4 takes many taps per pixel and is far too expensive on a phone. But HARD is
+	# too far the other way: with no filtering at all the shadow edge aliases into hard dark lines
+	# and self-shadowing shows up as dark patches — reported from a real iPhone as 'shadows look
+	# too dark and leave notably dark places and lines'. SOFT_LOW keeps a filtered edge at a small
+	# fraction of quality 4's cost.
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
+	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
 	print("[Platform] low-power profile applied (no MSAA, hard shadows)")
 
 
