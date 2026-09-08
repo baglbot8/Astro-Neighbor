@@ -25,6 +25,33 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx,
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 
+// WEB PARITY. planet_common is included for pc_in/pc_out only - the recipe is at its lines 84-104.
+// Compatibility skips the CPU-side sRGB->linear on `source_color` uniforms and applies its own
+// srgb_to_linear() to whatever fragment() writes to ALBEDO/EMISSION, so shade_tint is decoded at
+// first use and each of the two writes is encoded once. `astro_compat` is 1.0 only under
+// Compatibility, so on Forward+ every wrap is the identity and the desktop look cannot move. v_col
+// is the baked lamp/crystal colour and is NOT wrapped (recipe (c)).
+//
+// MEASURED, showcase/decorations_gallery.tscn --still --row=15 (the Crystal Lamp), on the 6,492-px
+// glow surface. The mask is the pixels a magenta-emission build of THIS shader moves by more than
+// 30 codes on BOTH renderers, eroded 2. The instance pulse is frozen for the measurement (p = 1.0)
+// because it is TIME-driven and the two renderers do not reach the capture on the same frame; with
+// it live the same run repeats to +-1 code instead of +-0.5. Forward+ vs Compatibility, day frame,
+// two independent captures:
+//     before   MAE 71.12  p95 84.33   region SAT 0.7769 -> 0.9367 (gap 0.1598)
+//     after    MAE  2.09  p95  5.67   region SAT 0.7786 -> 0.7886 (gap 0.0100)
+//     repeat   MAE  1.58  p95  5.33   region SAT 0.7789 -> 0.7918 (gap 0.0129)
+// Forward+ did not move: p05/p50/p95 35.0 / 135.3 / 145.4 in every run, before and after.
+//
+// The night frame does NOT come down as far (MAE 2.43, SAT gap 0.0235) and it is not this shader:
+// after dark `aces_inverse` hands the core an HDR value several times over 1.0 by design, and
+// Compatibility's LDR target clamps there, which trims the brightest channel of a strongly coloured
+// core and costs it a little saturation. Dropping the exposure does not help because the clamp is
+// on the emissive itself, not on the frame. See planet_glow_pulse for the measurement of that
+// ceiling. It is an engine limit of the Compatibility target, not something to tune out.
+#include "res://src/shaders/planet_common.gdshaderinc"
+global uniform float astro_compat;
+
 global uniform float astro_night;
 
 // Must match Environment.tonemap_white (src/world/environment.gd TONEMAP_WHITE).
@@ -68,10 +95,16 @@ void fragment() {
 	}
 	float night = clamp(astro_night, 0.0, 1.0);
 	float lvl = mix(day_floor, 1.0, night) * p;
-	ALBEDO = mix(v_col, vec3(1.0), albedo_lift * lvl) * mix(1.0, night_albedo, night);
+	ALBEDO = pc_out(mix(v_col, vec3(1.0), albedo_lift * lvl) * mix(1.0, night_albedo, night));
 	// The colour we want on screen, then the HDR value that survives the tonemapper as that colour.
 	vec3 target = cap_display(v_col * glow_strength * emission_scale, core_cap) * lvl;
-	EMISSION = aces_inverse(target, tonemap_white);
+	// aces_inverse deliberately returns an HDR value - the point of this shader is to pick the
+	// colour we want ON SCREEN and hand the tonemapper whatever survives as that colour - so this
+	// write is usually well over 1.0 and Compatibility's LDR target clamps it there whether or not
+	// it was encoded (measured on planet_glow_pulse: EMISSION 1.0 / 1.6 / 2.0 / 3.0 all land on one
+	// Compatibility pixel). The wrap is still the right call: it is exact for the dimmed daytime and
+	// pulse-trough values that DO fall inside the target, and identical to no wrap above it.
+	EMISSION = pc_out(aces_inverse(target, tonemap_white));
 	ROUGHNESS = 0.5;
 	METALLIC = 0.0;
 	SPECULAR = 0.15;
@@ -80,7 +113,7 @@ void fragment() {
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-0.4, 0.4, ndl) * ATTENUATION;
-	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, 0.18);
+	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), 0.18);
 	float k = mix(1.0, night_lit, clamp(astro_night, 0.0, 1.0));
 	DIFFUSE_LIGHT += mix(shadow_col * 0.7, ALBEDO, lit) * LIGHT_COLOR * k / PI;
 }

@@ -21,6 +21,7 @@ shader_type spatial;
 render_mode unshaded, cull_back, depth_draw_opaque, shadows_disabled, fog_disabled;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
+#include "res://src/shaders/planet_common.gdshaderinc"
 
 /// 0 meadow (green + seas), 1 violet (glowing rivers), 2 chrome (plate grid + seams), 3 plaza,
 /// 4 flats (pale salt rings round dark pools), 5 chalk (quantised contour terraces),
@@ -99,9 +100,34 @@ void vertex() {
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
+// WEB PARITY: THE WRITE TRANSFER (planet_common.gdshaderinc lines 5-104 — read that block first).
+// Compatibility does not sRGB-decode `source_color` uniforms on upload the way Forward+ does, and
+// it DOES sRGB-decode whatever fragment() writes to ALBEDO. This shader does a great deal of
+// arithmetic in between — every mix() below, the terminator ramp, the rim add — so on the phone all
+// of it ran in display space and each multiplicative term landed as t^2.2. Measured before the fix,
+// masked to the sky bodies only, Forward+ vs Compatibility at hour 13: home 166.2 -> 90.3 luma p50
+// (GAP 62.8, saturation +0.233), vela 144.4 -> 81.0 (GAP 49.6), grig 171.9 -> 110.6 (GAP 53.6).
+// These were the worst objects in the game, and the most eye-catching: home's purple neighbour and
+// fen's yellow moon (which came out orange) hang in open sky.
+//
+// The six palette uniforms that appear more than once are decoded ONCE into locals instead of
+// being pc_in()-wrapped at each mention: land_a is read seven times across the biome branches,
+// land_b six, sea_deep and low_color four, sea_color and accent three. A second wrap on any one of
+// them is a second decode — a silent, plausible-looking error, and recipe note (a) exists because
+// somebody will otherwise write it. One alias each makes that impossible. The four that appear
+// exactly once (cloud_color, shade_tint, sun_light, rim_color) stay wrapped in place. Cost on the
+// phone is six pow() triples on a body 2-4 deg across.
+global uniform float astro_compat;
+
 void fragment() {
+	vec3 c_land_a = pc_in(land_a);
+	vec3 c_land_b = pc_in(land_b);
+	vec3 c_low = pc_in(low_color);
+	vec3 c_sea = pc_in(sea_color);
+	vec3 c_sea_deep = pc_in(sea_deep);
+	vec3 c_accent = pc_in(accent);
 	vec3 p = obj_dir * pattern_scale;
-	vec3 col = land_a;
+	vec3 col = c_land_a;
 	float em = 0.0;
 
 	if (mode == 0) {
@@ -109,20 +135,20 @@ void fragment() {
 		float n = fbm3(p);
 		float land = smoothstep(sea_level - 0.035, sea_level + 0.035, n);
 		float depth = smoothstep(sea_level, sea_level - 0.14, n);
-		vec3 water = mix(sea_color, sea_deep, depth);
-		vec3 ground = mix(land_a, land_b, smoothstep(0.50, 0.76, n));
+		vec3 water = mix(c_sea, c_sea_deep, depth);
+		vec3 ground = mix(c_land_a, c_land_b, smoothstep(0.50, 0.76, n));
 		float shore = smoothstep(sea_level + 0.004, sea_level + 0.026, n)
 			* (1.0 - smoothstep(sea_level + 0.026, sea_level + 0.055, n));
-		ground = mix(ground, low_color * 0.82, shore * 0.55);
+		ground = mix(ground, c_low * 0.82, shore * 0.55);
 		col = mix(water, ground, land);
 	} else if (mode == 1) {
 		// Violet: muted lilac land with thin glowing rivers along the noise ridges.
 		float n = fbm3(p);
-		col = mix(land_b, land_a, smoothstep(0.36, 0.70, n));
+		col = mix(c_land_b, c_land_a, smoothstep(0.36, 0.70, n));
 		float r = fbm3(p * 0.85 + 31.0);
 		float ridge = 1.0 - abs(r * 2.0 - 1.0);
 		float river = smoothstep(0.93, 0.995, ridge);
-		col = mix(col, accent * 0.42, river * 0.62);
+		col = mix(col, c_accent * 0.42, river * 0.62);
 		em = river;
 	} else if (mode == 2) {
 		// Chrome: irregular flat plates with glowing seams.
@@ -132,10 +158,10 @@ void fragment() {
 		vec3 cell = floor(q);
 		vec3 f = q - cell;
 		float plate = hash13(cell);
-		col = mix(land_b, land_a, plate);
+		col = mix(c_land_b, c_land_a, plate);
 		float e = min(min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)), min(f.z, 1.0 - f.z));
 		float seam = smoothstep(0.030, 0.006, e);
-		col = mix(col, accent * 0.30, seam * 0.45);
+		col = mix(col, c_accent * 0.30, seam * 0.45);
 		em = seam;
 	} else if (mode == 4) {
 		// Flats: a dry salt pan pocked with round pools. A broad crust mottle for the pan, plus a
@@ -144,19 +170,19 @@ void fragment() {
 		// Kept identical to src/rocket/globe.gdshader mode 4 so Fen in the sky is Fen on the map.
 		float n = fbm3(p * 1.35);
 		float b = fbm3(p * 1.05 + 19.0);
-		vec3 pan = mix(land_a, land_b, smoothstep(0.44, 0.68, n));
+		vec3 pan = mix(c_land_a, c_land_b, smoothstep(0.44, 0.68, n));
 		float pool = 1.0 - smoothstep(sea_level - 0.025, sea_level + 0.015, b);
 		float ring = smoothstep(sea_level - 0.005, sea_level + 0.030, b)
 			* (1.0 - smoothstep(sea_level + 0.055, sea_level + 0.105, b));
-		col = mix(pan, low_color * 0.92, ring * 0.80);
-		// Capped at 0.7 toward sea_deep: these are 40-70 cm mirror pools you can see the floor of,
+		col = mix(pan, c_low * 0.92, ring * 0.80);
+		// Capped at 0.7 toward c_sea_deep: these are 40-70 cm mirror pools you can see the floor of,
 		// and the full deep tone punched black holes in a body only 2-4 deg across.
-		col = mix(col, mix(sea_color, sea_deep, pool * 0.7), pool);
+		col = mix(col, mix(c_sea, c_sea_deep, pool * 0.7), pool);
 	} else if (mode == 5) {
 		// Chalk: the world cut into concentric terraces - the sky-scale twin of the real
 		// terrace_bank contour rings. Quantise one height field into steps, alternate the tread
 		// tone so neighbouring shelves separate, and paint a thin band at every step boundary in
-		// low_color for the riser faces.
+		// c_low for the riser faces.
 		// DELIBERATELY NOT fbm3, and identical to src/rocket/globe.gdshader mode 5: fbm's upper
 		// octaves shatter a contour line into speckle, and Grig's real terrain is only ~1.9 noise
 		// cycles around the whole world. One dominant smooth octave, a light second, 7 steps.
@@ -164,11 +190,11 @@ void fragment() {
 		float f = h * 7.0;
 		float tread = floor(f);
 		float band = f - tread;
-		col = mix(land_a, land_b, mod(tread, 2.0) * 0.5);
+		col = mix(c_land_a, c_land_b, mod(tread, 2.0) * 0.5);
 		col *= mix(0.90, 1.10, clamp(h * 1.5 - 0.25, 0.0, 1.0));
 		float edge = min(band, 1.0 - band);
 		float riser = 1.0 - smoothstep(0.06, 0.14, edge);
-		col = mix(col, low_color, riser * 0.80);
+		col = mix(col, c_low, riser * 0.80);
 	} else if (mode == 6) {
 		// Frost: an ice world read by LATITUDE. Every other mode here is isotropic 3D noise, so
 		// "poles" is the one structural cue none of them can say - bright caps over a darker
@@ -177,17 +203,17 @@ void fragment() {
 		// mode 6 so Vela in the sky is Vela on the map.
 		float cap = smoothstep(0.44, 0.80, abs(obj_dir.y));
 		float n = fbm3(p * 1.5);
-		col = mix(land_b, land_a, smoothstep(0.40, 0.66, n));
+		col = mix(c_land_b, c_land_a, smoothstep(0.40, 0.66, n));
 		// Melt ponds in the low ground of the belt, never on the caps.
 		float melt = 1.0 - smoothstep(sea_level - 0.030, sea_level + 0.020, n);
-		col = mix(col, mix(sea_color, sea_deep, melt * 0.75), melt * (1.0 - cap) * 0.85);
+		col = mix(col, mix(c_sea, c_sea_deep, melt * 0.75), melt * (1.0 - cap) * 0.85);
 		// Fracture veins: the SAME ridge construction as mode 1's rivers, deliberately inverted -
 		// thin and DARK instead of thin and glowing, so the two never read as the same world.
 		float r = fbm3(p * 0.95 + 43.0);
 		float ridge = 1.0 - abs(r * 2.0 - 1.0);
 		float crack = smoothstep(0.90, 0.99, ridge);
-		col = mix(col, sea_deep, crack * 0.50);
-		col = mix(col, low_color, cap * 0.90);
+		col = mix(col, c_sea_deep, crack * 0.50);
+		col = mix(col, c_low, cap * 0.90);
 		// The Long Array: a sparse scatter of station lights on the belt, never on the ice cap.
 		// ~11 cells across the diameter and a 0.955 cut, so it is a handful of pinpricks on the
 		// night side rather than the hub's whole lit town.
@@ -195,8 +221,8 @@ void fragment() {
 	} else {
 		// Plaza: cream tiles and broad green lawns.
 		float n = fbm3(p * 1.15);
-		col = mix(low_color, land_a, smoothstep(0.40, 0.60, n));
-		col = mix(col, land_b, smoothstep(0.64, 0.84, n) * 0.65);
+		col = mix(c_low, c_land_a, smoothstep(0.40, 0.60, n));
+		col = mix(col, c_land_b, smoothstep(0.64, 0.84, n) * 0.65);
 	}
 
 	// Flat cloud patches, painted rather than modelled: at 2-3 deg across, a mesh puff would be a
@@ -204,23 +230,26 @@ void fragment() {
 	if (cloud_amount > 0.002) {
 		float cn = fbm3(obj_dir * 3.4 + 57.0);
 		float cover = smoothstep(0.56, 0.66, cn) * cloud_amount;
-		col = mix(col, cloud_color, cover);
+		col = mix(col, pc_in(cloud_color), cover);
 	}
 
 	// ---- analytic sun lighting: a soft toon terminator with a readable night side --------------
 	vec3 n_w = normalize(world_normal);
 	float ndl = dot(n_w, normalize(sun_dir));
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl);
-	vec3 shadow_col = col * mix(vec3(1.0), shade_tint, shade_strength);
-	vec3 outc = mix(shadow_col * shade_floor, col, lit) * sun_light;
+	vec3 shadow_col = col * mix(vec3(1.0), pc_in(shade_tint), shade_strength);
+	vec3 outc = mix(shadow_col * shade_floor, col, lit) * pc_in(sun_light);
 
 	// Thin atmosphere rim on the lit limb.
 	float rim = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 3.2);
-	outc += rim_color * rim * rim_strength * smoothstep(-0.05, 0.55, ndl);
+	outc += pc_in(rim_color) * rim * rim_strength * smoothstep(-0.05, 0.55, ndl);
 
 	// Settlement / river / seam lights belong to the night side.
 	float night_side = 1.0 - smoothstep(-0.18, 0.28, ndl);
-	outc += accent * em * accent_glow * mix(0.22, 1.0, night_side);
+	outc += c_accent * em * accent_glow * mix(0.22, 1.0, night_side);
 
-	ALBEDO = aces_inverse(cap_display(outc * exposure, display_cap), tonemap_white);
+	// The write transfer, once, on the way out. `display_cap` is 0.58 and aces_inverse maps that to
+	// ~0.24 HDR, well under the 1.0 at which Compatibility clips a fragment write, so nothing here
+	// runs into the over-range caveat in planet_common's recipe note (g).
+	ALBEDO = pc_out(aces_inverse(cap_display(outc * exposure, display_cap), tonemap_white));
 }

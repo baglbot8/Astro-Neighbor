@@ -23,6 +23,7 @@ shader_type sky;
 render_mode use_debanding;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
+#include "res://src/shaders/planet_common.gdshaderinc"
 
 // ---- local frame & bodies -------------------------------------------------------------------
 uniform vec3 sky_up = vec3(0.0, 1.0, 0.0);
@@ -80,22 +81,92 @@ uniform vec3 milky_way_color : source_color = vec3(0.34, 0.33, 0.56);
 // ---- display-referred output ---------------------------------------------------------------
 uniform float tonemap_white = 6.0;
 uniform float display_cap : hint_range(0.3, 1.0) = 0.85;
-// WEB PARITY (docs/OPEN_ISSUES.md 32). This sky is authored in DISPLAY-REFERRED colour and
-// pushed back through the inverse ACES curve so the renderer's tonemapper returns the palette
-// unchanged. That round trip does not close under the Compatibility (WebGL2) renderer, which
-// the web export is forced onto: measured over the upper sky, Forward+ renders (29,28,57) —
-// the intended navy — and Compatibility renders (8,5,31), which reads as flat black on a
-// phone. Reported from a real iPhone as 'the sky is black instead of navy'.
-// The lift is applied BEFORE the inverse curve, so it moves the authored colour rather than
-// scaling the result: the curve is steep down there, so darks recover far more than the sun
-// and stars, which are added afterwards and are untouched.
+// WEB PARITY: THE SKY'S HALF OF THE COMPATIBILITY COLOUR BUG (docs/OPEN_ISSUES.md 32).
+// This sky is authored in DISPLAY-REFERRED colour and pushed back through the inverse ACES curve so
+// the renderer's tonemapper returns the palette unchanged. Under the Compatibility (WebGL2) renderer
+// the web export is forced onto, that round trip did NOT close: the dome rendered about half as
+// bright and noticeably more saturated than the desktop reference, across 35-53% of every frame.
+// Reported from a real iPhone as 'the sky is black instead of navy'.
+//
+// IT IS THE SAME TWO-PART BUG planet_common.gdshaderinc lines 5-104 documents for spatial shaders,
+// and `shader_type sky` is subject to BOTH halves. Neither part is fitted; both were measured.
+//
+//   (1) UNIFORMS IN. Compatibility does not sRGB-decode `source_color` uniforms at upload; Forward+
+//       does. So zenith_color, mid_color, limb_color, haze_color, sun_glow_color, milky_way_color,
+//       wisp_color, moon_color, moon_b_color and sun_color all arrived display-encoded, and every
+//       mix() and += below composed in the wrong space. -> pc_in() each, once, at first use.
+//   (2) COLOUR OUT. Compatibility sRGB-decodes whatever the shader writes to COLOR (its sky pass
+//       does it before tonemapping, "so color matches scene shader better"). -> pc_out() the write.
+//
+// THIS COST A FULL BISECT, SO HERE IS THE TRAP. Part (2) alone LOOKS right and is catastrophically
+// wrong: with pc_out on the write and the uniforms still undecoded, home's dome went from Cp50 17.0
+// to 94.1 against a Forward+ reference of 31.5 — three times too bright, worse than doing nothing.
+// A flat constant written to COLOR through pc_out matched Forward+ perfectly at the same time, in
+// the same frame, which is what made it so confusing: constants need no pc_in, and the sky's real
+// colour is nothing but uniforms. If you ever see "the probe passes but the scene fails", suspect a
+// missing pc_in before you suspect the write.
+//
+// THE PROBE for part (2), flat constants written straight to COLOR, read off one pixel of
+// showcase/planet_home.tscn at hour 13, both renderers:
+//
+//   COLOR      F+ rgb          C rgb (plain)     C rgb (pc_out)   maxdiff F+ vs C(pc_out)
+//   0.010    ( 11,  7, 19)     (  8,  4, 16)     (  8,  4, 16)          3.0
+//   0.025    ( 24, 20, 33)     (  8,  4, 16)     ( 22, 18, 31)          2.5
+//   0.035    ( 32, 27, 40)     (  8,  4, 16)     ( 30, 26, 38)          2.1
+//   0.070    ( 55, 51, 63)     (  8,  4, 16)     ( 55, 50, 62)          0.9
+//   0.20     (138,135,142)     ( 29, 24, 37)     (139,136,143)          0.8
+//   0.45     (180,176,179)     (126,122,130)     (180,176,179)          0.4
+//   0.80     (197,192,193)     (190,185,187)     (197,192,193)          0.4
+//   0.95     (201,197,197)     (200,195,195)     (201,197,197)          0.3
+//
+// RESULT, per-region, sky dome masked by repainting this shader magenta and applying that mask to
+// unmodified captures, Forward+ vs Compatibility, luma p50 and mean |F-C| over p05/p50/p95:
+//
+//   world   npx      GAP before -> after     dSAT before -> after
+//   home   427,938   15.66 -> 1.26           +0.1838 -> +0.0129
+//   hub    347,253   26.19 -> 1.22           +0.2095 -> +0.0115
+//   vela   481,593   22.82 -> 1.64           +0.1561 -> +0.0268
+//   zorp   479,327   15.65 -> 1.26           +0.1352 -> +0.0237
+//   bolt   414,097   13.67 -> 3.74           +0.1541 -> +0.0095   (see the ring note below)
+//   fen    455,155   20.44 -> 1.64           +0.1503 -> +0.0231
+//   grig   444,150   13.56 -> 2.07           +0.1772 -> +0.0132
+//
+// AT NIGHT TOO, hour 21.5, dome crop y80-330, MAE and luma p50: home 13.28 -> 2.92 and -15.87 ->
+// -2.86 luma, fen 17.66 -> 3.02 and -18.08 -> -2.57, vela 14.43 -> 3.69 and -10.57 -> -3.92. The
+// retired lift was a day-tuned constant and was costing the night sky the most.
+//
+// pc_out() and pc_in() are the identity on Forward+ (astro_compat == 0.0), so the desktop reference
+// cannot move: byte-identical on home and bolt, and on the other five within the run-to-run noise
+// the twinkling stars already produce between two captures of unchanged code.
+//
+// `compat_sky_lift = 0.08` IS RETIRED BY THIS. It was a stand-in for (2) alone and would now
+// overshoot. The MULTIPLY that was tried before it stays banned: the dark sky is blue-dominant, so
+// scaling grows blue fastest and at the strength needed to rescue the darks the dome went royal
+// blue, the Earth-like daytime sky STYLE_GUIDE R2.1 forbids.
+//
+// FOUR LIMITS OF THE FIX. All four are renderer-side; none is worth a constant.
+//  * Compatibility CLAMPS this write at 1.0. Measured: COLOR 1.0, 1.5 and 2.5 all render the
+//    identical (202,197,197) while Forward+ climbs 202/208/214. So the sun disc (3.4x), the star
+//    cores and the brightest haze clip on the phone. They clipped before this change too, and
+//    pc_out cannot make it worse because pc_l2s(x) <= 1 for every x <= 1.
+//  * THE 3D PASS RUNS AT HALF LINEAR RESOLUTION on Compatibility (platform.gd sets
+//    scaling_3d_scale = 0.5). That is a deliberate thermal decision and it puts a floor under any
+//    per-pixel score. Measured by forcing the SAME 0.5 scale on Forward+ and comparing it with
+//    full-res Forward+ — one renderer, one set of shaders, resolution the only variable: dome MAE
+//    1.31-1.77 / p95 4. The shipped Forward+ vs Compatibility dome is MAE 1.85-2.22 / p95 5-6 on
+//    the six ringless worlds, i.e. within ~0.4 of a floor that has nothing to do with colour.
+//  * BOLT AND VELA'S RING is the one dome region still visibly off, because ring.gdshader is
+//    blend_mix and Forward+ blends it into a linear HDR buffer before tonemapping while
+//    Compatibility blends it in sRGB display space after. Masked to bolt's ring pixels only:
+//    MAE 29.15 before this round, 15.09 after ring.gdshader's own conversion, against a resolution
+//    floor of 0.74. Bolt's dome MINUS the ring is 17.72 -> 2.28 against a floor of 1.54.
+//  * BELOW COLOR ~0.03 about 3 codes remain and Compatibility floors on the grade LUT's black
+//    point (8,4,16) — 8-bit quantisation ahead of the adjustment pass. It is small here because the
+//    dome sits at COLOR ~0.035 by day and higher at night. It is NOT small in the two skies that
+//    are authored darker: src/ui/title/title_sky.gdshader and src/rocket/space_sky.gdshader both
+//    keep their empirical lifts because this same conversion measured WORSE on them. Their files
+//    carry the tables. Do not "finish the job" by converting them without re-measuring.
 global uniform float astro_compat;
-// A MULTIPLY was tried first and is wrong: the dark sky is blue-dominant, so scaling it grows
-// the blue channel fastest and at the strength needed to fix the darks it turned the sky vivid
-// royal blue — exactly the Earth-like sky R2.1 bans. A neutral ADD lifts the black end toward
-// the intended navy without touching the hue balance. Desktop reference for the sky band is a
-// near-neutral (91,88,99); Compatibility rendered the bulk of it at luma 13 against 33.
-uniform float compat_sky_lift : hint_range(0.0, 0.3) = 0.08;
 
 const float WISP_PERIOD = 9.0;
 // Stars are clamped just under Environment.glow_hdr_threshold so they stay crisp pinpoints
@@ -243,12 +314,14 @@ void sky() {
 	// ---- gradient: deep space, warming only in the last few degrees above the limb -----------
 	// In space (space_blend -> 1) the whole dome collapses to the deep zenith tone, which is the
 	// same navy the solar-system map uses.
-	vec3 c_limb = mix(limb_color, zenith_color, space_blend);
-	vec3 c_mid = mix(mid_color, zenith_color, space_blend * 0.9);
+	vec3 c_zenith = pc_in(zenith_color);
+	vec3 c_sun_glow = pc_in(sun_glow_color);
+	vec3 c_limb = mix(pc_in(limb_color), c_zenith, space_blend);
+	vec3 c_mid = mix(pc_in(mid_color), c_zenith, space_blend * 0.9);
 	float t_low = clamp(hp / mid_height, 0.0, 1.0);
 	float t_high = clamp((hp - mid_height) / max(zenith_height - mid_height, 0.01), 0.0, 1.0);
 	vec3 col = mix(c_limb, c_mid, t_low * t_low * (3.0 - 2.0 * t_low));
-	col = mix(col, zenith_color, t_high * t_high * (3.0 - 2.0 * t_high));
+	col = mix(col, c_zenith, t_high * t_high * (3.0 - 2.0 * t_high));
 
 	// ---- the thin limb band ------------------------------------------------------------------
 	// Two falloffs: a tight bright rim right on the silhouette plus a much wider, fainter skirt,
@@ -257,15 +330,15 @@ void sky() {
 	float rim = exp(-hp / haze_width);
 	float skirt = exp(-hp / (haze_width * 2.8)) * 0.26;
 	float haze = clamp((rim + skirt) * haze_strength * (1.0 - space_blend), 0.0, 1.0);
-	col = mix(col, haze_color, haze);
+	col = mix(col, pc_in(haze_color), haze);
 
 	// ---- sunrise / sunset: the band burns warm on the sun's side ------------------------------
 	float sc = dot(d, sun_dir);
 	float sun_h = limb_height(sun_dir);
 	float sun_vis = smoothstep(-0.16, -0.03, sun_h);
 	float glow = pow(max(sc, 0.0), 3.0) * exp(-hp / (haze_width * 4.5)) * sun_glow * (1.0 - space_blend);
-	col = mix(col, sun_glow_color, clamp(glow, 0.0, 1.0));
-	col += pow(max(sc, 0.0), 2.5) * sun_glow * sun_glow_color * 0.10 * (1.0 - space_blend);
+	col = mix(col, c_sun_glow, clamp(glow, 0.0, 1.0));
+	col += pow(max(sc, 0.0), 2.5) * sun_glow * c_sun_glow * 0.10 * (1.0 - space_blend);
 
 	if (AT_CUBEMAP_PASS) {
 		// Cheap radiance for ambient light / reflections: gradient + limb band only.
@@ -281,7 +354,7 @@ void sky() {
 		float mw_band = exp(-gd * gd * 14.0);
 		float mwn = fbm3(d * 4.2 + 3.0);
 		float mw_vis = max(max(night, space_blend), 0.13) * (1.0 - haze * 0.9);
-		col += milky_way_color * mw_band * (0.30 + 0.70 * mwn) * 0.20 * mw_vis;
+		col += pc_in(milky_way_color) * mw_band * (0.30 + 0.70 * mwn) * 0.20 * mw_vis;
 
 		// ---- thin high dust wisps inside the band ----------------------------------------
 		float cov = 0.0;
@@ -292,11 +365,11 @@ void sky() {
 			vec2 cuv = vec2(az / TAU * WISP_PERIOD + TIME * wind, hp * 22.0);
 			float n = fbm(cuv, WISP_PERIOD);
 			cov = smoothstep(0.60, 0.80, n) * band * wisp_amount * (1.0 - space_blend);
-			col = mix(col, wisp_color, cov);
+			col = mix(col, pc_in(wisp_color), cov);
 		}
 
 		// ---- to HDR ----------------------------------------------------------------------
-		col = aces_inverse(cap_display(col + vec3(compat_sky_lift * astro_compat), display_cap), tonemap_white);
+		col = aces_inverse(cap_display(col, display_cap), tonemap_white);
 
 		// ---- stars: always present, dimmer by day ---------------------------------------
 		// Suppressed inside the bright limb band (the only place there is enough dust to
@@ -316,18 +389,27 @@ void sky() {
 		// ---- moons (visible by day too — there is no blue haze to hide them) --------------
 		float moon_vis = mix(0.55, 1.0, night) * (1.0 - cov * 0.6) * (1.0 - haze * 0.55);
 		float vis_a = moon_vis * smoothstep(-0.14, -0.01, limb_height(moon_dir_a));
-		col += draw_moon(d, moon_dir_a, moon_size, moon_color, 0.62, vis_a);
+		col += draw_moon(d, moon_dir_a, moon_size, pc_in(moon_color), 0.62, vis_a);
 		if (moon_count > 1) {
 			float vis_b = moon_vis * smoothstep(-0.14, -0.01, limb_height(moon_dir_b));
-			col += draw_moon(d, moon_dir_b, moon_size * 0.55, moon_b_color, 1.35, vis_b);
+			col += draw_moon(d, moon_dir_b, moon_size * 0.55, pc_in(moon_b_color), 1.35, vis_b);
 		}
 
 		// ---- sun disc + a tight halo (no air, so no big glare ball) ----------------------
 		float ang = acos(clamp(sc, -1.0, 1.0));
 		float disc = 1.0 - smoothstep(sun_disc_size * 0.82, sun_disc_size, ang);
 		float halo = pow(max(sc, 0.0), 620.0) * 0.75 + pow(max(sc, 0.0), 90.0) * 0.16;
-		col += (disc * 3.4 + halo * (1.0 - cov * 0.6)) * sun_color * sun_vis;
+		col += (disc * 3.4 + halo * (1.0 - cov * 0.6)) * pc_in(sun_color) * sun_vis;
 	}
 
-	COLOR = col;
+	// The write transfer, once, on the way out — and NOT on the cubemap pass. That branch feeds the
+	// radiance map behind ambient_light_sky_contribution, and whether Compatibility applies the same
+	// decode to a cubemap-pass write was never measured, so encoding it would be a guess on the one
+	// region (the ground) that is already at parity. pc_in() above DOES reach it, because the
+	// gradient is built before the branch, and that is correct in either case: it only makes the
+	// radiance colour agree with what Forward+ uploads. Measured effect on the ground+props region,
+	// Compatibility vs Forward+ MAE, before -> after this whole change: home 4.37 -> 4.38,
+	// hub 6.24 -> 6.16, vela 2.97 -> 2.77, zorp 4.56 -> 4.53, bolt 4.60 -> 4.35, fen 11.17 -> 11.15,
+	// grig 3.46 -> 3.42. Nothing moved, which is the result this line is protecting.
+	COLOR = AT_CUBEMAP_PASS ? col : pc_out(col);
 }

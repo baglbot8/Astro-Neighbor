@@ -1,6 +1,26 @@
 // Shooting-star streak: a quad oriented along the motion (x = travel direction, head at u=1).
 // Bright warm head, tapering tail with a sparkly dotted pattern. Additive, unlit, no fog.
 shader_type spatial;
+
+// WEB PARITY: DELIBERATELY NOT CONVERTED, AND THE REASON IS THE BLEND MODE, NOT AN OVERSIGHT.
+// The sky, the sky bodies and the ring were converted this round with pc_in()/pc_out() from
+// planet_common.gdshaderinc; this shader was measured against that scheme and left alone.
+// `blend_add` is why. An additive fragment does not stand on its own: Forward+ adds its
+// contribution into the LINEAR HDR buffer and tonemaps the sum,
+//     result = l2s(tonemap(background_linear + source_linear))
+// while Compatibility tonemaps and sRGB-encodes each fragment and adds in DISPLAY space,
+//     result = clamp(background_display + l2s(tonemap(s2l(ALBEDO))))
+// Those are not the same function of the same inputs, and no per-shader transform of ALBEDO turns
+// one into the other — the destination is inside the tonemap on one renderer and outside it on the
+// other. It is the same class of defect as the shadow pass in src/world/environment.gd, which had
+// to be fixed at the renderer level (`_no_cast_shadows`) rather than in a shader.
+// pc_out() here would make the source term correct in isolation and the composite no more correct
+// than it is now, and nothing in the seven showcase frames or the title scene renders enough of
+// this material to measure whether that helped or hurt. Applying it would be a guess.
+// IF YOU PICK THIS UP: build a frame that is mostly this material (a night world with the
+// fireflies cranked, or a shooting-star scrub), score it per-region the way the sky was scored, and
+// expect the answer to be a renderer-level change to how the additive pass composites — not a
+// constant in this file. THE IRON RULE STILL HOLDS: if it needs a gain to pass, it has failed.
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
 uniform vec4 head_color : source_color = vec4(1.0, 0.97, 0.85, 1.0);

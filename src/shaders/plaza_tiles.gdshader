@@ -26,6 +26,45 @@ const float SD_STONEC_HZ = 9.2;
 const float SD_STONEF_K = 0.78;
 const float SD_STONEF_HZ = 35.9;
 
+// WEB PARITY. Under the Compatibility (WebGL2) renderer the web export is forced onto,
+// `astro_compat` is 1.0; it is 0.0 on desktop, set once by the Platform autoload, so every wrap
+// below is the exact identity on Forward+ and the reference look cannot move.
+//
+// This shader is converted with pc_in() / pc_out() — see the long block at the top of
+// planet_common.gdshaderinc for the measurement, the probe numbers and the rules. In short:
+// Compatibility does not sRGB-decode `source_color` uniforms on upload (so they arrive in display
+// space and need pc_in), and it sRGB-ENCODES whatever fragment() writes to ALBEDO (so the write
+// needs pc_out). Everything between the two then runs in linear on both renderers.
+//
+// This is the single largest surface in the game and it does a lot of arithmetic on colour: the
+// triangle lawn mix, the macro shadow blend, the checker/hash tile mix, the grout mix, the curb and
+// bank mixes, the weathering mix, the edge-AO multiply, the four R2.9 detail bands and pc_pastel.
+// Under the old code every one of those multiplies was landing as t^2.2, which is why the hub deck
+// the user photographed reads as a flat bright sheet in the browser.
+//
+// MEASURED, showcase/planet_hub.tscn, on a 333,582-pixel plaza mask built by the
+// black-emission / white-emission probe pair (both renderers, eroded 3 px):
+// Both renderers with cast shadows off, so the only thing left between the two frames is this
+// shader (Compatibility ships with shadows off anyway; Forward+ was made to match for the probe):
+//     before   per-pixel MAE 6.15 codes, p95 19.0, region SAT 0.3180 -> 0.3390 (gap 0.0210)
+//     after    per-pixel MAE 0.25 codes, p95  1.0, region SAT 0.3180 -> 0.3173 (gap 0.0007)
+//     after    region luma p05/p50/p95  F+ 140.8 187.8 202.4   C 140.7 187.8 202.3  (GAP 0.06)
+// Two independent capture pairs gave MAE 0.252 both times. Forward+ did not move: the same mask
+// scored between the pre- and post-conversion Forward+ frames is MAE 0.000, max 1 code — as it
+// must be, since astro_compat is 0.0 there and every wrap is the identity.
+// With cast shadows left ON under Forward+ the same run reads MAE 2.38 with p95 still 1.0: 96% of
+// the mask is under 4 codes and the whole residual is the bench and flowerbed shadow slabs that
+// Compatibility does not draw at all. That is the deliberate low-power profile, not a colour bug.
+// Forcing MSAA, FXAA, SSAO and glow identical on the two renderers as well (i.e. taking the whole
+// low-power profile out of the comparison) gives MAE 0.76, p95 2.0, SAT gap 0.0045, GAP 0.60 —
+// the same answer from the other direction.
+//
+// NOT WRAPPED, deliberately: `v_color` (COLOR.g is the plateau-bank SELECTOR at the bank_t line,
+// COLOR.a is baked ground occlusion), AO / ROUGHNESS / METALLIC / SPECULAR, and every literal or
+// computed value. Those arrive identically on both renderers; only the source_color uniforms and
+// the ALBEDO write need the encode. See rule (c)/(d) in planet_common.gdshaderinc.
+global uniform float astro_compat;
+
 uniform vec4 lawn_a : source_color = vec4(0.373, 0.690, 0.388, 1.0);
 uniform vec4 lawn_b : source_color = vec4(0.247, 0.541, 0.290, 1.0);
 uniform vec4 lawn_c : source_color = vec4(0.447, 0.753, 0.455, 1.0);
@@ -137,19 +176,19 @@ void fragment() {
 	float lod_t = pc_detail_lod(uv / tile_size);
 	float fine_t = 1.0 - lod_t;
 	vec2 tri = pc_tri_pattern(uv / cell_size, tri_radius, tri_density);
-	vec3 tri_col = mix(lawn_b.rgb, lawn_c.rgb, mix(step(0.62, tri.y), 0.38, lod_g));
-	vec3 lawn = mix(lawn_a.rgb, tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod_g));
+	vec3 tri_col = mix(pc_in(lawn_b.rgb), pc_in(lawn_c.rgb), mix(step(0.62, tri.y), 0.38, lod_g));
+	vec3 lawn = mix(pc_in(lawn_a.rgb), tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod_g));
 	float patch = pc_fbm3(wp * 0.11 + vec3(3.7));
 	lawn *= 1.0 + (patch - 0.5) * 0.12;
 	float macro = pc_fbm3(wp * 0.042 + vec3(11.3, 4.1, 7.9));
-	lawn = mix(lawn, lawn_shadow.rgb, smoothstep(0.40, 0.70, macro) * shadow_patch);
+	lawn = mix(lawn, pc_in(lawn_shadow.rgb), smoothstep(0.40, 0.70, macro) * shadow_patch);
 
 	// --- sand near water --------------------------------------------------------------------------
 	float edge_n = (pc_noise3(wp * 0.9) - 0.5) * 0.4 * (1.0 - lod_g);
 	float sand_t = 1.0 - smoothstep(wl + 0.12 + edge_n, wl + sand_band + edge_n, h);
 	float wet_t = 1.0 - smoothstep(wl - 0.22, wl + 0.02, h);
-	vec3 ground = mix(lawn, sand_color.rgb, sand_t);
-	ground = mix(ground, shore_color.rgb, wet_t * sand_t * 0.85);
+	vec3 ground = mix(lawn, pc_in(sand_color.rgb), sand_t);
+	ground = mix(ground, pc_in(shore_color.rgb), wet_t * sand_t * 0.85);
 	ground *= 1.0 - 0.32 * smoothstep(wl, wl - 0.9, h);
 
 	// --- tile region signed distance (meters, negative inside) ----------------------------------
@@ -173,7 +212,7 @@ void fragment() {
 	float sd = tile_sdf(uv, cell);
 	float ch = pc_hash21(cell);
 	float checker = mod(cell.x + cell.y, 2.0);
-	vec3 tcol = mix(tile_a.rgb, tile_b.rgb, checker * 0.22 + ch * 0.28);
+	vec3 tcol = mix(pc_in(tile_a.rgb), pc_in(tile_b.rgb), checker * 0.22 + ch * 0.28);
 	tcol *= 1.0 + (pc_noise3(wp * 4.0) - 0.5) * 0.06 * fine_t;
 	float aa = fwidth(sd) + 0.003;
 	// 0.89 is the fraction of a cell that is stone rather than grout — the pattern's own mean.
@@ -181,7 +220,7 @@ void fragment() {
 	// Joint shadow: a thin band of contact AO on the stone right beside the grout. Real paving reads
 	// dark at the joints, so the plaza can stay bright cream and still carry value structure.
 	tcol *= 1.0 - joint_ao * mix(smoothstep(-0.075, -0.006, sd), 0.82, lod_t);
-	vec3 tiles = mix(grout_color.rgb, tcol, in_tile);
+	vec3 tiles = mix(pc_in(grout_color.rgb), tcol, in_tile);
 	// Fake bevel: tilt the normal outward near tile edges.
 	float e = 0.01;
 	vec2 c2;
@@ -199,15 +238,15 @@ void fragment() {
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
 
 	vec3 col = mix(ground, tiles, tile_mask);
-	col = mix(col, curb_color.rgb, curb * 0.9);
+	col = mix(col, pc_in(curb_color.rgb), curb * 0.9);
 	// Exposed rock on plateau banks / crater walls (baked in COLOR.g), lawn only: a clean warm
 	// sandstone cliff face with vertical striations, NOT a blotchy earth stain.
 	float bank_t = smoothstep(0.36, 0.50, v_color.g) * (1.0 - tile_mask) * (1.0 - sand_t);
 	float strata = mix(pc_noise3(vec3(uv.x * 9.0, dir.y * 3.0, uv.y * 9.0)), 0.5, lod_t);
-	vec3 bank = bank_color.rgb * (0.94 + 0.10 * strata);
+	vec3 bank = pc_in(bank_color.rgb) * (0.94 + 0.10 * strata);
 	col = mix(col, bank, bank_t);
 	// Weathering: same cream family, a few percent of value — enough to break the flat plate.
-	col = mix(col, tile_shadow.rgb, smoothstep(0.30, 0.70, pc_fbm3(wp * 0.075 + vec3(5.5))) * tile_weather * tile_mask);
+	col = mix(col, pc_in(tile_shadow.rgb), smoothstep(0.30, 0.70, pc_fbm3(wp * 0.075 + vec3(5.5))) * tile_weather * tile_mask);
 	// Contact AO where the paving meets lawn/curb, and a matching pool on the grass just outside it.
 	float ao_in = smoothstep(-edge_ao_width, -0.05, sd_zone) * tile_mask;
 	float ao_out = (1.0 - smoothstep(0.05, edge_ao_width * 0.7, sd_zone)) * step(0.0, sd_zone);
@@ -249,9 +288,9 @@ void fragment() {
 	float facing = clamp(dot(dir, normalize(CAMERA_POSITION_WORLD - wp)), 0.0, 1.0);
 	float limb = 1.0 - smoothstep(0.10, 0.86, facing);
 	limb = clamp(limb + (pc_hash21(FRAGCOORD.xy) - 0.5) * 0.016, 0.0, 1.0);
-	col = mix(col, col * limb_tint.rgb, limb * limb_darken);
+	col = mix(col, col * pc_in(limb_tint.rgb), limb * limb_darken);
 
-	ALBEDO = pc_pastel(col, pastel_max, pastel_dark);
+	ALBEDO = pc_out(pc_pastel(col, pastel_max, pastel_dark));
 	// Paving is polished-ish stone; the R2.9 microsurface roughens it back up unevenly.
 	ROUGHNESS = clamp(mix(0.98, 0.92, tile_mask) + sd_sc.rough * 0.5 + sd_sf.rough * 0.5, 0.0, 1.0);
 	METALLIC = 0.0;
@@ -264,12 +303,12 @@ void fragment() {
 void light() {
 	float lit;
 	float ndl = dot(NORMAL, LIGHT);
-	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, shade_tint.rgb, shade_floor, LIGHT_IS_DIRECTIONAL, lit);
+	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, pc_in(shade_tint.rgb), shade_floor, LIGHT_IS_DIRECTIONAL, lit);
 	// R2.9: carry the surface detail's slope into the saturated part of the toon ramp. Clamped, so
 	// it adds no energy and cannot make a hotspot (R2.6 stands).
 	diffuse *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.80, 1.22);
 	DIFFUSE_LIGHT += pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
-	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, shadow_fill_color.rgb, shadow_fill) * LIGHT_COLOR / PI;
+	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, pc_in(shadow_fill_color.rgb), shadow_fill) * LIGHT_COLOR / PI;
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	float spec = smoothstep(0.45, 0.6, pow(ndh, 60.0)) * 0.06 * lit * (1.0 - ROUGHNESS);

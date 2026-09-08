@@ -33,6 +33,55 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 
 global uniform float astro_night;
 
+// WEB PARITY. Under the Compatibility (WebGL2) renderer the web export is forced onto,
+// `astro_compat` is 1.0; it is 0.0 on desktop, set once by the Platform autoload, so every wrap
+// below is the exact identity on Forward+ and the reference look cannot move.
+//
+// planet_common.gdshaderinc is included ONLY for pc_in() / pc_out() (it declares no uniforms, so
+// there is nothing to collide with astro_night or the surface_detail bands above). Read the long
+// block at the top of that file for the measurement and the rules; in short, Compatibility does not
+// sRGB-decode `source_color` uniforms on upload, and it sRGB-DECODES whatever fragment() leaves in
+// ALBEDO, so the uniform needs pc_in on the way in and the finished colour needs pc_out on the way
+// out. In between, both renderers are in linear.
+//
+// The pc_out lands as a single line at the END of fragment(), not on the `ALBEDO = albedo.rgb *
+// COLOR.rgb` at the top, because the three detail bands below multiply ALBEDO in place. Encoding
+// early would put the seam and macro tints on the wrong side of the curve.
+//
+// THIS SHADER WAS THE WORST OFFENDER IN THE GAME. Measured on showcase/hub_buildings.tscn over a
+// 51,635-pixel building mask (built by capturing the same frame twice with this shader forced to
+// EMISSION 0 and EMISSION 1, on BOTH renderers, and keeping the pixels that moved in both; eroded
+// 3 px). Cast shadows, MSAA/FXAA, SSAO and glow were all forced IDENTICAL on the two renderers for
+// the probe, so the only thing left between the two frames is this shader:
+//     before   per-pixel MAE 51.87 codes, p95 134.0, region SAT 0.3807 -> 0.5439 (gap 0.1632)
+//              region luma p05/p50/p95  F+ 29.1 168.0 229.3   C 4.0 70.4 223.4   (GAP 42.86)
+//     after    per-pixel MAE  1.79 codes, p95   7.0, region SAT 0.3807 -> 0.3844 (gap 0.0037)
+//              region luma p05/p50/p95  F+ 29.1 168.0 229.3   C 28.4 166.9 229.8 (GAP 0.76)
+// That p50 of 70.4 against 168.0 is the browser build's "the hub buildings are nearly black", and
+// it is what an un-decoded source_color does to a shader whose light() composes the colour from
+// ALBEDO itself (see the KNOWN BUG note above — the albedo lands twice, so the error squares).
+//
+// WHERE THE REMAINING 1.79 IS, because it is NOT colour. Excluding pixels whose 3x3 neighbourhood
+// spans more than 6 codes (i.e. scoring only the flat interiors, 31,570 px) gives MAE 0.995,
+// p95 3.0, SAT gap 0.0001 — and the SAME frame with this shader forced to a flat `pc_out(vec3(0.6))`
+// albedo, where the two renderers are provably being handed the identical colour, still scores
+// MAE 0.71 / p95 2.0. So the residual is edge rasterisation on a building covered in window trim,
+// not a transfer error. Binned by brightness the mean C-F delta is under 2 codes in every bucket
+// from 0 to 240 and changes sign, which is noise, not a curve.
+// Two independent capture pairs both gave MAE 1.789. Forward+ did not move: the same mask scored
+// between the pre- and post-conversion Forward+ frames is MAE 0.002, max 1 code.
+//
+// A CLAMP WAS RULED OUT, not assumed: `pc_out(clamp(ALBEDO, 0.0, 1.0))` changed the Compatibility
+// result by 0.00 (rule (g) does not bite here — nothing drives this albedo over 1.0).
+// pc_in(COLOR.rgb) WAS RULED OUT the same way: adding it takes MAE from 1.79 back to 54.31. The
+// vertex colour really does arrive linear on both renderers, exactly as rule (c) says.
+//
+// NOT WRAPPED, deliberately: COLOR.rgb. It is a VERTEX colour, delivered identically to both
+// renderers and already linear on Forward+ — rule (c) in planet_common.gdshaderinc. Nor
+// ROUGHNESS / METALLIC / the sd_* tints, which are not colours arriving from a uniform.
+global uniform float astro_compat;
+
+#include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
 // ------------------------------------------------------------------ band 1: fine surface detail
@@ -104,7 +153,7 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = albedo.rgb * COLOR.rgb;
+	ALBEDO = pc_in(albedo.rgb) * COLOR.rgb;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
 	v_sheen = 0.0;
@@ -179,12 +228,15 @@ void fragment() {
 			ALBEDO *= vec3(1.0 + m * macro_amount * mlod);
 		}
 	}
+
+	// The one encode, after every band has had its say. Identity on Forward+.
+	ALBEDO = pc_out(ALBEDO);
 }
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
-	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength);
+	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
 	vec3 diffuse = mix(shadow_col * floor_level, ALBEDO, lit);
 	DIFFUSE_LIGHT += diffuse * LIGHT_COLOR / PI;
@@ -197,7 +249,7 @@ void light() {
 
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;
-	SPECULAR_LIGHT += rim * rim_color.rgb * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += rim * pc_in(rim_color.rgb) * LIGHT_COLOR / PI;
 
 	if (v_sheen > 0.001) {
 		float sheen = (surface_kind == 1)

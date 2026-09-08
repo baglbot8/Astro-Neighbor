@@ -49,6 +49,101 @@ uniform float twinkle_speed = 1.0;
 uniform float tonemap_white = 6.0;
 uniform float display_cap : hint_range(0.1, 1.0) = 0.62;
 
+// ---- Compatibility (WebGL2) dark-end parity ---------------------------------------------------
+// SAME DEFECT AS src/shaders/sky.gdshader:299 AND src/ui/title/title_sky.gdshader. Everything
+// painted above is authored display-referred and pushed back through the inverse ACES curve so the
+// tonemapper hands the palette out unchanged. That round trip does NOT close under the
+// Compatibility (WebGL2) renderer, which the web export is forced onto. This sky is dark enough
+// that the residual does not merely dim it: it clips red and green to zero outright across the
+// whole dome, leaving a blue-only near-black.
+//
+// The user has NOT reported this one. They reported the start screen four times ("the sky is black
+// instead of navy like on the computer" and three restatements) and it was fixed in
+// title_sky.gdshader; this sky is the solar-system map you fly through, and they have been getting
+// stuck before flying far. It is the same bug and it is measured here so it does not become the
+// fifth report.
+//
+// Measured on showcase/space_map.tscn at 1280x720, median RGB of four clean sky crops that avoid
+// the sun bloom, the planets and the info card - TL x 0-120 y 0-160, TR x 1160-1280 y 0-160,
+// L x 0-60 y 180-520, BL x 0-120 y 560-700:
+//
+//                          TL              TR              L               BL
+//   Forward+  shipped  (23,24,65) L27.11 (20,21,61) L23.75 (19,19,56) L21.61 (15,13,44) L15.87
+//   Compat    shipped  ( 0, 0,29) L 2.09 ( 0, 0,25) L 1.80 ( 0, 0,20) L 1.44 ( 0, 0,10) L 0.72
+//   Compat    0.10     (13,17,55) L18.75 (12,14,52) L16.53 (11,13,45) L14.60 (10, 8,32) L10.16
+//   Compat    0.12     (18,21,62) L23.32 (16,19,57) L21.11 (16,17,51) L18.96 (14,12,38) L14.59
+//   Compat    0.13 *   (20,23,65) L25.11 (18,21,60) L23.68 (17,19,54) L20.81 (16,14,41) L16.37
+//   Compat    0.14     (22,25,68) L27.82 (21,23,64) L25.46 (20,21,57) L23.60 (18,17,44) L18.88
+//   Compat    0.18     (33,35,83) L38.11 (31,34,78) L36.33 (30,31,70) L33.60 (27,25,55) L27.88
+//
+// 0.13 is shipped. Mean absolute luma error against the Forward+ reference over the four crops is
+// 0.84 for 0.13 against 1.86 for 0.14: 0.14 fits the bright top of the dome slightly better but
+// overshoots the dark bottom by 3 luma, and overshooting is the worse failure here - it fogs the
+// dome and eats the contrast the pinpoint stars need. Two consecutive captures of identical code
+// moved these medians by at most 1/255, well inside the reading, so the ranking is real and not
+// the capture noise of docs/OPEN_ISSUES.md 37.
+//
+// 0.13 HERE, 0.12 IN title_sky.gdshader, 0.08 IN sky.gdshader. THESE ARE NOT MEANT TO AGREE AND
+// THE NUMBER MUST NEVER BE COPIED BETWEEN THEM. The lift is added to the authored display colour
+// before a steep curve, so where it lands depends entirely on what that colour already was, and
+// the three skies are authored at three different darknesses. The title's 0.12 was tried here and
+// measures (18,21,62) at TL - visibly short of the (23,24,65) reference. Each sky is fitted to its
+// own palette by rendering it, both ways, and reading the pixels.
+//
+// It is a neutral ADD and must never become a multiply. The multiply was tried on the ground sky
+// and rejected: the dark sky is blue-dominant, so scaling grows blue fastest, and at the strength
+// needed to rescue the darks the dome went vivid royal blue - the Earth-like daytime sky
+// STYLE_GUIDE R2.1 bans. A neutral add raises the black end toward navy and leaves the hue alone.
+//
+// THE SEAM. `gcol` below - this shader's impersonation of the ground sky at ground_match 1 - is
+// deliberately left unlifted in this change. src/shaders/sky.gdshader applies its own 0.08 there,
+// so under Compatibility this shader's ground-match tone is already slightly darker than the real
+// ground sky it is impersonating. That mismatch predates this change and is untouched by it: at
+// ground_match 1 the lift is mixed out entirely, so the seam frame renders exactly as it did
+// before. Fixing it means tracking sky.gdshader's constant from here, and it could not be measured
+// in this round because reproducing the seam frame needs a real journey, not the static showcase.
+// Left as a follow-up rather than shipped on reasoning alone.
+//
+//
+// THE pc_in/pc_out MECHANISM WAS TRIED HERE AND MEASURED WORSE. DO NOT RE-TRY IT WITHOUT NEW DATA.
+// src/shaders/sky.gdshader now fixes the in-game sky properly (Compatibility does not sRGB-decode
+// `source_color` uniforms at upload and DOES sRGB-decode the COLOR write; pc_in on the tints plus
+// pc_out on the write took its dome from GAP 13.6-26.2 to 1.2-3.7 codes on all seven worlds). The
+// same conversion applied here — pc_in on zenith/mid/nadir, the three nebula tints, band_color and
+// every g_* ground-sky tint, pc_out on the write, lift deleted — did NOT beat the lift. Measured on
+// showcase/space_map.tscn at 1280x720 (median RGB, then luma, then whole-crop MAE):
+//
+//   crop                  Forward+ ref      lift 0.13 (shipped)       pc_in + pc_out
+//   top strip y0-90       (23,24,64) 26.04  (19,22,63) 24.32  -1.72   (17,19,63) 21.68  -4.36
+//   left col x0-120       (23,23,62) 26.09  (20,21,60) 23.67  -2.43   (20,20,62) 22.96  -3.13
+//   bottom strip y640-720 (16,13,40) 14.95  (16,14,38) 16.02  +1.07   (10, 7,38)  9.95  -5.00
+//   MAE, same three crops                   2.76 / 3.55 / 2.61        3.13 / 3.16 / 3.81
+//
+// MAE is a wash and luma is clearly worse, for the same reason as src/ui/title/title_sky.gdshader:
+// Compatibility renders a few codes short of Forward+ at the very bottom of the range whatever the
+// shader writes (probed with flat constants through pc_out: 0.008 -> F+ 2 vs C 0, 0.016 -> 13 vs 9,
+// 0.035 -> 36 vs 34), and this sky is authored down in that band. The in-game sky escapes it only
+// because it sits higher (COLOR ~0.035 by day, brighter still at night).
+//
+// The lift stays. To retire it you must first remove the dark-end residual, which is a renderer
+// effect and not reachable from this file.
+// astro_compat is 1.0 only under Compatibility; src/autoload/platform.gd:78-81 drives it and
+// project.godot [shader_globals] declares it. On desktop and the native mobile renderer this whole
+// term is a literal zero, so the Forward+ reference look is bit-identical to before.
+//
+// NOT applied in the AT_CUBEMAP_PASS branch: that pass only feeds radiance and reflections.
+//
+// TO RE-MEASURE: invoke godot directly, never tools/snap.sh, which appends flags after the `--`
+// separator where --rendering-method is silently ignored and hands you a Forward+ render:
+//   godot --path . res://showcase/space_map.tscn --rendering-method gl_compatibility \
+//         -- "--director=<timeline.json>" "--capture-dir=<dir>"
+// and confirm "[Platform] renderer: Compatibility (parity correction ON)" before believing any
+// pixel. Note showcase/space_map.tscn builds the fallback Environment in space_travel.gd:375
+// (no RocketJourney.env), so an in-flight capture, which inherits the departure planet's
+// Environment, may sit a little off these absolute numbers.
+global uniform float astro_compat;
+uniform float compat_sky_lift : hint_range(0.0, 0.4) = 0.13;
+
 // ---- ground-sky impersonation (the seam) ------------------------------------------------------
 // 0 = this scene's own look. 1 = exactly what src/shaders/sky.gdshader paints at space_blend 1.
 uniform float ground_match : hint_range(0.0, 1.0) = 0.0;
@@ -203,7 +298,12 @@ void sky() {
 		float mwn = fbm3(d * 4.2 + 3.0);
 		vec3 gcol = g_zenith + g_milky * mw_band_g * (0.30 + 0.70 * mwn) * 0.20;
 
-		col = aces_inverse(cap_display(col, display_cap), tonemap_white);
+		// The lift goes in BEFORE the inverse curve so it moves the authored colour rather than
+		// scaling the result; the curve is steep down here, so the darks recover while the stars,
+		// the moons and the sun disc - all added afterwards, in HDR - are untouched. Deliberately
+		// NOT applied to `gcol` below; see the seam note in the uniform's comment block.
+		col = aces_inverse(cap_display(col + vec3(compat_sky_lift * astro_compat), display_cap),
+				tonemap_white);
 		if (ground_match > 0.001) {
 			gcol = aces_inverse(cap_display(gcol, g_display_cap), tonemap_white);
 			col = mix(col, gcol, ground_match);

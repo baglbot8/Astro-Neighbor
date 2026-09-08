@@ -87,17 +87,27 @@ const SKY_ZENITH_HEIGHT := 0.45
 const BODY_AZ_LOCK_SEC := 1.5
 ## Name of the global shader parameter that carries the night factor to every shader.
 const NIGHT_PARAM := &"astro_night"
-## Ambient multiplier applied ONLY under the Compatibility (WebGL2) renderer; 1.0 everywhere
-## else, so desktop and mobile are untouched. Set in _ready() from Platform. See the note beside
-## its use below, and re-measure BOTH renderers if you change it.
-# Was 0.75, tuned while glow was still on under Compatibility. Turning glow off removed the same
-# wash a second time, and the two together crushed the darks — measured whole-frame luma p05 of
-# 11 against 25 on Forward+, which a player on a real iPhone read as 'all dark colors much
-# darker'. Glow-off does this job on its own.
-const COMPAT_AMBIENT_SCALE := 1.0
-var _ambient_scale: float = 1.0
+# RETIRED: COMPAT_AMBIENT_SCALE. There was a `const COMPAT_AMBIENT_SCALE` here, a multiplier on
+# ambient_light_energy applied only under Compatibility. It sat at 1.0 (a no-op) for a long time
+# after the value it once carried (0.75) was traced to glow, and it is now gone. DO NOT REVIVE IT.
+#
+# It was aimed at a real symptom - the browser build's ground reads far too pale - but it is the
+# wrong lever, and the measurement says so unambiguously. Setting it to 0.15 takes the home
+# planet's GROUND luma GAP from 46 down to 2.8, which looks like a fix, while pushing the
+# saturation GAP from 0.0097 to 0.1135: it buys a luma match by desaturating the whole world.
+# That is a constant tuned on one crop against one error, exactly like `compat_gain` and the three
+# palette "fixes" that were all reverted. Ambient is not the culprit either: measured in
+# isolation on a 385,201-pixel ground mask, ambient-only is byte-identical on both renderers
+# (60,68,77 against 60,68,77). The pale ground came from the shadow additive pass blending in
+# sRGB-encoded space (see _apply below), and that has a cause-level fix with no free parameter.
+# If the browser still looks wrong after this, the answer is to finish converting the remaining
+# shaders, not to re-add a scalar here.
+
 ## True on a phone or in the browser: see _apply_quality_profile in the Platform autoload.
 var _low_power := false
+## True ONLY under the Compatibility (WebGL2) renderer. Turns off real-time cast shadows on the
+## sun and the moon. Set in _ready() from Platform; see the long note above _apply() for why.
+var _no_cast_shadows := false
 ## Colour grade LUT (see _grade_lut). Sampled per channel, so each stop shapes R, G and B separately.
 const GRADE_OFFSETS := [0.0, 0.25, 0.6, 1.0]
 ## The top stop is deliberately BELOW 1.0. R2.6: "no near-clipping whites - cap ~0.92". The grade
@@ -174,7 +184,7 @@ var _sky_bodies: SkyBodies
 
 func _ready() -> void:
 	_low_power = Platform.is_compatibility_renderer() or Platform.is_mobile()
-	_ambient_scale = COMPAT_AMBIENT_SCALE if Platform.is_compatibility_renderer() else 1.0
+	_no_cast_shadows = Platform.is_compatibility_renderer()
 	planet_data = data_override if data_override != null else _find_planet_data()
 	planet_radius = planet_data.radius
 	palette.build(planet_data)
@@ -568,7 +578,9 @@ func _update_grade(night: float) -> void:
 func _build_lights() -> void:
 	_sun = DirectionalLight3D.new()
 	_sun.name = "Sun"
-	_sun.shadow_enabled = true
+	# Resting state only. `_apply()` rewrites this every frame (and once from _ready() before the
+	# first frame is drawn), including the Compatibility gate - see the note above _apply().
+	_sun.shadow_enabled = not _no_cast_shadows
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	_sun.directional_shadow_split_1 = 0.3
 	# A low sun stretches every shadow: at 11 deg the caster-to-shadow ratio is 5.1x, so a 4.5 m
@@ -646,6 +658,81 @@ func _build_night_life() -> void:
 	add_child(_night_life)
 
 # ----------------------------------------------------------------------------- per-frame apply
+## WEB PARITY, ROOT CAUSE (docs/OPEN_ISSUES.md 32). Under Godot's Compatibility (WebGL2) renderer a
+## directional light with `shadow_enabled = true` is drawn in a SEPARATE ADDITIVE PASS, and that
+## pass is combined with the base pass in sRGB-ENCODED space instead of linear space:
+##
+##     C_linear = s2l( l2s(ambient) + l2s(direct) )      instead of      ambient + direct
+##
+## Measured on showcase/planet_home.tscn with grass_planet patched to a flat albedo, median over a
+## 385,201-pixel ground mask:
+##
+##     run                Forward+       Compatibility    C/F linear
+##     ambient only     60, 68, 77       60, 68, 77         1.000
+##     direct only      83, 78, 69       82, 79, 70         1.026
+##     BOTH            101,102,101      142,146,146         2.163
+##
+## Forward+ is exactly additive (both / (amb + dir) = 0.992); Compatibility gives 2.114. Either
+## term ALONE is exact, because l2s(0) = 0 makes a single non-zero term round-trip perfectly -
+## which is why every isolated harness matched and this took so long to find. The single toggle
+## that flips it is `shadow_enabled`: with shadows off, both renderers agree (F+ 101,102,101
+## against C 101,103,101). A zero-free-parameter prediction test at three ambient energies landed
+## within 1 code value on both renderers at every level (F+ 92.0/103.1/121.8 predicted against
+## 91/102/121 measured; C 126.4/147.0/174.5 against 126/146/174).
+##
+## So on Compatibility we simply do not take that pass: `_no_cast_shadows`. There is no constant
+## and nothing tuned. Measured effect on the region-masked GROUND MAE (F+ against Compatibility,
+## 3 planets x 3 hours, this exact fix):
+##
+##           dawn (h 6.5)      noon (h 13)       dusk (h 19)
+##     home  41.5 ->  6.2      48.7 ->  6.7      36.6 ->  5.5
+##     hub   47.4 -> 20.6      30.5 -> 10.0      39.2 -> 15.1
+##     zorp  52.1 ->  8.8      33.5 ->  2.4      45.2 ->  3.9
+##
+## and the GROUND saturation gap, which is the number COMPAT_AMBIENT_SCALE would have wrecked:
+##     home noon 0.1813 -> 0.0229    hub noon 0.1439 -> 0.0045    zorp noon 0.1608 -> 0.0070
+##
+## Every figure above is the mean of two independent captures that agreed to within 0.06 codes.
+## Forward+ is untouched (the gate is false there): F+ before against F+ after is bit-identical on
+## home dawn and noon, and elsewhere differs only on 0.1-0.3% of pixels with p95 = 0, which is the
+## known capture jitter.
+##
+## The residual - hub is the worst of the three, and its ground p95 is still 144.7 against 187.8 -
+## is the 28 shaders that have not had the pc_s2l/pc_l2s conversion yet plus the frozen sky shader
+## (the SKY region does not move at all here: home noon 19.30 -> 19.30). The answer to that
+## residual is to finish the conversion, NOT to add a scalar here.
+##
+## THIS MUST LIVE AT THE PER-FRAME WRITE, not in _build_lights(). `_apply()` runs from _process()
+## every frame and rewrites `shadow_enabled` from the sun energy curve, so a one-shot edit at build
+## time is silently undone before anything is drawn. Three rounds of false negatives came from
+## exactly that. `_build_lights` still sets it, but only as the resting state of a light that
+## `_apply()` immediately overwrites in _ready().
+##
+## OTHER LIGHTS: the additive pass is triggered by SHADOWS, not by the light type, so every
+## shadow-caster in the game has this bug. Audited 2026-09-08: the sun and the moon here are the
+## only two. Every OmniLight3D and SpotLight3D in the tree already sets `shadow_enabled = false`
+## explicitly - hub building_base.gd:340,360, event_space.gd:324,338 (the party spots and omnis),
+## planet_props.gd:220, deco_item.gd:154, night_life via those, and the whole rocket rig. Nothing
+## in night_life casts. The hub, which has the most omnis of any scene, was measured anyway and
+## improves by the same mechanism (noon GROUND MAE 30.5 -> 10.0), which is what you would expect
+## if the directional sun were the only caster.
+##
+## The moon is gated off the same way, and off the SAME `sun_casts` intent rather than off
+## `_sun.shadow_enabled`. Reading the result instead of the intent would invert the moon: at noon
+## on Compatibility `_sun.shadow_enabled` is false, so the moon would switch its own shadows ON and
+## reintroduce the bug. Night was measured to confirm the gate reaches the moon at all:
+## home h=2, GROUND MAE 22.89 -> 4.41.
+##
+## COST, honestly: the browser build loses real-time cast shadows, and this is a real loss, not a
+## free win. The player keeps ground contact - src/player/blob_shadow.gdshader draws a blob under
+## the boots and it is clearly visible at noon and at dusk with cast shadows off. Props have NO
+## equivalent. Looked at, dawn/noon/dusk, both renderers: on the open planets (home, zorp) the
+## trees and rocks still read as planted, because their trunks meet the ground and the canopy
+## self-shading carries the form. On the HUB PLAZA it is visible: the bench loses both its cast
+## shadow and its contact darkening and reads as sitting slightly above the tiles, and at dusk the
+## long raking shadow bars the lamp posts and the colonnade threw across the plaza - a real part of
+## that scene's mood - are simply gone. If that matters more than parity, the next move is a
+## prop-side blob shadow like the player's, NOT turning this gate back off.
 func _apply(hour: float) -> void:
 	_compute_bodies(hour)
 	var t := EnvPalette.t(hour)
@@ -669,22 +756,27 @@ func _apply(hour: float) -> void:
 	_sun.visible = sun_on
 	if sun_on:
 		_sun.global_transform = Transform3D(_light_basis(_sun_dir), Vector3.ZERO)
-	_sun.shadow_enabled = sun_energy > 0.08
+	# `sun_casts` is the artistic intent (is the sun high enough to throw a shadow); the renderer
+	# gate is applied separately so the moon still reads the intent rather than the result - if it
+	# read `_sun.shadow_enabled` it would switch its own shadows ON at noon on Compatibility.
+	var sun_casts := sun_energy > 0.08
+	_sun.shadow_enabled = sun_casts and not _no_cast_shadows
 	_moon.light_color = palette.moon_light.sample(t)
 	_moon.light_energy = moon_energy
 	var moon_on := moon_energy > 0.02
 	_moon.visible = moon_on
 	if moon_on:
 		_moon.global_transform = Transform3D(_light_basis(_moon_light_dir), Vector3.ZERO)
-	_moon.shadow_enabled = moon_on and not _sun.shadow_enabled
+	_moon.shadow_enabled = moon_on and not sun_casts and not _no_cast_shadows
 
 	# --- environment
 	_env.ambient_light_color = palette.ambient.sample(t)
-	# WEB PARITY (docs/OPEN_ISSUES.md 32). Ambient reaches the surface much more strongly under the
-	# Compatibility (WebGL2) renderer than under Forward+: measured on the home ground, ambient
-	# lifts the value mean by +0.129 on Forward+ and by +0.212 on Compatibility. That extra white
-	# fill is what made the browser build look pale and washed out. Scaled back only there.
-	_env.ambient_light_energy = palette.ambient_energy.sample_baked(t) * _ambient_scale
+	# NO renderer-specific scale here, deliberately - see the retired COMPAT_AMBIENT_SCALE note at
+	# the top of this file. The old "ambient is stronger under Compatibility" reading was an
+	# artefact: it obtained "ambient" by differencing two runs, and the sRGB-encoded shadow blend
+	# inflates that difference by exactly the factor it was being blamed for. Ambient measured in
+	# isolation is byte-identical on both renderers.
+	_env.ambient_light_energy = palette.ambient_energy.sample_baked(t)
 	_env.fog_light_color = fog_col
 	# What little haze there is belongs to the surface; by the time the rocket is in space there
 	# is nothing left to scatter.

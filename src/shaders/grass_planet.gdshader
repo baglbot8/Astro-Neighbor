@@ -43,13 +43,25 @@ const float SD_ROCKC_HZ = 7.4;
 const float SD_ROCKF_K = 0.62;
 const float SD_ROCKF_HZ = 28.5;
 
-// WEB PARITY (docs/OPEN_ISSUES.md 32). Under the Compatibility (WebGL2) renderer that the web
-// export is forced onto, this ground renders too pale and washed out. `astro_compat` is 1.0
-// ONLY there, set once by the Platform autoload, so this is a no-op on desktop and mobile.
-// NOTE the direction: the ground needs the albedo applied ONCE MORE, while planet_foliage
-// needs it applied once LESS. That opposition is why a single global correction cannot work.
+// WEB PARITY. Under the Compatibility (WebGL2) renderer that the web export is forced onto,
+// `astro_compat` is 1.0; it is 0.0 on desktop, set once by the Platform autoload, so everything
+// below is the exact identity on Forward+ and the reference look cannot move.
+//
+// This shader is converted with pc_in() / pc_out() — see the long block at the top of
+// planet_common.gdshaderinc for the measurement, the probe numbers and the rules. In short:
+// Compatibility does not sRGB-decode `source_color` uniforms on upload (so they arrive in display
+// space and need pc_in), and it sRGB-ENCODES whatever fragment() writes to ALBEDO/EMISSION (so the
+// writes need pc_out). Everything between the two then runs in linear on both renderers, which is
+// the whole point: this shader does a great deal of arithmetic on colour — the triangle mix, the
+// macro shadow blend, the sun patch, the detail bands, pc_pastel — and under the old code every one
+// of those multiplies was landing as t^2.2. That is the "grass comes out very white" S-curve.
+//
+// DELETED HERE: `compat_gain` and the `* ALBEDO * compat_gain` it rode in on at the end of light().
+// It was compensating for a "double albedo under Compatibility" divergence that was MEASURED NOT TO
+// EXIST (both renderers multiply DIFFUSE_LIGHT by ALBEDO exactly once). Worse, it was not free: the
+// extra `* ALBEDO` cost the web build a further ~40% of the ground's brightness on top of the real
+// bug. Do not re-add it, or any constant like it.
 global uniform float astro_compat;
-uniform float compat_gain : hint_range(0.4, 1.5) = 1.0;
 
 uniform vec4 color_a : source_color = vec4(0.361, 0.706, 0.373, 1.0);   // base grass  #5cb45f
 uniform vec4 color_b : source_color = vec4(0.247, 0.541, 0.290, 1.0);   // darker triangles #3f8a4a
@@ -167,33 +179,51 @@ void fragment() {
 	float lod = pc_detail_lod(uv);
 	float fine = 1.0 - lod;
 	vec2 tri = pc_tri_pattern(uv, tri_radius, tri_density);
-	vec3 tri_col = mix(color_b.rgb, color_c.rgb, mix(step(0.62, tri.y), 0.38, lod));
-	vec3 grass = mix(color_a.rgb, tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod));
+	vec3 tri_col = mix(pc_in(color_b.rgb), pc_in(color_c.rgb), mix(step(0.62, tri.y), 0.38, lod));
+	vec3 grass = mix(pc_in(color_a.rgb), tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod));
 	float patch = pc_fbm3(wp * 0.11 + vec3(3.7));
 	grass *= 1.0 + (patch - 0.5) * patch_strength * 2.0;
 	grass = mix(grass, grass * vec3(1.03, 1.0, 0.93), smoothstep(0.55, 0.8, patch) * 0.35);
 	// Broad, deliberate darker meadow regions (large scale, NOT more noise) so real dark tones exist.
 	float macro = pc_fbm3(wp * 0.042 + vec3(11.3, 4.1, 7.9));
-	grass = mix(grass, shadow_color.rgb, smoothstep(0.30, 0.62, macro) * shadow_patch);
+	grass = mix(grass, pc_in(shadow_color.rgb), smoothstep(0.30, 0.62, macro) * shadow_patch);
 	// Sunlit meadow patches. R2.6: the old 1.34x lift pushed the brightest grass past luma 0.95 and
 	// was a big part of the blown-highlight count; a gentler lift still reads as a sunlit patch.
 	float macro_sun = pc_fbm3(wp * 0.055 + vec3(31.7, 2.3, 19.1));
 	// NOT clamped to 1.0: clipping a strong sunlit patch clips the dominant channel first, which
 	// desaturates it. That is what turned Zorp's violet into a washed lilac while chasing luma p95.
 	// The albedo is allowed over 1 here; the tonemapper is what decides how bright it lands.
-	grass = mix(grass, grass * sun_patch * sun_patch_tint.rgb, smoothstep(sun_patch_lo, sun_patch_lo + 0.34, macro_sun) * sun_patch_amt);
+	//
+	// WEB PARITY, THE ONE PLACE THE ROUND TRIP IS NOT GUARANTEED. pc_out()'s maxdiff-0 proof is only
+	// for values in [0, 1], and this line is the one shipped multiplier that drives the albedo ABOVE
+	// 1 inside fragment(): Zorp runs `sun_patch` 1.72 with `sun_patch_tint` (1.0, 1.14, 0.84), set in
+	// src/planet/planet.gd:776-779. It was the prime suspect for the blotchy bleached-mint meadow on
+	// the web build.
+	//
+	// MEASURED, AND IT IS NOT THE CAUSE. This shader was rendered on a vertex-coloured sphere under
+	// BOTH renderers at the shipped values, in an isolated project with a fixed sun and a fixed
+	// ambient so that nothing but the shader could differ. Five sample points, sRGB:
+	//   sun_patch 1.15  F+ (66,136,83) (48,100,64) (56,117,72) (49,101,67) (50,105,68)
+	//                   C  (66,136,83) (48,100,64) (56,117,72) (49,101,67) (50,105,68)   maxdiff 0
+	//   sun_patch 1.72  F+ (78,160,95) (56,116,72) (68,140,83) (59,118,76) (58,120,75)
+	//                   C  (78,160,95) (56,116,72) (68,140,83) (59,118,77) (58,120,75)   maxdiff 1
+	// pc_l2s and the engine's srgb_to_linear are exact inverses well past 1.0 (neither clamps the high
+	// end), so the over-range patch survives the round trip intact. The bleached mint is therefore the
+	// SAME on both renderers - an art call about an over-range patch, not a parity bug - and it must
+	// not be papered over with a compat-only clamp.
+	grass = mix(grass, grass * sun_patch * pc_in(sun_patch_tint.rgb), smoothstep(sun_patch_lo, sun_patch_lo + 0.34, macro_sun) * sun_patch_amt);
 
 	// --- sand by height, wet shore, underwater darkening ----------------------------------------
 	float edge_n = (pc_noise3(wp * 0.9) - 0.5) * 0.4 * fine;
 	float sand_t = 1.0 - smoothstep(wl + 0.12 + edge_n, wl + sand_band + edge_n, h);
 	float wet_t = 1.0 - smoothstep(wl - 0.22, wl + 0.02, h);
-	vec3 sand = sand_color.rgb * (1.0 + (pc_noise3(wp * 3.0) - 0.5) * 0.08 * fine);
+	vec3 sand = pc_in(sand_color.rgb) * (1.0 + (pc_noise3(wp * 3.0) - 0.5) * 0.08 * fine);
 	vec3 col = mix(grass, sand, sand_t);
-	col = mix(col, shore_color.rgb, wet_t * sand_t * 0.85);
+	col = mix(col, pc_in(shore_color.rgb), wet_t * sand_t * 0.85);
 	col *= 1.0 - 0.32 * smoothstep(wl, wl - 0.9, h);
 
 	// --- crater dust (baked in COLOR.b) ----------------------------------------------------------
-	col = mix(col, crater_color.rgb * (0.9 + 0.2 * patch), v_color.b * (1.0 - sand_t) * 0.55);
+	col = mix(col, pc_in(crater_color.rgb) * (0.9 + 0.2 * patch), v_color.b * (1.0 - sand_t) * 0.55);
 
 	// --- cliff face on plateau banks / crater walls (baked in COLOR.g) ----------------------------
 	// ACNH grammar: a CLEAN warm rock face with a crisp top edge and quiet vertical striations —
@@ -202,7 +232,7 @@ void fragment() {
 	// Vertical strata: thin darker seams running down the face (uv.x walks around the planet).
 	float strata = 0.5 + 0.5 * sin(uv.x * cell_size * 7.0 + pc_noise3(dir * 5.0) * 4.0);
 	strata = mix(strata, 0.5, lod);
-	vec3 bank = bank_color.rgb * (0.96 + 0.08 * mix(pc_noise3(wp * 1.1), 0.5, lod));
+	vec3 bank = pc_in(bank_color.rgb) * (0.96 + 0.08 * mix(pc_noise3(wp * 1.1), 0.5, lod));
 	bank *= 1.0 - 0.10 * smoothstep(0.55, 0.95, strata);
 	// A slightly lighter lip right under the grass edge so the top of the cliff reads as an edge.
 	bank = mix(bank, min(bank * 1.14, vec3(1.0)), smoothstep(0.86, 0.52, v_color.g) * 0.55);
@@ -219,8 +249,8 @@ void fragment() {
 		float pm = pd * planet_radius - path_width * 0.5 + edge_n * 0.35;
 		path_t = 1.0 - smoothstep(-0.05, 0.05, pm);
 		float path_edge = (1.0 - smoothstep(0.0, 0.16, abs(pm + 0.06))) * 0.85;
-		vec3 pc = path_color.rgb * (1.0 + (pc_noise3(wp * 2.5) - 0.5) * 0.10 * fine);
-		pc = mix(pc, path_edge_color.rgb, path_edge);
+		vec3 pc = pc_in(path_color.rgb) * (1.0 + (pc_noise3(wp * 2.5) - 0.5) * 0.10 * fine);
+		pc = mix(pc, pc_in(path_edge_color.rgb), path_edge);
 		col = mix(col, pc, path_t);
 	}
 
@@ -228,9 +258,9 @@ void fragment() {
 	vec3 emission = vec3(0.0);
 	if (river_glow > 0.0) {
 		float river_t = 1.0 - smoothstep(wl - 0.02, wl + 0.16, h);
-		col = mix(col, riverbed_color.rgb, river_t * 0.9);
+		col = mix(col, pc_in(riverbed_color.rgb), river_t * 0.9);
 		float flow = pc_noise3(wp * 1.6 + vec3(TIME * 0.35, 0.0, TIME * 0.2));
-		emission += river_color.rgb * river_glow * river_t * (0.55 + 0.45 * flow);
+		emission += pc_in(river_color.rgb) * river_glow * river_t * (0.55 + 0.45 * flow);
 	}
 	if (speck_strength > 0.0) {
 		vec3 sc = floor(wp * 3.5);
@@ -239,7 +269,7 @@ void fragment() {
 		float dd = length(wp - cp);
 		float spot = (1.0 - smoothstep(0.035, 0.07, dd)) * step(0.905, sh) * (1.0 - sand_t);
 		float pulse = 0.55 + 0.45 * sin(TIME * 2.2 + sh * 50.0);
-		vec3 sc_col = mix(speck_color_a.rgb, speck_color_b.rgb, step(0.5, fract(sh * 7.0)));
+		vec3 sc_col = mix(pc_in(speck_color_a.rgb), pc_in(speck_color_b.rgb), step(0.5, fract(sh * 7.0)));
 		col = mix(col, sc_col, spot * 0.7);
 		emission += sc_col * spot * pulse * speck_strength;
 	}
@@ -289,11 +319,11 @@ void fragment() {
 	float limb = 1.0 - smoothstep(0.10, 0.86, facing);
 	// A hair of screen-space dither: this gradient is so low-slope that 8-bit output alone bands it.
 	limb = clamp(limb + (pc_hash21(FRAGCOORD.xy) - 0.5) * 0.016, 0.0, 1.0);
-	col = mix(col, col * limb_tint.rgb, limb * limb_darken);
+	col = mix(col, col * pc_in(limb_tint.rgb), limb * limb_darken);
 
 	// R2.6: pastel guard last, so procedurally derived tones (bank strata, crater dust, wet shore,
 	// the macro shadow blend) are capped too, not just the authored uniforms.
-	ALBEDO = pc_pastel(col, pastel_max, pastel_dark);
+	ALBEDO = pc_out(pc_pastel(col, pastel_max, pastel_dark));
 	ROUGHNESS = 0.98;
 	METALLIC = 0.0;
 	// Matte: grass and earth have no gloss. The old 0.2 put a sheen on every ground facet turned
@@ -301,19 +331,19 @@ void fragment() {
 	SPECULAR = 0.02;
 	AO = mix(1.0, v_color.a, ao_ambient);
 	AO_LIGHT_AFFECT = 0.0;
-	EMISSION = emission * (1.0 - limb * 0.5) * mix(1.0, v_color.a, 0.5);
+	EMISSION = pc_out(emission * (1.0 - limb * 0.5) * mix(1.0, v_color.a, 0.5));
 }
 
 void light() {
 	float lit;
 	float ndl = dot(NORMAL, LIGHT);
-	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, shade_tint.rgb, shade_floor, LIGHT_IS_DIRECTIONAL, lit);
+	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, pc_in(shade_tint.rgb), shade_floor, LIGHT_IS_DIRECTIONAL, lit);
 	// R2.9: carry the surface detail's slope into the saturated part of the toon ramp (see the
 	// `detail_light` uniform). Clamped hard on both sides so it can never blow out or punch a hole.
 	diffuse *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.80, 1.22);
 	vec3 lit_rgb = pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
-	DIFFUSE_LIGHT += mix(lit_rgb, lit_rgb * ALBEDO * compat_gain, astro_compat);
-	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, shadow_fill_color.rgb, shadow_fill) * LIGHT_COLOR / PI;
+	DIFFUSE_LIGHT += lit_rgb;
+	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, pc_in(shadow_fill_color.rgb), shadow_fill) * LIGHT_COLOR / PI;
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	float spec = smoothstep(0.45, 0.6, pow(ndh, 40.0)) * spec_strength * lit;

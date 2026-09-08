@@ -16,6 +16,32 @@ global uniform float astro_night;
 // surface library is available here too, off by default and switched on per instance.
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
+// WEB PARITY. planet_common is included for pc_in/pc_out only - the recipe is at its lines 84-104.
+// Compatibility skips the CPU-side sRGB->linear on `source_color` uniforms and applies its own
+// srgb_to_linear() to whatever fragment() writes to ALBEDO/EMISSION, so every source_color is
+// decoded once at first use and each of the two writes is encoded once. `astro_compat` is 1.0 only
+// under Compatibility, so on Forward+ every wrap is the identity and the desktop look cannot move.
+// v_col is the baked window/sign colour and is NOT wrapped (recipe (c)); sd.tint and the macro
+// drift are computed values, not colours arriving from the CPU, so they are not wrapped either.
+//
+// MEASURED, showcase/hub_buildings.tscn --night --focus=clothes_store --dist=6, on the 6,733-px
+// glow surfaces of that shopfront (window panes, sign halo, string-light bulbs). The mask is the
+// pixels a magenta-emission build of THIS shader moves by more than 30 codes on BOTH renderers,
+// eroded 2. Forward+ vs Compatibility, two independent captures:
+//     before   MAE 6.50  p95 15.33   region SAT 0.0757 -> 0.1077 (gap 0.0319)
+//     after    MAE 1.41  p95  2.00   region SAT 0.0758 -> 0.0755 (gap 0.0002)
+//     repeat   MAE 1.42  p95  2.00   region SAT 0.0758 -> 0.0754 (gap 0.0004)
+// Forward+ did not move: p05/p50/p95 193.6 / 208.1 / 210.1 in every run, before and after.
+//
+// Measured at tonemap_exposure 0.40, moved identically on both renderers, for the reason written up
+// at length in src/shaders/planet_glow_pulse.gdshader: Compatibility renders to an LDR target and
+// clamps any fragment Forward+ drives past 1.0 linear, and lit windows at 22:30 sit on that ceiling
+// at the shipped exposure (there, Forward+ reads 225.0/232.1/233.0 against a Compatibility pinned
+// flat at 221.4). Dropping the exposure takes the clamp out of the way so what is measured is this
+// shader and not the target's headroom.
+#include "res://src/shaders/planet_common.gdshaderinc"
+global uniform float astro_compat;
+
 instance uniform float surface_amount = 0.0;   // 0 = off. Laid-tile microsurface via sd_rock.
 instance uniform float surface_macro = 0.0;    // large-scale tonal drift, cycles/m x amount
 
@@ -56,7 +82,7 @@ void vertex() {
 
 void fragment() {
 	float lit = max(astro_night, force_on);
-	ALBEDO = mix(v_col, day_color.rgb, day_dark * (1.0 - lit)) * albedo_scale;
+	ALBEDO = mix(v_col, pc_in(day_color.rgb), day_dark * (1.0 - lit)) * albedo_scale;
 	ROUGHNESS = 0.72;
 	if (surface_amount > 0.001) {
 		// Laid stone tile: sd_rock at `scale` 0.55 (render/paving frequencies, not cliff), faded
@@ -80,13 +106,19 @@ void fragment() {
 	}
 	vec3 em = v_col * glow_strength * night * pulse;
 	float peak = max(em.r, max(em.g, em.b));
-	EMISSION = (peak > emission_cap) ? em * (emission_cap / peak) : em;
+	// One encode of the frame for each write. EMISSION can be driven over 1.0 by emission_cap
+	// (default 1.9); pc_l2s is the exact inverse of the engine's decode for any positive value, and
+	// above 1.0 Compatibility's LDR target clamps whether or not the value was encoded - measured on
+	// planet_glow_pulse, where EMISSION 1.0 / 1.6 / 2.0 / 3.0 all land on the same Compatibility
+	// pixel. So the wrap is exact where it can be and harmless where the target has run out.
+	EMISSION = pc_out((peak > emission_cap) ? em * (emission_cap / peak) : em);
+	ALBEDO = pc_out(ALBEDO);
 }
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
-	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength);
+	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
 	DIFFUSE_LIGHT += mix(shadow_col * floor_level, ALBEDO, lit) * LIGHT_COLOR / PI;
 }

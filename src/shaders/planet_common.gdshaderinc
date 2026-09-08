@@ -2,6 +2,126 @@
 // Everything is procedural: hashes, value noise, the ACNH-style triangle pattern, cube-sphere
 // mapping (seamless-enough planar coordinates on a sphere) and the shared toon light ramp.
 
+// --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS -------------------------------------------------
+// READ THIS BEFORE TOUCHING ANY COLOUR MATHS IN A SPATIAL SHADER. This block is the foundation the
+// whole renderer-parity round is built on; the recipe at the bottom is what every other shader
+// conversion must follow, verbatim.
+//
+// THE BUG (proven independently by two agents, then reproduced from scratch in a clean project):
+// Godot's Compatibility renderer (WebGL2, which the web export is forced onto, and which is what
+// the game is actually played on) moves the sRGB->linear conversion from CPU uniform-upload time —
+// where Forward+ does it — to the END OF THE FRAGMENT STAGE. Measured:
+//   * Compatibility does NOT convert `source_color` uniforms on upload; Forward+ does.
+//   * Compatibility applies srgb_to_linear() to whatever fragment() writes to ALBEDO and EMISSION;
+//     Forward+ does not.
+//   * The two therefore break even ONLY for a shader that assigns a source_color uniform straight
+//     to ALBEDO with no maths in between. (Measured; the two renderers agreed within 2 code values.)
+//
+// Every surface shader in this project instead does arithmetic on colour inside fragment() — the
+// detail-band multiplies, pc_pastel, the vertex-colour multiply, grass_planet's sun_patch lift.
+// Under Compatibility that arithmetic runs in DISPLAY space instead of LINEAR space and is THEN
+// gamma-decoded, so every multiplicative term t lands as t^2.2 instead of t. Measured: a 2.09x
+// contrast expansion on the material's own texture, pivoting on the untinted colour. That is the
+// S-curve the user has been reporting for three rounds — "the grass comes out very white", "the
+// plants are very black" — and it is one bug, not two.
+//
+// THE PROBE NUMBERS (unshaded quads, LINEAR tonemap, ten steps of 0.0667..1.0):
+//   ALBEDO = literal            F+ [73,102,124,141,156,170,188,213,231,255]
+//                               C  [12, 32, 50, 68, 85,102,128,170,204,255]
+//   ALBEDO = pc_out(literal)    F+ [73,102,124,141,156,170,188,213,231,255]
+//                               C  [73,102,124,141,156,170,188,213,231,255]   <- MAXDIFF 0
+// Two agents reached maxdiff 0 separately, without seeing each other's work. Nothing here is a
+// fitted constant, and nothing here may BECOME one: a magic gain that "closes the last few units"
+// is exactly the mistake that cost this project its three previous attempts at web parity.
+//
+// WHAT THIS IS *NOT*. The "double-albedo divergence" written up in docs/OPEN_ISSUES.md 19 and 32
+// IS NOT REAL and nobody should re-add a knob for it. Measured with a flat probe: BOTH renderers
+// multiply DIFFUSE_LIGHT by ALBEDO exactly once, light() sees the same ALBEDO the engine goes on to
+// multiply by, and specular is never multiplied by albedo in either. So light(), pc_light_term and
+// the albedo bookkeeping below are CORRECT AS THEY STAND — leave them alone. (The separate "albedo
+// applied twice" note about six shaders composing the finished colour in light() is real, but it is
+// renderer-INDEPENDENT: it costs Forward+ exactly as much, so it is a desktop art question.)
+//
+// The per-shader compat knobs that were invented to paper over the phantom bug have been deleted as
+// part of each shader's conversion — grass_planet's `compat_gain` (which was additionally costing
+// Compatibility ~40% of the ground's brightness) and planet_foliage's `compat_light_boost`.
+// sky.gdshader's `compat_sky_lift` is the ONE exception and it stays: a cross-check found the sky
+// path's transfer is col^1.28 rather than a clean decode, so the scheme below is UNVALIDATED there
+// and every `shader_type sky` shader is frozen this round.
+
+// Exact sRGB transfer functions (the piecewise IEC 61966-2-1 pair, not a 2.2 power approximation —
+// the linear toe below 0.04045 is where the dark end of the ramp lives, and an approximation there
+// is worth several code values on exactly the shadow tones this project keeps failing on).
+vec3 pc_s2l(vec3 q) { return mix(q / 12.92, pow((q + vec3(0.055)) / 1.055, vec3(2.4)), step(vec3(0.04045), q)); }
+vec3 pc_l2s(vec3 q) { q = max(q, vec3(0.0)); return mix(q * 12.92, 1.055 * pow(q, vec3(1.0 / 2.4)) - vec3(0.055), step(vec3(0.0031308), q)); }
+
+// The two workhorses take the flag as an argument, and the MACROS below supply it. That indirection
+// is not style, it is the only arrangement that compiles:
+//   * `global uniform float astro_compat;` may be declared only ONCE per shader. Declaring it here
+//     in the include is a "Redefinition of 'astro_compat'" error in every shader that already has
+//     its own (grass_planet and planet_foliage both did) — verified in a scratch project, not
+//     guessed.
+//   * Godot's shader parser is single-pass, so a FUNCTION in this include cannot reference a uniform
+//     the including shader declares further down its own file.
+//   * A macro is expanded at the CALL site, where astro_compat is in scope whatever the declaration
+//     order. Wrapping the real work in pc_in_f / pc_out_f keeps the argument evaluated exactly once,
+//     which a naive `#define pc_out(q) ((astro_compat > 0.5) ? pc_l2s(q) : (q))` would not — and the
+//     argument at the ALBEDO write is usually a large expression.
+// So: your shader still declares `global uniform float astro_compat;` itself, anywhere it likes.
+vec3 pc_in_f(vec3 q, float compat) { return (compat > 0.5) ? pc_s2l(q) : q; }
+vec3 pc_out_f(vec3 q, float compat) { return (compat > 0.5) ? pc_l2s(q) : q; }
+
+// A colour ARRIVING from a `source_color` uniform. Compatibility skips Godot's CPU-side sRGB->linear
+// on these, so do it here. Identity on Forward+ (astro_compat == 0.0), which is why the reference
+// look cannot move.
+#define pc_in(q) pc_in_f((q), astro_compat)
+
+// A colour LEAVING fragment() into ALBEDO or EMISSION. Compatibility applies srgb_to_linear after
+// fragment() returns, so pre-encode. Identity on Forward+.
+#define pc_out(q) pc_out_f((q), astro_compat)
+
+// --- THE RECIPE. FOLLOW IT EXACTLY; THE RISK IS ALL IN GETTING THESE WRONG ----------------------
+// (a) WRAP with pc_in() every `source_color` uniform, at the point it first enters the colour maths:
+//     pc_in(color_a.rgb), pc_in(shade_tint.rgb), pc_in(sand_color.rgb), pc_in(emission_color.rgb)...
+//     Wrap it ONCE, at first use, not at every mention — double-wrapping is a second decode.
+// (b) WRAP THE FINAL WRITES: ALBEDO = pc_out(...); EMISSION = pc_out(...);
+// (c) DO NOT pc_in() vertex COLOR, INSTANCE_CUSTOM, literals, or computed values. They are delivered
+//     identically to both renderers and Forward+ treats them as linear already. They need pc_out on
+//     the WRITE only. (This is the toon_soft / planet_foliage / planet_glow_pulse / crystal case.)
+// (d) DO NOT WRAP ANYTHING USED AS A MASK OR SELECTOR rather than as a colour. This is the failure
+//     mode that is hardest to see, because it changes geometry-driven behaviour rather than tone.
+//     The known list, so nobody has to rediscover it:
+//       * metal_plates.gdshader:236 and :258 — bank selectors
+//       * plaza_tiles.gdshader:205        — bank selector
+//       * planet_foliage.gdshader         — the COLOR.a wood marker
+//       * grass_planet.gdshader           — COLOR.b crater dust and v_color.a baked AO
+//       * AO, ROUGHNESS, METALLIC, SPECULAR anywhere — these are not colours.
+// (e) DO NOT CONVERT ANY `shader_type sky` SHADER. Measured: that path's transfer is col^1.28, not a
+//     clean decode, and nobody has explained why. sky.gdshader keeps its compat_sky_lift = 0.08.
+// (f) DO NOT touch light(), beyond deleting that shader's own dead compat knob. See the
+//     "WHAT THIS IS NOT" paragraph above: the albedo bookkeeping is already correct.
+// (g) The maxdiff-0 guarantee holds for values in [0, 1]. It does NOT hold for a colour driven ABOVE
+//     1.0 inside fragment(), because pc_l2s clamps nothing and the encode of an over-range value is
+//     not the inverse of the decode the engine applies. grass_planet's `sun_patch` is the one
+//     shipped case; its measurement is recorded in that file.
+// (h) One shader per commit, scoring with parity.sh after each. A cross-check specifically overruled
+//     the "ship it as one big commit" advice — the knobs are per-shader, so the conversion is too,
+//     and this project has already had to revert one all-at-once shader sweep.
+// (i) DO NOT EXPECT parity.sh's LUMA GAP TO REACH 0, AND DO NOT FIT A CONSTANT TRYING TO GET IT
+//     THERE. The two captures it compares are not the same scene at the same quality, because the
+//     project deliberately ships a low-power profile to the browser build:
+//       * src/world/environment.gd:462,479  glow_enabled and ssao_enabled are OFF under
+//         Compatibility. SSAO is where a lot of the ground's and props' contact darkening comes
+//         from, so Compatibility renders brighter and flatter no matter what the shaders do.
+//       * src/autoload/platform.gd:49+      MSAA off, FXAA on, a cheaper directional shadow filter.
+//       * src/planet/props/planet_props.gd:230  prop density drops to 0.35, and :236 turns some
+//         props off entirely — so the two frames do not even contain the same objects.
+//     Those are intentional performance decisions, not colour bugs. The number that tells you a
+//     SHADER is right is a maxdiff of 0-1 for that shader in isolation (a fixed sun, a fixed
+//     ambient, nothing else in the scene); parity.sh's job is to catch a regression, not to hit 0.
+//     MEASURED for the two shaders converted first: grass_planet maxdiff 0 (1 at sun_patch 1.72),
+//     toon_soft maxdiff 1 on both its plain and its vertex-coloured path.
+
 float pc_hash21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
 	p += dot(p, p + 45.32);

@@ -14,6 +14,49 @@ global uniform float astro_night;
 
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
+// --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS, INLINED -----------------------------------------
+// THE CANONICAL COPY AND THE FULL WRITE-UP LIVE AT THE TOP OF src/shaders/planet_common.gdshaderinc:
+// the measurement, the probe numbers (maxdiff 0), the conversion rules, and the list of masks that
+// must NOT be wrapped. Read that first. They are inlined here rather than included because this is
+// the shader on EVERY character, prop and building, and it has no other reason to pull in the whole
+// planet ground library; keep the two copies byte-identical if either is ever changed.
+//
+// One-paragraph version: Compatibility (WebGL2, which the web export is forced onto and which is
+// what the game is actually played on) does not sRGB-decode `source_color` uniforms on upload the
+// way Forward+ does, and it sRGB-ENCODES whatever fragment() writes to ALBEDO/EMISSION. So a colour
+// uniform arrives in DISPLAY space and every multiply done on it inside fragment() lands as t^2.2.
+// This shader's vertex-colour path is the worst case in the game, because it multiplies by COLOR:
+// MEASURED, the hub bench slats rendered F+ (201,164,110) -> C (157,62,38) and the flower-bed soil
+// F+ (133,115,79) -> C (57,44,33). That is the user's "the plants are very black".
+//
+// `astro_compat` is 1.0 only under Compatibility (Platform._apply_renderer_parity), so every wrap
+// below is the exact identity on desktop and the Forward+ reference look cannot move.
+//
+// MEASURED AFTER THE CONVERSION. Both of this shader's albedo paths were rendered under BOTH
+// renderers in an isolated project (fixed sun, fixed ambient, nothing else in the scene, so only
+// the shader could differ), on the hub bench wood, the flower-bed soil, a mid grey and a saturated
+// green:
+//   vertex-colour path (MaterialLib.toon_vertex_color's rewrite, COLOR carrying the colour)
+//     F+ (213,163,109) (123,102,80) (172,173,179) (155,213,169)
+//     C  (213,163,109) (124,102,80) (172,173,179) (156,214,170)        MAXDIFF 1
+//   plain path (`albedo` uniform carrying the colour, COLOR white)
+//     F+ (151,83,37) (49,32,21) (77,77,84) (26,92,34)
+//     C  (151,83,37) (49,32,20) (77,77,84) (27,92,34)                  MAXDIFF 1
+// In the real hub scene the near bench slat went C (156,39,19) -> C (230,204,175) against a
+// Forward+ (211,169,111): the hue and the near-black are gone. It does not land ON the Forward+
+// value there because the browser build renders that frame with SSAO and glow switched off and at
+// 0.35 prop density (see rule (i) in planet_common) — the shader itself is at maxdiff 1.
+global uniform float astro_compat;
+
+vec3 pc_s2l(vec3 q) { return mix(q / 12.92, pow((q + vec3(0.055)) / 1.055, vec3(2.4)), step(vec3(0.04045), q)); }
+vec3 pc_l2s(vec3 q) { q = max(q, vec3(0.0)); return mix(q * 12.92, 1.055 * pow(q, vec3(1.0 / 2.4)) - vec3(0.055), step(vec3(0.0031308), q)); }
+vec3 pc_in_f(vec3 q, float compat) { return (compat > 0.5) ? pc_s2l(q) : q; }
+vec3 pc_out_f(vec3 q, float compat) { return (compat > 0.5) ? pc_l2s(q) : q; }
+// Macros, not functions, so `astro_compat` is resolved at the CALL site — a function in a shared
+// include cannot see a uniform the including shader declares further down. See planet_common.
+#define pc_in(q) pc_in_f((q), astro_compat)
+#define pc_out(q) pc_out_f((q), astro_compat)
+
 // R2.9 surface detail. `surface_kind`: 0 none, 1 cloth, 2 metal, 3 wood, 4 rock, 5 foliage,
 // 6 rubber, 7 skin, 8 scales. Keep this list, MaterialLib.SURFACE_KINDS and the if-chain in
 // fragment() in step.
@@ -45,6 +88,15 @@ global uniform float astro_night;
 // alone leaves surfaces washed out and hue-shifted (measured: the hub's wooden bench loses its
 // brown entirely). It must land together with a palette re-author, as one measured pass.
 // `planet_common.gdshaderinc` already has the correct helper: `pc_light_term` + `pc_albedo_floor`.
+//
+// IT IS NOT A WEB-PARITY BUG, AND IT MUST NOT BE "FIXED" WITH A COMPAT KNOB. docs/OPEN_ISSUES.md 19
+// and 32 both claimed Compatibility applies the albedo a DIFFERENT number of times from Forward+.
+// That claim is FALSE and was measured false with a flat probe: BOTH renderers multiply
+// DIFFUSE_LIGHT by ALBEDO exactly once, light() sees the same ALBEDO the engine multiplies by, and
+// specular is never multiplied by albedo in either. The squaring above therefore costs Forward+
+// exactly as much as it costs the web build — it is a desktop art question, tracked separately, and
+// it is invisible to parity.sh. The per-shader `compat_gain` / `compat_light_boost` knobs that were
+// invented for the phantom divergence have been deleted. Do not re-add one.
 // ---------------------------------------------------------------------------------------------
 
 uniform int surface_kind : hint_range(0, 8) = 0;
@@ -118,10 +170,28 @@ uniform bool use_texture = false;
 uniform vec2 uv_scale = vec2(1.0);
 
 void fragment() {
+	// DO NOT REWRITE THE NEXT LINE. MaterialLib.toon_vertex_color (src/materials/material_lib.gd:165)
+	// does a literal string replace of it with `vec3 base = albedo.rgb * COLOR.rgb;` to build the
+	// vertex-coloured variant that every SurfaceTool-built prop uses. Change its text and every
+	// bench, flower bed and building silently loses its vertex colours.
 	vec3 base = albedo.rgb;
+	// Which is why the sRGB fix-up is a SEPARATE line: it has to be correct for both spellings of
+	// the line above. `base` is either `albedo.rgb` or `albedo.rgb * COLOR.rgb`, so multiplying by
+	// the uniform's own linearisation ratio converts the uniform's contribution and ONLY that.
+	// Vertex COLOR is deliberately left alone — per the conversion rules in planet_common, vertex
+	// colours, INSTANCE_CUSTOM and literals are delivered identically to both renderers and Forward+
+	// already treats them as linear, so they need the pc_out on the WRITE and nothing on the read.
+	// The max() guard is for a channel the artist authored as 0: pc_in(0) is 0, so the ratio is 0
+	// and the channel stays 0 instead of dividing by zero.
+	base *= pc_in(albedo.rgb) / max(albedo.rgb, vec3(1e-5));
 	if (use_texture) {
+		// NOT wrapped: `albedo_texture` is hinted `source_color`, so Godot uploads it in an sRGB
+		// texture format and the decode happens in the sampler on BOTH renderers. This sample is
+		// already linear either way; a pc_in here would be a second decode.
 		base *= texture(albedo_texture, UV * uv_scale).rgb;
 	}
+	// ALBEDO is kept LINEAR through the whole of fragment() and encoded once at the very bottom, so
+	// the surface-detail multiplies below still happen in linear space.
 	ALBEDO = base;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
@@ -159,15 +229,21 @@ void fragment() {
 		NORMAL = normalize(NORMAL + sd.bump);
 		v_sheen = sd.aniso;
 	}
-	vec3 em = emission_color.rgb * emission_strength * mix(emission_day_scale, 1.0, astro_night);
+	vec3 em = pc_in(emission_color.rgb) * emission_strength * mix(emission_day_scale, 1.0, astro_night);
 	float peak = max(em.r, max(em.g, em.b));
-	EMISSION = (peak > emission_cap) ? em * (emission_cap / peak) : em;
+	EMISSION = pc_out((peak > emission_cap) ? em * (emission_cap / peak) : em);
+	// The one encode of the frame. Everything above ran in linear on both renderers; Compatibility
+	// applies its own srgb_to_linear() to this value after fragment() returns, and pc_out is the
+	// exact inverse of that, so the two renderers land on the same linear albedo. Identity on
+	// Forward+. light() below still sees the linear ALBEDO on both renderers (measured: light()
+	// sees the same ALBEDO the engine goes on to multiply DIFFUSE_LIGHT by, exactly once).
+	ALBEDO = pc_out(ALBEDO);
 }
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
-	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength);
+	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
 	vec3 diffuse = mix(shadow_col * floor_level, ALBEDO, lit);
 	// The toon ramp SATURATES: `mix(..., ALBEDO, lit)` returns exactly ALBEDO once lit == 1, which
@@ -193,7 +269,7 @@ void light() {
 
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;
-	SPECULAR_LIGHT += rim * rim_color.rgb * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += rim * pc_in(rim_color.rgb) * LIGHT_COLOR / PI;
 
 	// R2.9 sheen: broad and low-amplitude, so metal reads as metal without a blown highlight.
 	if (v_sheen > 0.001) {

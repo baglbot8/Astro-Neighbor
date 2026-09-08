@@ -28,6 +28,40 @@ const float SD_BANK_HZ = 10.1;
 // COOL BLUE-GREY CHROME (docs/STYLE_GUIDE "Chrome planet plates" #8fa3bf / #6f819c). Bolt's identity
 // is steel; the ONLY saturated accent is the warm orange seam light. Panel variety is a few percent
 // of value/hue, never a coloured tile — scattered red/green plates read as a bathroom floor.
+// WEB PARITY. Under the Compatibility (WebGL2) renderer the web export is forced onto,
+// `astro_compat` is 1.0; it is 0.0 on desktop, set once by the Platform autoload, so every wrap
+// below is the exact identity on Forward+ and the reference look cannot move. Converted with
+// pc_in() / pc_out() — see the long block at the top of planet_common.gdshaderinc for the
+// measurement and the rules. Compatibility does not sRGB-decode `source_color` uniforms on upload,
+// and it decodes whatever fragment() leaves in ALBEDO / EMISSION, so the uniforms need pc_in on the
+// way in and the two writes need pc_out on the way out; everything between runs in linear on both.
+//
+// TWO UNIFORMS ARE DECODED INTO A LOCAL AND REUSED — `seam_dark` and `seam_light` are each read in
+// two separate statements, and calling pc_in twice on the same uniform would decode the second one
+// a second time. One decode, two uses.
+//
+// NOT WRAPPED, deliberately: `v_color.g`, which is the plateau-bank SELECTOR at both the bank mix
+// and the `bank_m` detail gate, and `v_color.a`, which is baked ground occlusion. Neither is a
+// colour — rule (d) in planet_common.gdshaderinc names these two lines specifically. Nor AO /
+// ROUGHNESS / METALLIC / SPECULAR, nor the sd_* tints, nor any literal.
+//
+// MEASURED on showcase/planet_bolt.tscn over a 361,832-pixel deck mask (this shader forced to
+// EMISSION 0 and then EMISSION 1, captured on BOTH renderers, keep what moved in both, eroded
+// 3 px), with cast shadows, MSAA/FXAA, SSAO, glow and the mobile scatter thinning forced identical
+// on the two renderers, so the only thing left between the two frames is this shader:
+//     before   per-pixel MAE 8.85 codes, p95 24.0, region SAT 0.3140 -> 0.3279 (gap 0.0140)
+//              region luma p05/p50/p95  F+ 127.3 162.9 186.6   C 114.5 159.4 194.3  (GAP 8.00)
+//     after    per-pixel MAE 0.74 codes, p95  2.0, region SAT 0.3140 -> 0.3073 (gap 0.0067)
+//              region luma p05/p50/p95  F+ 127.3 162.9 186.6   C 128.4 163.7 187.3  (GAP 0.84)
+// Note the SHAPE of the `before` error, because it is the signature the whole investigation turned
+// on: the browser's deck was 12.8 codes too DARK at p05 and 7.7 codes too BRIGHT at p95, i.e. an
+// S-curve across the deck's tonal range, not an offset. A gain cannot fix that, and this is the
+// third time a constant was tried on this exact symptom (compat_gain, COMPAT_AMBIENT_SCALE,
+// compat_light_boost) and reverted. The transfer function is the fix.
+// Two independent capture pairs both gave MAE 0.741. Forward+ did not move: the same mask scored
+// between the pre- and post-conversion Forward+ frames is MAE 0.000, max 0 codes.
+global uniform float astro_compat;
+
 uniform vec4 plate_a : source_color = vec4(0.561, 0.639, 0.749, 1.0);
 uniform vec4 plate_b : source_color = vec4(0.435, 0.506, 0.612, 1.0);
 uniform vec4 plate_c : source_color = vec4(0.647, 0.714, 0.808, 1.0);
@@ -159,15 +193,15 @@ void fragment() {
 	float raised = step(0.72, ch2);
 	// Panel variety = a few percent of value, plus a barely-there warm/cool hue drift. Nothing here
 	// changes the hue family: every plate is still steel.
-	vec3 pcol = mix(plate_a.rgb, plate_b.rgb, step(0.5, ch) * 0.55 + ch * 0.28);
-	pcol = mix(pcol, plate_c.rgb, raised * 0.42);
+	vec3 pcol = mix(pc_in(plate_a.rgb), pc_in(plate_b.rgb), step(0.5, ch) * 0.55 + ch * 0.28);
+	pcol = mix(pcol, pc_in(plate_c.rgb), raised * 0.42);
 	float warm = pc_hash21(cell + vec2(11.7, 3.3)) - 0.5;
 	pcol *= vec3(1.0 + warm * 0.045, 1.0, 1.0 - warm * 0.045);
 	// Bay-level tone: whole sections read a little lighter or darker than their neighbours.
 	pcol *= 0.90 + 0.19 * sech;
 	// One rare desaturated slate maintenance hatch, and ONLY on a finely plated bay: on a 2x2 bay the
 	// same hatch turned a 1.7 m slab of deck dark teal and read as a hole in the floor.
-	pcol = mix(pcol, plate_panel.rgb, step(1.0 - panel_rarity, pc_hash21(cell + vec2(2.9, 17.1))) * step(3.5, div));
+	pcol = mix(pcol, pc_in(plate_panel.rgb), step(1.0 - panel_rarity, pc_hash21(cell + vec2(2.9, 17.1))) * step(3.5, div));
 	// Inner panel line: every plate carries a recessed rectangle a hand's width inside its edge, so
 	// the big 1.7 m plates in a coarse bay still have something at small scale instead of reading as
 	// a blank slab. This is the second scale of detail, under the plate and the bay.
@@ -180,7 +214,7 @@ void fragment() {
 	float grime = pc_fbm3(wp * 0.7) ;
 	pcol = pcol * (1.0 + brush);
 	// Broad grime pooling gives large-scale value variation (dark tones) in the SAME cool hue family.
-	pcol = mix(pcol, grime_color.rgb, smoothstep(0.46, 0.84, pc_fbm3(wp * 0.10 + vec3(6.1))) * 0.09);
+	pcol = mix(pcol, pc_in(grime_color.rgb), smoothstep(0.46, 0.84, pc_fbm3(wp * 0.10 + vec3(6.1))) * 0.09);
 	pcol *= 0.95 + 0.11 * mix(grime, 0.5, lod * 0.7);
 	// rivets at plate corners
 	vec2 rp = abs(local) - vec2(psize * 0.5 - gap * 0.5 - 0.15);
@@ -204,10 +238,13 @@ void fragment() {
 	pulse = 0.3 + 0.7 * pulse * pulse;
 	// R2.6: the pastel guard belongs to the DECK only. The warm orange seam light is the one small
 	// saturated accent Bolt is allowed, so it is mixed in after the guard and keeps its full chroma.
-	vec3 col = pc_pastel(mix(seam_dark.rgb, pcol, in_plate), pastel_max, pastel_dark);
-	col = mix(col, seam_dark.rgb * 0.94, bay_joint * fine);
-	col = mix(col, seam_light.rgb, seam * 0.85);
-	vec3 emission = seam_light.rgb * seam * pulse * seam_glow;
+	// Decoded ONCE each and reused below: both of these are read in two separate statements.
+	vec3 seam_dark_lin = pc_in(seam_dark.rgb);
+	vec3 seam_light_lin = pc_in(seam_light.rgb);
+	vec3 col = pc_pastel(mix(seam_dark_lin, pcol, in_plate), pastel_max, pastel_dark);
+	col = mix(col, seam_dark_lin * 0.94, bay_joint * fine);
+	col = mix(col, seam_light_lin, seam * 0.85);
+	vec3 emission = seam_light_lin * seam * pulse * seam_glow;
 
 	// bevel: tilt normal outward near the plate edge (stronger on raised plates)
 	float e = 0.01;
@@ -228,18 +265,18 @@ void fragment() {
 	// oil pools: dark wet look below the oil line, ring just above it
 	float oil_t = 1.0 - smoothstep(wl - 0.02, wl + 0.10, h);
 	float ring_t = (1.0 - smoothstep(wl + 0.10, wl + 0.30, h)) * (1.0 - oil_t);
-	col = mix(col, oil_color.rgb, oil_t * 0.80);
-	col = mix(col, oil_ring.rgb, ring_t * 0.8);
+	col = mix(col, pc_in(oil_color.rgb), oil_t * 0.80);
+	col = mix(col, pc_in(oil_ring.rgb), ring_t * 0.8);
 	emission *= (1.0 - oil_t);
 	wn = normalize(mix(wn, v_world_nrm, oil_t));
 	// Worn edge on plateau banks / crater walls (baked in COLOR.g).
-	col = mix(col, bank_color.rgb * (0.88 + 0.24 * mix(pc_noise3(wp * 2.2), 0.5, lod)), smoothstep(0.34, 0.72, v_color.g) * (1.0 - oil_t));
+	col = mix(col, pc_in(bank_color.rgb) * (0.88 + 0.24 * mix(pc_noise3(wp * 2.2), 0.5, lod)), smoothstep(0.34, 0.72, v_color.g) * (1.0 - oil_t));
 	// Limb shading driven by the GEOMETRIC radial direction, not the bevelled normal — see the note
 	// in grass_planet.gdshader. Driving it from `wn` also gave every plate its own limb step.
 	float facing = clamp(dot(dir, normalize(CAMERA_POSITION_WORLD - wp)), 0.0, 1.0);
 	float limb = 1.0 - smoothstep(0.10, 0.86, facing);
 	limb = clamp(limb + (pc_hash21(FRAGCOORD.xy) - 0.5) * 0.016, 0.0, 1.0);
-	col = mix(col, col * limb_tint.rgb, limb * limb_darken);
+	col = mix(col, col * pc_in(limb_tint.rgb), limb * limb_darken);
 	emission *= (1.0 - limb * 0.4);
 
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
@@ -275,7 +312,7 @@ void fragment() {
 	vec3 sgrad = pc_surface_grad(wp, dir, detail_h);
 	NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * detail_bump);
 
-	ALBEDO = col;
+	ALBEDO = pc_out(col);
 	AO = mix(1.0, v_color.a, ao_ambient);
 	AO_LIGHT_AFFECT = 0.0;
 	// Painted steel, not glass: a toon planet needs a matte plate with one crisp highlight.
@@ -285,18 +322,18 @@ void fragment() {
 	ROUGHNESS = clamp(mix(0.80, 0.18, oil_t) + (sd_mf.rough + sd_mc.rough + sd_bk.rough) * 0.5, 0.0, 1.0);
 	METALLIC = mix(0.06, 0.06, oil_t);
 	SPECULAR = mix(0.10, 0.45, oil_t);
-	EMISSION = emission;
+	EMISSION = pc_out(emission);
 }
 
 void light() {
 	float lit;
 	float ndl = dot(NORMAL, LIGHT);
-	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, shade_tint.rgb, shade_floor, LIGHT_IS_DIRECTIONAL, lit);
+	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, pc_in(shade_tint.rgb), shade_floor, LIGHT_IS_DIRECTIONAL, lit);
 	// R2.9: carry the grain's slope into the saturated part of the toon ramp. Clamped, so it adds no
 	// energy and cannot make a hotspot (R2.6 stands).
 	diffuse *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.82, 1.20);
 	DIFFUSE_LIGHT += pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
-	DIFFUSE_LIGHT += pc_shadow_fill(ndl, ATTENUATION, ramp_softness, shadow_fill_color.rgb, shadow_fill) * LIGHT_COLOR / PI;
+	DIFFUSE_LIGHT += pc_shadow_fill(ndl, ATTENUATION, ramp_softness, pc_in(shadow_fill_color.rgb), shadow_fill) * LIGHT_COLOR / PI;
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	float spec = smoothstep(0.4, 0.6, pow(ndh, 90.0)) * 0.10 * lit;

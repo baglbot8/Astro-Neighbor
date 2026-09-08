@@ -3,6 +3,23 @@
 // The painted highlight is a fake specular, not a light source, so it fades out with the
 // `astro_night` global (see docs/ARCHITECTURE.md 9.1) — otherwise it blooms into a white dot on
 // the helmet in every night frame.
+//
+// --- WEB PARITY: NOT CONVERTED THIS ROUND, ON PURPOSE ------------------------------------------
+// This shader would fit the pc_in()/pc_out() recipe on paper — `tint` goes straight to ALBEDO (which
+// is already at parity by itself, see the recipe's opening paragraph), while `rim_color` is
+// multiplied and added into EMISSION, which is the pattern that needs pc_in on the read and pc_out
+// on the write. It is left alone anyway, because a conversion this round has to come with a
+// measurement and this one cannot have one:
+//   * IT HAS NO INSTANCES. MaterialLib.visor() is its only entry point and nothing calls it — the
+//     astronaut's pane moved to the OPAQUE src/player/astro_visor.gdshader when R2.1 made the visor
+//     navy. Zero pixels in any scene means no mask, no region score and no gate.
+//   * IT IS ALPHA-BLENDED (blend_mix, ALPHA from `tint.a` plus fresnel). Measured on
+//     src/player/blob_shadow.gdshader — see the long note there — Compatibility combines a blend in
+//     sRGB-encoded space rather than linear, which is a gap of ~11 code values that the shader
+//     cannot reach and that a colour conversion does not address. Anything measured here would be
+//     measuring that instead.
+// So: if this shader is ever revived, convert it THEN and score it in the scene that revives it.
+// Converting it blind would put an unverified encode on a code path nobody can see.
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
 

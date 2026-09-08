@@ -23,16 +23,38 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
-// WEB PARITY (docs/OPEN_ISSUES.md 32). Under the Compatibility (WebGL2) renderer the canopy
-// comes out far too dark: measured V 0.293 against a Forward+ target of 0.513. The correction
-// is a straight LIFT of this shader's own light gain, NOT a corrective albedo divide — that
-// was tried twice and rendered the trees white and pink both times, because dividing by a dark
-// leaf albedo is a ~14x multiply that clips into the ACES shoulder where chroma collapses.
-// `astro_compat` is 1.0 only under Compatibility, so this is a no-op on desktop and mobile.
+// WEB PARITY. Under the Compatibility (WebGL2) renderer the web export is forced onto,
+// `astro_compat` is 1.0; it is 0.0 on desktop, so every wrap below is the exact identity on
+// Forward+ and the reference look cannot move. This shader is converted with pc_in() / pc_out() —
+// see the long block at the top of planet_common.gdshaderinc for the measurement and the rules.
+//
+// DELETED HERE: the `compat_light_boost` uniform (a 2.0 multiplier on light_gain that only ran
+// under Compatibility) and the `* mix(1.0, <it>, astro_compat)` it rode in on. It was a CONSTANT
+// FITTED TO A CROP — the note it replaced said so itself: 3.6 was fitted to the tree canopy and
+// then had to be pulled back to 2.0 because it rendered the grass tufts white on a real iPhone.
+// One number cannot serve two albedos, which is the tell that it was compensating for a
+// MULTIPLICATIVE error with an additive lever. The real cause is now known and fixed at the
+// mechanism: Compatibility does not sRGB-decode `source_color` uniforms on upload, and it decodes
+// whatever fragment() leaves in ALBEDO/EMISSION, so the leaf colour was arriving dark and a flat
+// gain was trying to drag the whole distribution back. Same class as compat_gain and
+// COMPAT_AMBIENT_SCALE, both of which were reverted. Do not re-add it, or any constant like it.
+//
+// MEASURED on showcase/planet_home.tscn over a 48,230-pixel foliage mask (trees, bushes, grass
+// tufts and flowers together), built by forcing this shader to EMISSION 0 and then EMISSION 1,
+// capturing on BOTH renderers and keeping the pixels that moved in both (eroded 3 px). Cast
+// shadows, MSAA/FXAA, SSAO, glow and the mobile scatter thinning were all forced identical on the
+// two renderers for the probe, so the only thing left between the two frames is this shader:
+//     before (boost in place)  per-pixel MAE 52.87 codes, p95 78.0, region SAT 0.4037 -> 0.5795
+//                              region luma p05/p50/p95  F+ 89.4 132.6 182.4  C 24.6 69.5 161.1
+//     after                    per-pixel MAE  1.75 codes, p95  3.0, region SAT 0.4037 -> 0.4027
+//                              region luma p05/p50/p95  F+ 89.4 132.6 182.4  C 90.2 133.1 182.7
+// A region median of 69.5 against 132.6 IS the user's "the plants are very black", and the 2.0
+// boost was nowhere near enough to close it while the saturation gap it left behind (0.1758) was
+// enormous — the browser's foliage was both far too dark AND far too saturated, which no single
+// gain can fix at once. After the conversion the saturation gap is 0.0009 and the luma gap is 0.57.
+// Two independent capture pairs both gave MAE 1.745. Forward+ did not move at all: the same mask
+// scored between the pre- and post-conversion Forward+ frames is MAE 0.000, max 0 codes.
 global uniform float astro_compat;
-// 3.6 was fitted to the tree CANOPY crop alone. Grass tufts run through the same shader with a
-// much lighter albedo, and at 3.6 they rendered almost white on a real iPhone. Fit to both.
-uniform float compat_light_boost : hint_range(1.0, 6.0) = 2.0;
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float sway_amount = 0.05;
@@ -170,7 +192,7 @@ void vertex() {
 
 void fragment() {
 	// pc_albedo_floor keeps every channel above PC_ALBEDO_FLOOR so pc_light_term's divide stays sane.
-	vec3 base = albedo.rgb * v_col;
+	vec3 base = pc_in(albedo.rgb) * v_col;
 	float rough = 0.97;
 	v_flat_nrm = NORMAL;
 	// --- R2.9 SURFACE TEXTURE ----------------------------------------------------------------------
@@ -201,13 +223,13 @@ void fragment() {
 		vec3 sgrad = pc_surface_grad(v_wpos, normalize(v_wnrm), tint.r - 1.0);
 		NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * surface_bump);
 	}
-	ALBEDO = pc_albedo_floor(pc_pastel(base, pastel_max, pastel_dark));
+	ALBEDO = pc_out(pc_albedo_floor(pc_pastel(base, pastel_max, pastel_dark)));
 	ROUGHNESS = rough;
 	METALLIC = 0.0;
 	SPECULAR = 0.02;
 	AO = ambient_damp;
 	AO_LIGHT_AFFECT = 0.0;
-	EMISSION = emission_color.rgb * emission_strength * v_col;
+	EMISSION = pc_out(pc_in(emission_color.rgb) * emission_strength * v_col);
 }
 
 void light() {
@@ -221,15 +243,15 @@ void light() {
 		// R2.9: the ramp above saturates, so the detail bump alone would be invisible on the sunlit
 		// crown. Clamped hard, so it can never blow the crown out or punch a dark hole in it.
 		shade *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * surface_light, 0.82, 1.14);
-		vec3 shaded = pc_pastel(ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength), shade_s_max, shade_desat);
+		vec3 shaded = pc_pastel(ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength), shade_s_max, shade_desat);
 		vec3 col = mix(shaded, ALBEDO, lit) * shade;
-		vec3 composed = pc_pastel(col * LIGHT_COLOR / PI, light_s_max, 0.0) * (light_gain * mix(1.0, compat_light_boost, astro_compat));
+		vec3 composed = pc_pastel(col * LIGHT_COLOR / PI, light_s_max, 0.0) * light_gain;
 		DIFFUSE_LIGHT += pc_light_term(composed, ALBEDO);
 		// R2.9: a hint of subsurface warmth where the sun passes through a leaf. Strongest looking
 		// INTO the sun through the shaded side of the canopy, which is when you really see it.
 		if (sss_strength > 0.001 && v_wood < 0.5) {
 			float thru = pow(clamp(dot(VIEW, -LIGHT), 0.0, 1.0), 2.0) * smoothstep(0.30, -0.35, ndl);
-			SPECULAR_LIGHT += ALBEDO * sss_color.rgb * (thru * sss_strength) * LIGHT_COLOR / PI;
+			SPECULAR_LIGHT += ALBEDO * pc_in(sss_color.rgb) * (thru * sss_strength) * LIGHT_COLOR / PI;
 		}
 	} else {
 		vec3 composed = pc_pastel(ALBEDO * lit * ATTENUATION * LIGHT_COLOR / PI, light_s_max, 0.0);

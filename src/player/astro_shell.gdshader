@@ -47,6 +47,61 @@ global uniform float astro_night;
 
 #include "res://src/shaders/surface_detail.gdshaderinc"
 
+// --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS, INLINED -----------------------------------------
+// THE CANONICAL COPY AND THE FULL WRITE-UP LIVE AT THE TOP OF src/shaders/planet_common.gdshaderinc.
+// Read that first: the measurement, the probe numbers (maxdiff 0), the conversion recipe and the
+// list of things that must NOT be wrapped. The block below is byte-identical to the one inlined in
+// src/shaders/toon_soft.gdshader; this shader is toon_soft's sibling (same uniform names, so the two
+// stay interchangeable) and it has no other reason to pull in the whole planet ground library, so it
+// gets its own copy. Keep the three copies identical if any of them is ever changed.
+//
+// One-paragraph version: Compatibility (WebGL2, which the web export is forced onto and which is
+// what the game is actually played on) does not sRGB-decode `source_color` uniforms on upload the
+// way Forward+ does, and it sRGB-ENCODES whatever fragment() writes to ALBEDO/EMISSION. So a colour
+// uniform arrives in DISPLAY space and every multiply done on it inside fragment() lands as t^2.2.
+// This shader does FIVE such multiplies on the suit colour before it reaches ALBEDO — `limb_darken`,
+// `floor_shade`, the surface-detail tint, the seam groove and the topstitch — which is exactly the
+// contrast expansion the astronaut has been showing on the phone.
+//
+// `astro_compat` is 1.0 only under Compatibility (Platform._apply_renderer_parity), so every wrap
+// below is the exact identity on desktop and the Forward+ reference look cannot move.
+//
+// MEASURED, in the real gameplay frame (res://src/world/world.tscn on home, camera orbited to the
+// front with CameraRig.orbit_front so the suit and the visor both face the lens), Forward+ against
+// Compatibility, scored ONLY on THIS shader's own pixels — a mask built by differencing a normal
+// capture against one in which this file alone was swapped for a flat magenta unshaded shader, then
+// eroded 1 px so no antialiased silhouette pixel (a blend of this shader and whatever is behind it)
+// is charged to it. Two independent capture configurations, different RNG seed and different
+// capture time, so the character stands in a different idle pose in each:
+//   config a (seed 7, t=4.0s, 10,398 px)    before  MAE 10.27  p95 29.7   region SAT gap 0.0216
+//                                           after   MAE  0.88  p95  3.3   region SAT gap 0.0086
+//   config b (seed 13, t=5.5s, 11,004 px)   before  MAE 10.14  p95 29.7   region SAT gap 0.0222
+//                                           after   MAE  0.86  p95  3.0   region SAT gap 0.0083
+// The two configurations agree to 0.02 codes, so the numbers are the shader's and not a capture's.
+// FORWARD+ DID NOT MOVE: the F+ frame before this change and the F+ frame after it are byte-
+// identical over the mask (MAE 0.00, max 0.0), which is what `astro_compat == 0.0` guarantees.
+//
+// THOSE ARE SHADER NUMBERS AND THE FRAME THEY WERE TAKEN IN IS NOT THE SHIPPED FRAME. Per rule (i)
+// in planet_common, the browser build deliberately renders a cheaper picture, and on a CHARACTER one
+// of those decisions swamps everything else: `_no_cast_shadows` (environment.gd:683) turns the sun's
+// shadow pass off under Compatibility, and an astronaut self-shadows heavily — the torso across the
+// thighs, the helmet across the collar. Scoring F+ WITH those self-shadows against Compatibility
+// WITHOUT them measures that decision, not this file: it reads MAE 17.6 before and 22.3 after, i.e.
+// it moves the wrong way and says nothing about the conversion. The gate above therefore runs with
+// the cast-shadow pass off on BOTH renderers (and SSAO, glow, MSAA/FXAA and prop scatter equalised
+// the same way), which is the only configuration in which the two frames contain the same light.
+// That equalisation lives in the measuring rig, never in the tree.
+global uniform float astro_compat;
+
+vec3 pc_s2l(vec3 q) { return mix(q / 12.92, pow((q + vec3(0.055)) / 1.055, vec3(2.4)), step(vec3(0.04045), q)); }
+vec3 pc_l2s(vec3 q) { q = max(q, vec3(0.0)); return mix(q * 12.92, 1.055 * pow(q, vec3(1.0 / 2.4)) - vec3(0.055), step(vec3(0.0031308), q)); }
+vec3 pc_in_f(vec3 q, float compat) { return (compat > 0.5) ? pc_s2l(q) : q; }
+vec3 pc_out_f(vec3 q, float compat) { return (compat > 0.5) ? pc_l2s(q) : q; }
+// Macros, not functions, so `astro_compat` is resolved at the CALL site — a function in a shared
+// include cannot see a uniform the including shader declares further down. See planet_common.
+#define pc_in(q) pc_in_f((q), astro_compat)
+#define pc_out(q) pc_out_f((q), astro_compat)
+
 // Shared R2.9 vocabulary, same names and same numbering as toon_soft.gdshader.
 // `surface_kind`: 0 none, 1 cloth, 2 metal, 3 wood (unused here), 4 rock, 5 foliage (unused here).
 uniform int surface_kind : hint_range(0, 5) = 0;
@@ -121,7 +176,9 @@ uniform float limb_power : hint_range(0.5, 8.0) = 2.4;
 uniform float floor_shade : hint_range(0.0, 1.0) = 0.18;
 
 void fragment() {
-	vec3 base = albedo.rgb;
+	// pc_in ONCE, at the uniform's first use, before any of the maths below. Everything from here to
+	// the pc_out at the bottom of fragment() therefore runs in LINEAR space on both renderers.
+	vec3 base = pc_in(albedo.rgb);
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), limb_power);
 	base *= mix(1.0, 1.0 - limb_darken, fres);
 	// NORMAL is view space in fragment(); rotate it back to world to find which way is up.
@@ -183,15 +240,21 @@ void fragment() {
 			- v_axis_tan * gore_g * clamp(gore_s * 5.0, -1.0, 1.0) * 0.09 * slod);
 	}
 
-	vec3 em = emission_color.rgb * emission_strength * mix(emission_day_scale, 1.0, astro_night);
+	vec3 em = pc_in(emission_color.rgb) * emission_strength * mix(emission_day_scale, 1.0, astro_night);
 	float peak = max(em.r, max(em.g, em.b));
-	EMISSION = (peak > emission_cap) ? em * (emission_cap / peak) : em;
+	EMISSION = pc_out((peak > emission_cap) ? em * (emission_cap / peak) : em);
+	// The one encode of the frame, AFTER the surface detail and the seams, so every multiply above
+	// happened in linear on both renderers. Compatibility applies its own srgb_to_linear() to this
+	// value once fragment() returns and pc_out is the exact inverse of that; identity on Forward+.
+	// light() below still sees the linear ALBEDO on both renderers (measured: light() sees the same
+	// ALBEDO the engine goes on to multiply DIFFUSE_LIGHT by, exactly once).
+	ALBEDO = pc_out(ALBEDO);
 }
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
-	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength);
+	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
 	DIFFUSE_LIGHT += mix(shadow_col * floor_level, ALBEDO, lit) * LIGHT_COLOR / PI;
 
@@ -200,7 +263,7 @@ void light() {
 	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
 
 	float rim = smoothstep(0.6, 0.9, 1.0 - max(dot(NORMAL, VIEW), 0.0)) * rim_strength * lit;
-	SPECULAR_LIGHT += rim * rim_color.rgb * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += rim * pc_in(rim_color.rgb) * LIGHT_COLOR / PI;
 
 	// R2.9 sheen, from the shared library so the astronaut's metal matches the rocket's and the
 	// neighbours'. Cloth catches light only at grazing angles (sd_cloth_sheen); metal gets the
