@@ -790,3 +790,170 @@ duplicate Zorp). `tools/check.sh` passes.
 4. **`tools/capture.sh` is not deterministic** — two captures of the same scene with identical code
    differ by ~55,000 pixels at 1280x720, because neither the idle animation phase nor the framing is
    pinned. Every render-based review in this project is quietly weaker than it looks.
+
+
+## 38. [2026-09-08] Renderer parity: two engine bugs, and the three wrong answers on the way
+
+The user tested on an iPhone five times and reported the same thing every time: "all dark colors are
+much darker and light colors are much lighter", "all the plants very black", "certain grass ... comes
+out very white". Three previous rounds "fixed" it and none of them reached the phone. This entry is
+the whole account, because the wrong turns cost more than the fix.
+
+### Nothing reached the phone for two days, and the cause was a service worker
+Builds published before 2026-09-06 21:00 shipped Godot's PWA service worker. Its fetch handler is
+cache-first with NO revalidation over `CACHEABLE_FILES`, which is `["index.wasm","index.pck"]` - the
+entire game. A device that loaded the site in that window cached the whole build and served it from
+disk forever. Turning the PWA option off only stopped NEW visitors registering it, and deleting the
+worker file makes it worse: a 404 fails the update check, so the old registration survives. See
+item 37's fix - `tools/publish_web.sh` now publishes a self-destructing worker, permanently.
+**Every "still broken" report before that fix landed was a frozen 2026-09-06 build, not a live bug.**
+
+### BUG A - the write transfer
+Compatibility applies `srgb_to_linear()` to whatever `fragment()` writes to ALBEDO and EMISSION.
+Forward+ instead converts `source_color` uniforms at CPU upload. The two break even ONLY when a
+source_color uniform goes straight to ALBEDO with no maths in between. Every shader here does maths,
+so under Compatibility it composes in DISPLAY space and every multiplicative term becomes t^2.2.
+Measured 2.09x contrast expansion, pivoting on the untinted colour - the user's S-curve exactly.
+
+Probe, unshaded quads, LINEAR tonemap, v = 0.0667..1.0:
+    ALBEDO = literal        F+ [73,102,124,141,156,170,188,213,231,255]
+                            C  [12, 32, 50, 68, 85,102,128,170,204,255]
+    ALBEDO = pc_out(lit)    both [73,102,124,141,156,170,188,213,231,255]   MAXDIFF 0
+Fix: `pc_in()` / `pc_out()` in `src/shaders/planet_common.gdshaderinc`, recipe at lines 84-104.
+`pc_s2l`/`pc_l2s` are the exact IEC 61966-2-1 curves, not `pow(2.2)` - the piecewise toe matters
+precisely where the user's complaint lives. They are MACROS, not functions: `global uniform float
+astro_compat;` declared inside the include collides with shaders that declare their own, and Godot's
+shader parser is single-pass so an include function cannot see a later uniform.
+
+### BUG B - the shadow pass, which is what made every measurement lie
+Under Compatibility a directional light with `shadow_enabled = true` is drawn in a SEPARATE ADDITIVE
+PASS, and that pass is combined with the base pass in sRGB-ENCODED space:
+
+    C_linear = s2l( l2s(ambient) + l2s(direct) )        instead of        ambient + direct
+
+    run                  Forward+       Compatibility
+    ambient only        60, 68, 77      60, 68, 77       ratio 1.000
+    direct only         83, 78, 69      82, 79, 70             1.026
+    BOTH               101,102,101     142,146,146             2.163
+Predicted-then-measured within 1 code at three ambient energies, nothing fitted. The single toggle is
+`DirectionalLight3D.shadow_enabled`; with shadows off both renderers agree exactly.
+
+This is why every isolated harness matched (`l2s(0) = 0`, so one term round-trips perfectly) and why
+the two shaders showed different signatures: when direct dominates the residual is a FLAT offset
+(hub, +22..+30); when an albedo ramp scales both together it is a CURVE peaking near v=0.2 (home).
+Fix: `_no_cast_shadows` in `src/world/environment.gd`, gating the sun's and moon's `shadow_enabled`
+under Compatibility, applied AT THE PER-FRAME WRITE.
+
+### THREE WRONG ANSWERS, all confident, all measured false
+1. **"The double-albedo divergence" (this file's own items 19 and 32).** MEASURED FALSE. Both
+   renderers multiply DIFFUSE_LIGHT by ALBEDO exactly once, and `light()` sees the same ALBEDO the
+   engine multiplies by. Specular is never multiplied by albedo in either. Items 19/32 are wrong and
+   should be read as retracted.
+2. **"Compatibility's ambient is 7-8x too strong; fix with `srgb_to_linear()/PI` on the CPU."**
+   MEASURED FALSE. Ambient IN ISOLATION is byte-identical on both renderers. That hunt obtained
+   "ambient" by differencing two runs, which the encoded blend inflates by exactly the factor it
+   attributed to PI. Implemented verbatim it makes ambient-only 16x too dark.
+3. **`pc_light_term` divide-vs-no-divide explains the two signatures.** Killed three times, finally
+   with an explanation (see BUG B).
+
+### THE IRON RULE THAT MADE THE DIFFERENCE
+**If it needs a gain, a scale or a tuned constant to pass, it is wrong.** `compat_gain`,
+`compat_light_boost` and `COMPAT_AMBIENT_SCALE` are all retired. Do not revive them - a measured
+COMPAT_AMBIENT_SCALE of 0.15 takes planet GAP 46 -> 2.8 while pushing SAT GAP 0.0097 -> 0.1135, i.e.
+it trades a luma error for a saturation error and calls it progress. Both real fixes above are
+transfer inversions with no free parameter, which is why they held where three fitted fixes did not.
+
+### METHODOLOGY THAT ACTUALLY WORKED, and one that did not
+* **Bisect FORWARD from a harness that matches, not backward from the scene that fails.** Two rounds
+  of backward elimination cleared the quality profile, fog, ambient and the whole post chain and
+  still missed it, because the gate was a COMBINATION (shadow + ambient + sun) that no single removal
+  isolates. Adding elements one at a time to a maxdiff-0 harness found it.
+* **SCORE PER REGION, NEVER WHOLE-FRAME.** On home the ground was +0.24 saturation and the sky -0.19;
+  the celebrated whole-frame SAT GAP of 0.0097 was those two errors cancelling. A whole-frame score
+  would have called the successful round a regression.
+* Gate per converted shader: region-masked MAE <= 2 codes, p95 <= 4, region SAT gap <= 0.01, and two
+  independent captures agreeing to within 1 code.
+
+### TOOLING TRAPS THAT COST EIGHT AGENTS A ROUND EACH - fix or route around
+1. **`tools/snap.sh` cannot pass engine flags.** It appends extra args AFTER the `--` separator, so
+   `--rendering-method gl_compatibility` becomes a GAME arg and is silently ignored; you get a
+   Forward+ render and believe it is Compatibility. Call godot directly when the renderer matters,
+   and check the `[Platform] renderer:` line in every run.
+2. **zsh does not word-split an unquoted variable.** Flags held in `$flags` are passed as ONE
+   argument and ignored. Write engine flags literally. (Same defect already noted in
+   `publish_web.sh`'s parent-args comment.)
+3. **`src/ui/title/title_screen.gd:56` auto-starts the game whenever `Director.is_active()`**, so any
+   director timeline aimed at the title scene captures the IN-GAME world instead. This is why four
+   separate fixes for "the start screen is black" changed nothing - they were all measuring
+   `sky.gdshader` while the bug was in `title_sky.gdshader`. Use `showcase/ui_title.tscn`. An agent
+   caught it by setting `zenith_color` to bright red and seeing ZERO pixels change.
+4. **`environment.gd::_apply()` rewrites ambient, adjustments and the grade LUT EVERY FRAME** from
+   the palette, so a one-shot Environment edit in a frozen clone is undone before the capture lands.
+   Three rounds of false negatives came from this. Patch at the per-frame write.
+5. **`--freeze` only zeroes the turntable** (`lineup_showcase.gd:80`); poses, hovers and sways keep
+   running, so two captures of the same command still differ. Read images, do not diff them.
+
+
+## 39. [2026-09-08] "I can't move after landing" was a CAMERA bug, not an input bug
+
+Reported three playtests running: "when I landed on the first planet, I couldnt move anymore, the
+move joystick just moved the camera" / "coming out of a spaceship on new planet still doesnt let me
+move" / "I can move again by hitting pause and resume."
+
+The user's first description was literally accurate and we spent two rounds treating it as figurative.
+
+### The cause
+`RocketPad._journey_arrival` plays `p.play_emote("happy")` 0.35 s after the thaw. `Player.play_emote`
+calls `CameraRig.orbit_front()`, which by design tweens the camera round to a three-quarter FRONT
+view - 180 - ORBIT_YAW_DEG(26) = **154 degrees** off the astronaut's facing - so the player can see
+the pose. Movement is resolved against the camera heading. So for roughly two seconds after every
+landing, "forward" pointed 150 degrees away from where the astronaut faced, and pushing forward
+walked them backwards into the rocket.
+
+`pause -> resume` "fixed" it because it burns time, not because it reset anything.
+
+Measured, 1.0 s forward push, displacement along the astronaut's facing:
+    delay after control returns   +0.00   +0.75    +1.50    +2.50
+    before                        +3.67   +1.78    -0.99    +3.35     <- backwards at 1.5 s
+    after                         +3.64   +3.69    +3.66    +3.66
+20/20 positive across four planets, head_err 0.0 deg at every mark. One to two seconds is exactly a
+human's thumb-planting delay, which is why every playtest hit it and no scripted test did.
+
+### The same defect fires outside a landing
+Any player-triggered emote does it: 9 of 12 pushes negative across three planets, peak heading error
+154.0 deg. Fixed generally rather than with a second special case.
+
+### THE TRAP THAT MADE A RIG-ONLY FIX A FALSE CLAIM
+`CameraRig.get_planar_forward()` is NOT what movement resolved against.
+`Player._camera_planar_forward()` read the live viewport camera's own basis
+(`-cam.global_transform.basis.z`). **Changing the rig alone measured as a complete no-op** - the
+probe printed head_err 0.0 deg while the astronaut still walked backwards. The real coupling was in
+`player.gd`. Anyone touching movement direction must check BOTH.
+
+Fix: `get_planar_forward()` returns `_fwd_saved` (the heading the player left the camera on) whenever
+a cinematic - emote orbit or dialogue focus - is driving `_fwd`; `Player._camera_planar_forward()`
+asks the rig instead of reading the camera. Gated on the rig owning the active camera, so
+`jetpack_showcase --chase/--side` keeps its documented camera-relative behaviour. The emote camera is
+untouched and still swings its full 154 deg - only the CONTROL basis was separated from it.
+`LANDING_ORBIT_GRACE` (3.5 s) survives as a backstop, now normally exited by the player's first real
+input (gameplay live AND `Input.get_vector` past 0.2 deflection, so a resting thumb does not count).
+
+### Also fixed here
+`camera_rig.gd`'s dialogue-focus branch slerped about an un-normalised axis: 5,579
+"must be normalized" errors in a 125 s run with the intro dialogue held open. Now 0. Invisible in
+normal play, which is why it survived so long.
+
+### STILL OPEN, and only the user can close it
+The second half of this bug is a TOUCH bug and no agent can test it. `TouchControls._input()` returns
+early while the controls are hidden, and `_release_everything()` clears `_pointers` when the landing
+cutscene hides them, so a finger already resting on the glass has no entry for the rest of its life -
+`_pointer_move` and `_pointer_up` both return on `if not _pointers.has(id)`. `_adopt_late_pointer`
+now adopts such a drag as a late touch-down (guarded `if id < 0` so a desktop mouse hover cannot
+steer, and limited to the stick/camera roles so a resting thumb cannot fire Jump).
+
+Every "finger" in every measurement is `debug_touch`/`debug_drag` calling `_pointer_down`/
+`_pointer_move` directly - **nothing has ever exercised `_input()`**. The premise, that iOS WebKit
+keeps delivering `touchmove` for a finger whose `touchstart` was swallowed, is read off two lines of
+Godot source and has never been observed. USER TEST: land while holding your thumb on the stick and,
+without lifting, drag. Walking = fixed. Nothing until you lift and re-plant = the adoption is not
+reaching the real event path, and it needs a different mechanism.

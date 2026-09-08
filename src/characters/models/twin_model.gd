@@ -16,19 +16,41 @@ extends ChibiModel
 ##            tall, narrow, high-waisted          wide, low, square, planted
 ##   head     0.616 w x 0.536 h, n 2.8            0.712 w x 0.408 h, n 3.0
 ##            aspect 1.15, soft, no crown seam    aspect 1.75, hard, crown seam kept
-##   eyes     round pupil in a pale sclera        raked solid almond, no sclera, no iris
+##   eyes     round pupil in a pale sclera,       raked solid almond, no sclera, no iris
+##            hooded by a sleepy half-lid
 ##   crown    ONE curved matte knob feeler        TWO flat matte paddle blades, raked back
+##                                                PLUS two giant swept horns at the temples
 ##   mouth    small round toothless slot          straight lipless bar
 ##   skin     sd_foliage (soft down)              NOTHING AT ALL
-##   outline  broken by fur at jaw + shoulders    the hardest edge in the cast
+##   outline  broken by fur at jaw + shoulders    hard edges, now with a horned silhouette
 ##   garment  long gathered apron, dusty rose     short square waist apron + belly plate
-##   manner   blinks 2.2x as often, 8 % quicker   blinks 0.6x as often, 8 % slower
+##   manner   heavy lids over a FAST blink        wide-open eyes over a SLOW blink
+##            (drowsy but fighting it)            blinks 0.6x as often, 8 % slower
 ##
-## Neither twin gets lashes, brows, horns, tusks or a shoulder yoke: they are CHILDREN, and the
-## standing ruling is that the cast's total of that hard vocabulary must go DOWN, not be re-sorted.
-## Their difference is carried by proportion, head shape, eye shape, palette temperature and manner,
-## which is how Animal Crossing does it and which costs no dialogue edits — `npc_data.gd:228`
-## ("That's my brother Pop. He has two antennae.") stays true word for word.
+## R5 (USER REQUEST). Two accessories were asked for by name — "make Pip's eyes half lidded like
+## it's sleepy" and "Pop can get giant horns on each side of its head" — and both touch the standing
+## hard-vocabulary cap, so the old paragraph here is amended rather than deleted. What it used to say
+## was: "Neither twin gets lashes, brows, horns, tusks or a shoulder yoke: they are CHILDREN, and the
+## standing ruling is that the cast's total of that hard vocabulary must go DOWN, not be re-sorted."
+## That first clause is now FALSE and the ruling it cites is knowingly overridden:
+##   * POP wears HORNS. 1 of his allowed 2 from {brow ridge, heavy lid, horns, tusks, fangs,
+##     shoulder yoke} — he had zero before (no brow bar, no lid, no teeth of any kind, and his
+##     plastron is a belly plate, not a shoulder yoke), so he is legal with one slot spare.
+##   * PIP wears a LID. Counted here as 1 of her 2, conservatively: it is a soft skin-tone hood and
+##     not Grig's bone ridge, but "heavy lid" is in the capped set by name and the honest place to
+##     record a judgement call is next to the thing it excuses. She also had zero before.
+## Cast-wide that is 4 -> 6 uses of the hard vocabulary, i.e. UP, which is the opposite of what
+## CAST_VARIETY ruling 2 asks for. The user asked for both explicitly, so they ship — but the two
+## ledgers that track it are now stale and belong to files this pass does not own:
+## docs/CAST_VARIETY.md:64 ("Fen: none · Vela: none · Zorp: none") and docs/OPEN_ISSUES.md:611
+## ("Fen and Vela carry none; every reworked model passes `brows: false`") both need a row saying
+## Pop: horns (1 of 2) and Pip: sleepy lid (1 of 2). Whoever owns those files must add it.
+##
+## Everything ELSE separating the twins is still proportion, head shape, eye shape, palette
+## temperature and manner, which is how Animal Crossing does it and which costs no dialogue edits —
+## `npc_data.gd:228` ("That's my brother Pop. He has two antennae.") stays true word for word, and
+## the horns are seated at the TEMPLES, far outboard of the paddles, precisely so that line and the
+## five others about the antennae keep describing something the player can still see.
 ##
 ## DIALOGUE-LOCKED, DO NOT TOUCH: the antenna COUNT. Six shipped player-facing lines depend on it
 ## (npc_data.gd 228, 229, 241, 288, 297, 304 — "One antenna. Best antenna. Fact." / "Two antennae,
@@ -59,6 +81,75 @@ const PIP_TRIM := Color("#c49a9c")   ## dusty rose apron trim  S 0.21 V 0.77
 const PIP_FUR := Color("#c3d3a2")    ## S 0.24 V 0.83
 const PIP_KNOB := Color("#c98f74")   ## warm coral feeler tip — matte, NOT an emissive bulb
 const PIP_TONGUE := Color("#cf8490") ## S 0.36 V 0.81; the parent's #e8788f is S 0.48, over the gate
+## PIP'S SLEEPY LID GETS NO COLOUR CONSTANT, AND THAT IS THE DECISION, NOT AN OMISSION.
+## It is built in `skin` — her own body green, at her own `PIP_SURF_HEAD` downy nap — because the
+## whole risk in this part is that it reads as a BROW. A dark bar above an eye is a brow; brows are
+## the capped hard vocabulary; and this character has none precisely to stay off the angry register.
+## The lid only needs a VALUE STEP against the forehead to read as a separate form, and it gets that
+## from its own terminator: `shade` is lifted from `_matte`'s 0.30 to 0.36 in `_build_sleepy_lids`,
+## which darkens the shaded top of the dome without darkening its albedo. The lower edge needs no
+## help at all — it cuts across a V 0.95 sclera. If a render ever shows it melting into the
+## forehead, the sanctioned next step is `skin.darkened(0.07)` and NOT one step further.
+##
+## PIP'S LID GEOMETRY — five numbers, solved against the eye `_build_eye` actually makes, not
+## guessed. Her eye spec is w = h = 0.0345, d = 0.020, `face_scale` 1.08, `sclera_mul` 1.40, so in
+## the EYE NODE's local frame (local -Z is the head's outward normal, +Y is up):
+##     sclera  semi (0.05216, 0.05216, 0.02400) at z -0.01100, front face z -0.03500
+##     pupil   semi (0.03726, 0.03726, 0.02000) at z -0.03160, front face z -0.05160
+##   the VISIBLE eye is the sclera: 104.3 mm tall on a 616 mm head.
+##
+## AN OPAQUE CONVEX SOLID STOPS OCCLUDING AT ITS OWN SILHOUETTE RIM, where its surface has only
+## reached its CENTRE depth. So a lid works only if its centre is already in front of the eye at the
+## height you want its edge — which is why LID_SEMI.z is 0.0330 rather than a thin plate laid on the
+## eye. Solved for the actual crossover of lid-surface against pupil-surface (and, out past the
+## pupil, against sclera-surface), column by column across the eye, the visible lid edge lands at:
+##     x -0.045 -> y +0.0072   (43.1 % of the eye covered)  INNER corner on the model's +x eye
+##     x -0.015 -> y +0.0116   (38.9 %)
+##     x  0.000 -> y +0.0120   (38.5 %)
+##     x +0.015 -> y +0.0104   (40.0 %)
+##     x +0.030 -> y +0.0066   (43.7 %)
+##     x +0.045 -> y +0.0030   (47.1 %)                     OUTER corner on the model's +x eye
+## i.e. 38-47 %, centred on the 35-45 % the brief asks for and only running past it in the last
+## 3 mm of the outer corner, where it is the roll doing its job — see LID_ROLL_DEG. LID_SEMI.x
+## 0.0660 overhangs the 0.05216 sclera by 14 mm so no white can peek round the sides, and the back
+## pole lands at z +0.0100, well inside the head, so the lid grows out of the brow rather than
+## floating in front of it.
+##
+## WHY IT IS WIDE AND SHALLOW (132 x 76 mm) AND NOT THE 124 x 96 THE FIRST BUILD USED. This was
+## settled by rendering all three, not by argument. At 96 mm tall the lid's own silhouette stayed in
+## front of the forehead all the way up to y +0.0928 — 40 mm ABOVE the top of the eyeball — and what
+## it rendered as was two pale domes perched over the eyes: bulging brow-balls, or a pair of little
+## hats, not skin. The eyeball itself only stands 8 mm proud of the shell at its top, so a form that
+## is going to read as a LID has to vanish into the forehead at about the height the eye does.
+## A 60 mm version (top at y +0.0588) fixed the dome but overshot: the lid's upper surface went
+## nearly horizontal and read as a flat awning with a hard lit edge. 76 mm tops out at y +0.0708 —
+## 19 mm above the eyeball — and is the one that reads as a heavy fold with a lid crease above it.
+## The trade behind all three: a lid whose pole sits high above the crossing meets the eye at a
+## steep angle and gives a crisp lid line, so every millimetre flatter softens that line.
+const LID_POS := Vector3(0.0, 0.0330, -0.0230)
+const LID_SEMI := Vector3(0.0660, 0.0380, 0.0330)
+## SLEEPY AND ANGRY ARE ONE ROTATION APART AND THIS IS IT. An angry lid slants DOWN toward the NOSE;
+## a sleepy one sits flat or drops very slightly toward the OUTSIDE. `_orient_on_head` ends in
+## `Basis.looking_at(outward, Vector3.UP)`, and this file already records at `_cut_almond_eyes` that
+## for BOTH eyes that basis's local +X points toward the MODEL's own +X — so "outboard" is
+## `signf(_eyes[i].position.x)`, not "left eye / right eye". Reasoning from left-and-right here
+## produces one correct eye and one wrong one, which renders as a wink. A negative roll about +Z
+## drops local +X, so `LID_ROLL_DEG * signf(position.x)` drops the OUTER end on both sides.
+## Measured differential across the eye at -4 deg on the wide lid: the outer corner's edge sits
+## 4.2 mm LOWER than the inner corner's, so the lid line runs level across the inside of the eye and
+## falls away only outboard. That stays deliberately modest — the brief's own words are "flat or
+## slants VERY SLIGHTLY down toward the outside" — and this file's history is two separate scowls
+## shipped by overdoing exactly this axis (Pop's almond point built at the inner corner, and his
+## rake at 20 deg before it had to come back to 12).
+const LID_ROLL_DEG := -4.0
+## WHERE THE LID GOES WHEN SHE OPENS HER EYES — up and BACK, into the head, not merely up.
+## At rest the lid's front pole is at z -0.0560 and stands well clear of the face. Retracted, its
+## centre goes to eye-local (0, +0.0590, +0.0350) and, sampled over the whole dome against the real
+## head superellipsoid, its closest approach to the shell is still 4.9 mm BEHIND it — so the entire
+## fold is inside the forehead and nothing at all is drawn over the expression. In the render:
+## `--state=happy` shows the full arcs and `--state=surprised` the full balls, with no lid anywhere.
+## Retracting up-only, or back by less, leaves a skin-coloured bump on her brow in every happy frame.
+const LID_RETRACT := Vector3(0.0, 0.0260, 0.0580)
 ## POP'S APRON INVERTS THE PAIR'S: tan body with a darker tan edging, against Pip's cream body
 ## with a dusty-rose trim.
 ## Same shop uniform, opposite way round. The practical reason is that his apron is CUT SHORT to
@@ -71,6 +162,19 @@ const POP_TRIM := Color("#a8905e")  ## a DARKER tan, so trim reads as edging and
 const POP_BLADE := Color("#6f8f92")  ## teal-slate paddles  S 0.24 V 0.57 — nothing else wears this
 const POP_PLATE := Color("#7e968b")  ## belly plate  S 0.16 V 0.59 against a V 0.79 body
 const POP_PLATE_RIM := Color("#56675f")
+## POP'S HORNS ARE COOL BONE, AND THAT IS A RULING RATHER THAN A PREFERENCE. Fifty lines up, this
+## file states that Pip is the WARM half of the pair and Pop the COOL half and that the two "must
+## never converge". Two 400 mm warm-ivory horns are the largest single block of colour he owns after
+## his own body, and warm bone would drag him straight across that line. So the bone is greened off:
+##   #b7bca9  S 0.10 V 0.74   pale bone with a green cast   — the shaft bands
+##   #818873  S 0.15 V 0.53   the keratin ring              — the alternating bands
+## Both inside the R2.6 gate (S <= 0.46, V <= 0.85), and at S 0.10-0.15 they are by a wide margin
+## the most DESATURATED thing on him, which is what bone should be against a S 0.45 body and what
+## keeps them readable as a silhouette against the night sky. The 0.74/0.53 VALUE step is what makes
+## the banding read as rings rather than as noise; two colours across four bands puts the dark one
+## on the tip, so each horn ends in a dark point — the same read Mayor Orbit's brass tips use.
+const POP_HORN := Color("#b7bca9")
+const POP_HORN_BAND := Color("#818873")
 
 ## PIP'S SKIN — `sd_foliage`, and the choice of FUNCTION is the point, not the settings.
 ## The ruling is that `sd_skin` may appear on at most TWO characters at genuinely opposite settings
@@ -118,6 +222,17 @@ const POP_SURF := {}
 ## Idle-bounce phase offset in seconds so the twins never bob in sync.
 @export var bounce_phase: float = 0.0
 var _antennae: Array[Node3D] = []
+## PIP'S TWO SLEEPY LIDS, in `_eyes` order, plus each one's authored resting position.
+##
+## THESE ARE DELIBERATELY NOT IN ANY OF THE BASE CLASS'S ARRAYS. `_apply_face` walks `_eye_ovals`,
+## `_eye_happy`, `_eye_round`, `_eye_flat`, `_eye_size` and `_brows` every single frame and rewrites
+## scale, visibility and position on all of them; a lid registered in any of those would be squashed
+## by the blink and stretched by EYE_WIDE. Owning them here is what lets `_animate_extras` retract
+## them for the expressions AFTER `_apply_face` has run — see `tick()`'s call order.
+## `_lid_home` exists because the retract is an OFFSET applied every frame: reading the current
+## position and adding to it would integrate the offset and launch the lid off the head in ~1 s.
+var _lids: Array[Node3D] = []
+var _lid_home: Array[Vector3] = []
 var _is_pip := true
 var _t: float = 0.0
 
@@ -215,6 +330,11 @@ func _resolve_variant() -> void:
 
 func _build_geometry() -> void:
 	_antennae.clear()
+	# `rebuild()` can run more than once on a live model (a caller flipping `variant`), and the old
+	# nodes are freed with the tree it replaces — so these have to be dropped here, next to
+	# `_antennae`, or `_animate_extras` walks two freed lids on the first tick after a rebuild.
+	_lids.clear()
+	_lid_home.clear()
 	if _is_pip:
 		_build_pip()
 	else:
@@ -253,13 +373,21 @@ func _build_pip() -> void:
 	#
 	# NO BROWS AND NO LASHES. Brows are the hard vocabulary and lashes are the single most
 	# stereotyped cue available; both twins are children and get neither.
+	#
+	# NO GLINT EITHER, and that is a consequence of the lid rather than a taste call. `_add_glint`
+	# hangs a proud lens dot at oval-local (0.36, 0.40, -0.52) scaled (0.19, 0.15, 0.72), which in
+	# host space puts its FRONT face at z -0.0564 — 4.4 mm in front of the lid surface at that
+	# (x, y). Left on, it would render as a bone-white speck sitting ON her closed eyelid. It is
+	# dead geometry in the other two states as well: `happy` and `surprised` hide the oval the glint
+	# is parented to. Dropping it also happens to be right: a sleepy eye has no catchlight.
 	var eyes: Array = []
 	for sx: float in [-1.0, 1.0]:
 		eyes.append({"yaw": 19.0 * sx, "pitch": -5.0, "brow": false, "fit_expr": true,
-			"sclera": SCLERA, "sclera_mul": 1.40})
+			"glint": false, "sclera": SCLERA, "sclera_mul": 1.40})
 	_add_face(EYE, MOUTH, PIP_TRIM, {"eyes": eyes, "nose": false, "blush": false, "brows": false,
 		"mouth_inner": Color("#7a3941")})
 	_build_round_slot_mouth()
+	_build_sleepy_lids()
 
 	_build_fur()
 	_build_pip_apron()
@@ -309,6 +437,62 @@ func _build_round_slot_mouth() -> void:
 		Vector3(0.026 * fs, 0.013 * fs, 0.011)
 	# `_apply_face` overwrites this node's SCALE every frame, so nothing here may carry one.
 	_mouth_smile = slot
+
+
+## HER SLEEPY HALF-LIDS — the user asked for "eyes half lidded like it's sleepy", and the whole of
+## the difficulty is that the same part, one degree of rotation away, is a scowl.
+##
+## A POST-PASS OVER `_add_face`'S WORK, NOT AN EYE SPEC KEY. `_build_eye` has no lid concept and
+## chibi_model.gd is off limits this pass, so this walks `_eyes` afterwards the way
+## `_cut_almond_eyes` walks `_eye_ovals`. All of the solved numbers live on LID_POS / LID_SEMI /
+## LID_ROLL_DEG next to the palette block; read those before touching anything here.
+##
+## IT IS A DOME, NOT A PLATE, and it is parented to the EYE, not to the oval. Both matter:
+##   * A flat plate laid over a bulging eye can only occlude where it is physically in front, and
+##     the pupil already stands 47.6 mm proud of the eye node — a plate thin enough to look like
+##     skin would be behind the pupil across the middle of the eye and the "lid" would render as
+##     two crescents at the corners. A squashed ellipsoid whose CENTRE sits at z -0.0280 is in
+##     front of the pupil everywhere above its own silhouette rim, which is what draws one clean
+##     edge across the eye.
+##   * `_apply_face` rewrites `oval.scale` every frame from `_eye_size`. Anything parented under the
+##     oval is squashed by the blink and stretched by EYE_WIDE — the lid would pump like a bellows.
+##     Under `_eyes[i]` nothing in the base class touches it, which is the point: it is ours to
+##     animate, and `_animate_extras` does exactly that.
+##
+## SURVIVING THE BLINK NEEDS NO CODE, and here is why rather than an assertion that it does.
+## `_update_blink` drives `_eye_open` into `oval.scale.y` and nothing else — the sclera and the lid
+## are both untouched. As the pupil squashes, its front surface at any given height RECEDES, so the
+## lid/pupil crossover slides smoothly down from y +0.0110 to about y +0.0020 (48 % of the eye) at
+## full blink and back up again. No discontinuity, nothing to pop, and the visible result is her lid
+## sinking as she blinks. Free acting.
+func _build_sleepy_lids() -> void:
+	# `.merged()` does not overwrite existing keys — the same idiom `_build_pip`'s torso call uses —
+	# so spec / rim / shade below win and the four `surface*` keys come from PIP_SURF_HEAD. That
+	# puts the SAME sd_foliage nap on the lid as on the head, which is most of what sells it as her
+	# own skin folding over rather than as a separate object stuck on the eye.
+	var m_lid := _toon(skin, _matte({"spec": 0.02, "rim": 0.03, "shade": 0.36}
+		.merged(PIP_SURF_HEAD)))
+	for i in _eyes.size():
+		# Pip's eyes carry no `slant_deg`, so today `_eyes[i]` IS `_build_eye`'s host and this
+		# lookup finds nothing. It is here because the day someone gives her a slant, `_build_eye`
+		# moves the oval, both expression meshes and the brow onto a `Slant` child and rolls THAT —
+		# and a lid left behind on the eye node would be the single part of the eye that does not
+		# follow the roll, which reads as the lid sliding off her face.
+		var host: Node3D = _eyes[i]
+		var slant := host.get_node_or_null("Slant") as Node3D
+		if slant != null:
+			host = slant
+		var lid := _node("Lid", host, LID_POS)
+		# The roll is about the lid's OWN centre (the node origin and the dome centre coincide), so
+		# this tips the lid line without walking the dome sideways off the sclera.
+		lid.rotation.z = deg_to_rad(LID_ROLL_DEG * signf(_eyes[i].position.x))
+		# The node SCALE is what makes this an ellipsoid — the same trick `_build_eye` uses for the
+		# sclera, and the reason there is no bespoke mesh here to blow the shared cache on.
+		# Measured with `--stats`: the two lids MINUS the two glints dropped above is a net +188,
+		# taking Pip from 4940 to 5128 of the 6000 budget.
+		_mi(sphere(1.0, 18, 10), m_lid, lid, Vector3.ZERO, "Cap").scale = LID_SEMI
+		_lids.append(lid)
+		_lid_home.append(lid.position)
 
 
 ## FUR, AS SILHOUETTE — the user asked for it by name and a shader cannot answer it. She is the only
@@ -467,6 +651,7 @@ func _build_pop() -> void:
 		seat.rotation.x = 0.52
 		_antennae.append(_add_antenna(seat, Vector3.ZERO, 0.0, POP_BLADE.darkened(0.22),
 			POP_BLADE, 0.115, 0.042, {"tip": "paddle", "glow": false, "stalk_r": 0.008}))
+	_build_pop_horns()
 
 	# PLASTRON — a contrasting belly plate with a hard rim, two scute seams and a navel. Six of the
 	# eighteen reference creatures wear one and nothing in this game does: Zorp's badge and the
@@ -525,6 +710,79 @@ func _cut_almond_eyes() -> void:
 		var tip := _node("Canthus", oval, Vector3(0.30 * outer, 0.0, 0.0))
 		tip.rotation.z = -PI * 0.5 * outer
 		_mi(taper_tube(1.22, 0.86, 0.04, 0.0, 3, 5), m_eye, tip, Vector3.ZERO, "Point")
+
+
+## HIS HORNS — asked for by name: "Pop can get giant horns on each side of its head".
+##
+## WHERE THE SPACE IS, AND WHY THE PADDLES SURVIVE. His shipped `_crown_row(1, 62, 62, 52 * sx)`
+## seats each paddle at head-local (+/-0.0845, 0.1963, -0.0660) — only 24 % of the way out to his own
+## half-width of 0.356. Everything from x +/-0.09 to x +/-0.36 is empty crown on both sides, which is
+## why the study of the shipped render called the temples "an enormous amount of unused silhouette".
+## The horns go THERE and sweep OUT; the paddles keep the vertical. That division of labour is the
+## whole reason both can exist: the horns own the width, the antennae own the height. Nothing about
+## the paddle loop above changes by a single character, because the user asked to ADD horns and six
+## shipped dialogue lines depend on there being exactly two antennae to look at.
+##
+## MEASURED AGAINST HIS REAL HEAD, solved on the actual superellipsoid (semi 0.3560, 0.2040, 0.2900,
+## n 3.0) rather than eyeballed, and quoted in HEAD-LOCAL metres unless it says "rendered" (his
+## `body_scale` is 0.76, so rendered = head-local x 0.76):
+##   seat point   (+/-0.2858, 0.1600, -0.0143), outward normal (+/-0.5145, 0.8575, -0.0024)
+##   pivot        (+/-0.2652, 0.1257, -0.0142) after the 0.040 inset
+##   aim          (+/-0.7648, 0.6269, 0.1485) — out, up and slightly back; 38.8 deg above horizontal
+##   tip          (+/-0.5436, 0.3461, 0.1567)
+##   SPAN         0.826 m rendered, tip to tip, against a head 0.541 m wide and a body 1.064 m tall.
+##                The horns make him 53 % wider than his own head and 78 % as wide as he is tall,
+##                which is what "dominant in the silhouette" has to mean to survive the 6.5 m camera.
+##   tip height   0.875 m rendered, BELOW the paddle blades' 0.898 m — so the antennae still crown
+##                him and are not swallowed by the thing that was added next to them.
+##   clearance    the closest the horn surface ever comes to the paddle stem or blade is 0.074 m
+##                rendered (sampled surface-to-surface along the whole horn). They cannot clip.
+##   base seating the base cap is a flat disc perpendicular to the aim, which the tilt has swung
+##                about 23 deg off the surface tangent, so its high side lifts ~27 mm off the shell.
+##                At `_add_horn`'s default 0.012 inset that is a visible floating gap; at 0.040 the
+##                whole 78 mm rim solves to at least 0.6 mm INSIDE the shell all the way round,
+##                and there is still ~0.36 m of horn outside the head.
+##
+## THE SIGN CONVENTION, WHICH IS THE NUMBER ONE WAY THIS GETS BUILT BACKWARDS.
+## `_add_horn` sets `pivot.basis = _basis_from_up(outward)`, and `_basis_from_up` branches on
+## `absf(up.x) < 0.9`. Here |n.x| = 0.5145, so BOTH horns take the `Vector3.RIGHT` branch — no flip,
+## no special case. That yields z axes of (0, 0.0028, 1.0) on BOTH sides, i.e. world +Z, which is
+## BACKWARD (the model faces -Z). So `curl` sweeps both horns back symmetrically for free, and
+## `tilt.x` needs no sign either — it maps +Y toward that shared +Z and tips both back equally.
+## `tilt.z` is the one that DOES need the sign: the two pivot bases are mirror images in their X
+## axes ((0.857, -0.514, 0) on the +x side, (0.857, +0.514, 0) on the -x side), so a negative
+## `rot_z` on the +x side rakes that horn OUTWARD and the mirrored value does the same on the left.
+## Positive would stand them both up instead.
+##
+## THE HORNS ARE FOUR-SIDED AND THAT IS DELIBERATE. `_add_horn` builds each band as
+## `taper_tube(..., 4, 6)`, and DETAIL 0.60 resolves that to 3 segments and FOUR sides; `taper_tube`
+## puts its cross-section corners on the aim frame's +/-X and +/-Z, so each horn carries a hard keel
+## along its top and bottom edge and flat facets on the diagonals. On Pop specifically that is right
+## rather than a defect to be smoothed away: he is the slab head, the flat paddle, the straight bar
+## mouth, the hard almond, the one character in the cast with no surface pattern at all — his own
+## docstring calls him "the hardest edge in the cast". A faceted, keeled horn is on-brand for him
+## and would be wrong on anybody else. It is also not fixable from here in any case: `sides` is
+## hardcoded to 6 inside `_add_horn` and chibi_model.gd is off limits this pass.
+##
+## THEY DO NOT ANIMATE, so the pivots are discarded rather than appended to `_antennae`. That array
+## is swayed every frame by `_animate_extras`; horn is bone and bone does not wobble.
+##
+## COST: 4 bands x 2 horns, each band 3 segs x 4 sides x 2 + two 4-triangle caps = 32 tris, so +256
+## measured, taking Pop from 5450 to 5706 of the 6000 budget. That leaves him 294 spare — the
+## tightest character in the cast after this change. A fifth band would be another 64 and is still
+## legal at 5770; there is no room for a sixth, and reaching for more SIDES to smooth the facets is
+## not an option anyway (see the paragraph above).
+func _build_pop_horns() -> void:
+	for sx: float in [-1.0, 1.0]:
+		_add_horn(_head, Vector3(sx, 0.56, -0.05), Vector3(0.16, 0.0, -0.34 * sx),
+			4, 0.40, 0.078, [POP_HORN, POP_HORN_BAND],
+			# NOTE THE TRAP: `_add_horn`'s `opts.surface` is the `_matte` OPTIONS dict, not the R2.9
+			# surface-detail string. `{"surface": "foliage"}` here would be a type error waiting to
+			# happen. And there is deliberately no surface pattern in it: Pop is the cast's one
+			# unpatterned character (CAST_VARIETY ruling 5, "exactly 1") and 0.8 m of horn is far
+			# too much of him to break that on.
+			{"curl": 0.60, "inset": 0.040, "tip_r": 0.011,
+			"surface": {"spec": 0.06, "rim": 0.04, "shade": 0.34}})
 
 
 ## HIS MOUTH: a straight LIPLESS BAR. Zero curvature is unmistakable against Pip's round hole at any
@@ -659,3 +917,37 @@ func _animate_extras(delta: float) -> void:
 		var a := _antennae[i]
 		var rest: float = a.get_meta("rest_tilt", 0.0)
 		a.rotation.z = rest + amp * wob * (1.0 if i == 0 else -1.0) - droop
+	_retract_lids()
+
+
+## PIP'S LIDS GET OUT OF THE WAY FOR `happy` AND `surprised`. Without this her expressions simply
+## stop existing, which the brief correctly calls a fail — measured at rest, the happy "^" arc
+## reaches y +0.036 and the surprised ball y +0.041, both far above a lid edge at +0.0120, so the
+## lid buries the entire expression and all she does is keep her sleepy face while smiling.
+##
+## IT HAS TO BE A POST-PASS, and `_animate_extras` is the only place it can be. `tick()` runs
+## `_apply_pose` — and therefore `_apply_face` — BEFORE `_animate_extras`, so anything written here
+## is the last word for the frame and cannot be fought by the base class on the same tick. That is
+## the same reason Fen's `_ripple_blink` lives in this hook.
+##
+## THE x2.2 IS LOAD-BEARING AND IS NOT A FUDGE. `_apply_face` swaps the oval out for the arc or the
+## ball on a HARD `> 0.5` test, so the lid has to be ALREADY CLEAR by the time the channel crosses
+## 0.5 — it cannot be merely on its way. x2.2 saturates the retract at 0.4545, one blend step early.
+## Writing `if pose(P.EYE_HAPPY) > 0.5` instead buys a frame of buried arc every single time she
+## smiles. No extra smoothing state is needed either: `_pose` is already lerped at `_blend_rate`, so
+## the lid rolls up over roughly 0.2 s and reads as her opening her eyes.
+##
+## AND `blink_hold` STAYS AT 0.45. It will be tempting to slow it down, because a sleepy character
+## "should" blink slowly. Two reasons not to, and they are both in the pair rather than in her.
+## First, blink rate is one of only five non-accessory cues carrying the twins apart at all (Pip
+## 0.45 against Pop 1.7) and slowing her converges them on the one differentiator that costs zero
+## triangles. Second, a heavy lid over a FAST blink reads as drowsy-fighting-it, which is better
+## acting than uniformly slow and which agrees with her shipped dialogue — npc_data.gd gives Pip the
+## chatty, over-caffeinated voice, so a character who is heavy-lidded and still blinking twice as
+## fast as her brother is the one reading that keeps the model and the writing in the same room.
+func _retract_lids() -> void:
+	if _lids.is_empty():
+		return
+	var open_amt := clampf(maxf(pose(P.EYE_HAPPY), pose(P.EYE_ROUND)) * 2.2, 0.0, 1.0)
+	for i in mini(_lids.size(), _lid_home.size()):
+		_lids[i].position = _lid_home[i] + LID_RETRACT * open_amt
