@@ -74,6 +74,19 @@ var _pointers: Dictionary = {}
 ## True once a real InputEventScreenTouch has arrived; the mouse fallback switches off for good.
 var _saw_touch := false
 
+## `--no-adopt` (after "--") turns OFF the late-pointer adoption in `_adopt_late_pointer` and puts
+## the stuck-after-landing bug back exactly as the player reported it. Same purpose as
+## `CameraRig`'s `--fade-off` / `--fade-thin`: the before/after pair for this fix can be re-captured
+## from ONE timeline at any time, so "the joystick was dead after a landing" stays a measurement
+## anyone can repeat rather than a claim about a build that no longer exists.
+##
+## Measured with tests/director round-trip timing (home -> zorp -> bolt -> hub -> home), a drag
+## delivered with no preceding touch-down over the stick zone:
+##   --no-adopt : pointers=0  stick_active=false  push=0.00  move=0.000  speed=0.00  travel=0.00 m
+##   default    : pointers=1  stick_active=true   push=1.00  move=1.000  speed=7.00  travel=4.99 m
+## Cached at _ready rather than read per event: `_pointer_move` runs once per finger per frame.
+var _adopt_off := false
+
 ## Drag pixels gathered this frame, handed to `CameraRig.add_look_px` in `_process` (one call per
 ## frame, so two fingers moving in the same frame cannot double-apply the sensitivity).
 var _cam_drag := Vector2.ZERO
@@ -96,6 +109,7 @@ func _ready() -> void:
 	# the tree while a finger is down.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	name = "TouchControls"
+	_adopt_off = OS.get_cmdline_user_args().has("--no-adopt")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
@@ -362,6 +376,8 @@ func _pointer_down(id: int, pos: Vector2) -> bool:
 
 func _pointer_move(id: int, pos: Vector2) -> void:
 	if not _pointers.has(id):
+		if not _adopt_off:
+			_adopt_late_pointer(id, pos)
 		return
 	_wake()
 	var p: Dictionary = _pointers[id]
@@ -381,6 +397,93 @@ func _pointer_move(id: int, pos: Vector2) -> void:
 		if b != null and not b.contains(pos):
 			b.release()
 			_pointers.erase(id)
+
+
+## THE FINGER THAT WAS ALREADY ON THE GLASS. The player's report, three playtests running:
+## *"when I landed on the first planet, I couldnt move anymore, the move joystick just moved the
+## camera"*, *"coming out of a spaceship on new planet still doesnt let me move"*, and the decisive
+## one: *"I can move again by hitting pause and resume."*
+##
+## WHY A DRAG CAN ARRIVE WITH NO POINTER. `_pointers` is keyed by touch index, and the ONLY thing
+## that ever adds a key is `_pointer_down`. Two ordinary events wipe the table under a finger that
+## is still pressed:
+##   * `_release_everything()` on `ui_modal_opened` — and the landing cutscene is a modal
+##     (`RocketPad._begin_cutscene` emits `ui_modal_opened("cutscene")`),
+##   * a planet load, which builds a BRAND NEW TouchControls whose table starts empty.
+## Both happen with the player's left thumb resting on the stick, because they were steering toward
+## the pad a second earlier. `_input` also returns early while the controls are hidden, so the
+## touch-DOWN that would re-register that finger is never seen either — it already happened.
+##
+## From then on the finger is a ghost: `_pointer_move` and `_pointer_up` both used to `return` on
+## `if not _pointers.has(id)`, so dragging it did nothing at all and lifting it did nothing at all.
+## The stick was drawn, un-owned and untouchable, for the rest of that finger's life. Only lifting
+## and re-planting the thumb produced a fresh touch-down — which is EXACTLY what pause-then-resume
+## forces the player to do, and why their workaround worked. That is the strongest evidence there
+## is that the pointer table, and not any gameplay gate, is what was broken: measured immediately
+## after landing, `paused=false modal=false input_enabled=true phys=true` on all four planets.
+##
+## THE FIX: treat the first drag from an unknown id as its missing touch-down. `_pointer_down`
+## refuses everything while `visible` is false, so this cannot resurrect a finger during a cutscene;
+## it can only act once the controls are back on screen, which is the moment the player expects the
+## stick to work again. The stick's origin becomes the CURRENT finger position, so adoption starts
+## at zero push and the astronaut does not lurch — the thumb is where it is, and the stick re-homes
+## under it rather than snapping it somewhere.
+##
+## *** BUTTONS ARE EXCLUDED, DELIBERATELY. *** A resting thumb becoming a synthetic touch-down must
+## never be able to FIRE something. If the drag is over Jump, Boost, the context button (Talk /
+## Enter / Fly), the bag, the journal or pause, adoption is refused outright and the finger stays a
+## ghost until it is lifted — a dead control is a far smaller bug than a rocket launched by a thumb
+## the player never pressed with. Only the two CONTINUOUS, self-cancelling roles can be adopted:
+## the stick (which starts at zero) and the camera drag (which starts at zero). This was raised by
+## the adversarial cross-check and it is the one hard rule in this function.
+##
+## RUN cannot be excluded separately, and saying so plainly: there is no run button in this game.
+## `TouchStick` derives run from stick push > 0.60 (touch_stick.gd:9-11, :137), so the only way to
+## keep an adopted stick from ever running would be to abandon the fix. What makes that safe is
+## that adoption itself fires nothing — the stick re-homes under the finger, so push is 0.00 at the
+## instant of adoption (measured) and run only appears once the player deliberately drags past 60%
+## of stick travel, exactly as it would after an ordinary touch-down.
+##
+## Measured, four late drags with no touch-down (`--ui=mobile`, 1280x720, Compatibility):
+##   over the context button (1184,624) -> pointers=0, primary alpha 0.45 (i.e. NOT pressed: a
+##                                         pressed button paints at ALPHA_ACTIVE 0.88)
+##   over Jump (1184,488)               -> pointers=0, jump alpha 0.45
+##   in the camera zone (940,500)       -> pointers=1, role "cam"
+##   in the stick zone (240,500)        -> pointers=1, role "stick", push 0.96, move 0.962
+## The two that must do nothing do nothing; the two that must work, work.
+##
+## The larger variant considered and NOT shipped: tracking a `_dead` set of ids that were cleared
+## while still held, so only those specific ids could be adopted. It is strictly more state to keep
+## correct across scene loads (where the node itself is new and the set would start empty anyway —
+## i.e. it would not even cover the landing case, which is the reported bug), and the button
+## exclusion above already removes the only dangerous outcome. If a case turns up that this cannot
+## reach, that is the next thing to try.
+func _adopt_late_pointer(id: int, pos: Vector2) -> void:
+	# *** THE MOUSE IS NOT A FINGER. *** The desktop fallback in `_input` calls
+	# `_pointer_move(-1, event.position)` on EVERY `InputEventMouseMotion`, with no button held —
+	# a mouse reports where the cursor is whether or not it is pressed, which a touchscreen never
+	# does. Without this line a reviewer running `--ui=mobile` who merely MOVED the cursor across
+	# the stick zone adopted the stick and walked the astronaut: measured
+	# `TOUCHPTR mouse_hover_stick pointers=2 [.., -1:stick@(240,500)] stick_active=true`, then
+	# hovering on to (240,380) gave `push=1.00 move=1.000 run=true speed=4.50`, no button ever
+	# pressed. That never reaches an iPhone, but `--ui=mobile` on this desktop is how every piece
+	# of mobile UI in this project is reviewed and captured, so a stray cursor would silently walk
+	# the astronaut out of frame in future timelines and screenshots. Caught by the critic on the
+	# first attempt at this fix.
+	# The mouse keeps its ordinary path: `InputEventMouseButton` still goes through `_pointer_down`,
+	# which registers id -1 properly, and once it is in `_pointers` this function is never reached
+	# for it. Only ids >= 0 — real `InputEventScreenTouch` / `InputEventScreenDrag` indices, and the
+	# timeline hooks that stand in for them — can be adopted late.
+	if id < 0:
+		return
+	if not visible:
+		return
+	for bid in _buttons:
+		var b: TouchButton = _buttons[bid]
+		if b.contains(pos):
+			return
+	# Can now only resolve to "stick" or "cam" inside `_pointer_down`, both of which begin at rest.
+	_pointer_down(id, pos)
 
 
 func _pointer_up(id: int) -> void:
@@ -590,3 +693,23 @@ func debug_report(tag: String = "") -> void:
 		str(Input.is_action_pressed("run")), speed, dist, _prompt,
 		_layer_alpha, _stick.modulate.a, _primary.modulate.a, _jump.modulate.a, _bag.modulate.a,
 		sa.x, sa.y, sa.z, sa.w])
+
+
+## POINTER TABLE DUMP, for the stuck-after-landing investigation.
+##
+## `debug_report` above answers "is the control drawn and is an action pressed". It cannot answer
+## the question the landing bug actually turns on, which is whether the finger currently on the
+## glass has an ENTRY in `_pointers` at all - because a pointer with no entry is invisible to
+## `_pointer_move` and `_pointer_up` (both `return` on `if not _pointers.has(id)`), and a stick that
+## no finger can claim looks exactly like a stick that works.
+##
+## Prints one line per live pointer plus the stick's own state, so a timeline can show the table
+## before and after a modal (the landing cutscene is one) and before and after a pause/resume.
+func debug_pointers(tag: String = "") -> void:
+	var rows: Array[String] = []
+	for id in _pointers:
+		var p: Dictionary = _pointers[id]
+		rows.append("%s:%s@(%.0f,%.0f)" % [str(id), str(p["role"]), (p["pos"] as Vector2).x, (p["pos"] as Vector2).y])
+	print("TOUCHPTR %s vis=%s pointers=%d [%s] stick_active=%s stick_push=%.2f cam_drag=(%.1f,%.1f)" % [
+		tag, str(visible), _pointers.size(), ", ".join(rows),
+		str(_stick.active), _stick.push, _cam_drag.x, _cam_drag.y])

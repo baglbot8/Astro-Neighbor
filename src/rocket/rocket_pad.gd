@@ -220,6 +220,14 @@ var _interactable: Interactable
 var _player: Player
 var _ground_r := 16.0
 var _busy := false
+## `--no-reseat` (after "--") skips the camera reseat at the end of `_pop_out` and puts the
+## walk-backwards-into-the-rocket landing bug back exactly as it was. Same purpose as `CameraRig`'s
+## `--fade-off`: the before/after pair for this fix is re-capturable from one timeline instead of
+## being a claim about a build that no longer exists. Measured, heading error at the instant control
+## returns, on a home -> zorp -> bolt -> hub -> home round trip:
+##   --no-reseat : 180.0 / 180.0 / 180.0 / 180.0 deg
+##   default     :   0.0 /   0.0 /   0.0 /   0.0 deg
+var _reseat_off := false
 var _cutscene := false
 var _time := 0.0
 var _flash := 0.0
@@ -293,6 +301,7 @@ var _env_looked_up := false
 
 
 func _ready() -> void:
+	_reseat_off = OS.get_cmdline_user_args().has("--no-reseat")
 	planet = _find_planet()
 	_pad_root = Node3D.new()
 	_pad_root.name = "Pad"
@@ -1693,6 +1702,21 @@ func _play_journey_arrival() -> void:
 	# thaw and a beat later, though: a frozen player never ticks its model, and a thawed one spends
 	# its first frames resolving the landing it just registered, which would overwrite the emote
 	# state and leave the watchdog to clean it up on every single landing.
+	# This emote was ALSO the post-landing camera swing, and the connection is not visible from
+	# here: `Player.play_emote` asks `CameraRig.orbit_front` for a three-quarter FRONT view, which
+	# drives the camera heading to 180 - ORBIT_YAW_DEG = 154 deg off the astronaut's facing for the
+	# length of the hop — and `move_forward` is resolved against that heading. Traced frame by
+	# frame: heading error 0.0 deg at handback, 89.5 at +0.5 s, peak 151.8 at +1.5 s, back to 1.1
+	# by +3.1 s, with a 1.0 s forward push at +1.50 s travelling -0.99 m along facing (BACKWARDS,
+	# into the rocket). That is the player's *"I can't move after I land"*, still there after the
+	# reseat fixed the heading at the instant of handback.
+	# The emote stays; the camera half of it does not. `CameraRig.reseat_behind_player` now arms
+	# LANDING_ORBIT_GRACE, so this `orbit_front` request is refused and the camera holds the
+	# reseated heading. Measured after, on zorp / bolt / hub / fen with no input: peak heading
+	# error 0.0 deg over the whole first 4 s (was 150.5 / 151.8 / 151.2 / 150.5), and a 1.0 s push
+	# at +0.00 / +0.75 / +1.50 / +2.50 / +3.00 s is positive along facing on all four planets.
+	# Do not "fix" the swing by deleting this line: the emote is not the fault, the camera move is,
+	# and the same fault is reachable from any other emote in the same window.
 	await get_tree().create_timer(0.35).timeout
 	if is_instance_valid(p) and is_inside_tree():
 		p.play_emote("happy")
@@ -1901,6 +1925,48 @@ func _pop_out(p: Player, landed_dir: Vector3) -> void:
 	t.tween_property(model, "scale", Vector3.ONE, 0.42).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await t.finished
 	p.global_transform = planet.surface_transform(landed_dir, _hop_to - _pad_root.global_position)
+	# ^ that line is the LAST word on which way the astronaut faces after a landing: away from the
+	# pad, ready to walk off. The camera has to be told, and this is the only place that knows the
+	# final transform is settled.
+	if not _reseat_off:
+		_reseat_camera_behind(p)
+
+
+## Turns the gameplay camera to sit behind the astronaut's NEW facing.
+##
+## THE BUG THIS FIXES. `CameraRig` latches its heading once, on its first processed frame. After a
+## flight that frame falls inside the landing cutscene, and `_prepare_journey_arrival` above has
+## deliberately turned the astronaut to FACE the pad for the framing (see the comment there — the
+## cutscene depends on it, so that is not the line to change). `_pop_out` then re-faces them away
+## from the rocket and the rig never hears about it, so the heading stays aimed at the rocket.
+##
+## `move_forward` is resolved against the camera heading, so the player pushed the stick forward and
+## the astronaut walked BACKWARDS into the hull they had just stepped out of. Measured on a scripted
+## round trip, at the instant control returned: 180.0 / 180.0 / 180.0 / 180.0 degrees of heading
+## error on the four landings, with the forward pulse reaching 4.20 m/s and then dropping to 0.00
+## within 0.7 s as the astronaut hit the rocket. The player: *"coming out of a spaceship on new
+## planet still doesnt let me move"*.
+##
+## Called HERE rather than in `_finish_arrival` because both arrival paths pass through `_pop_out`
+## and neither has handed the camera back yet at this point — the same-scene path then runs
+## `_hand_camera_back`, which blends the flight camera onto the rig transform, and the journey path
+## cuts to it in `_drop_camera`. Reseating first means both blends land on the correct framing
+## instead of swinging to it afterwards, and nothing is looking through the rig when it moves.
+##
+## Duck-typed through `has_method` for the same reason `_rig_camera` is: the rig is looked up by
+## PATH, and plenty of scenes do not have one — the showcase planet scenes boot a world with no
+## `/root/World/CameraRig` at all, and this function has to no-op there rather than crash a headless
+## boot check. (An earlier draft of this comment justified the duck-typing by saying `src/player/**`
+## belongs to another builder. That was simply wrong — the same change adds `reseat_behind_player`
+## to `src/player/camera_rig.gd` — and a future reader would have believed it.)
+func _reseat_camera_behind(p: Player) -> void:
+	if p == null or not is_instance_valid(p):
+		return
+	var rig := get_node_or_null("/root/World/CameraRig")
+	if rig == null:
+		rig = get_tree().get_first_node_in_group("camera_rig")
+	if rig != null and is_instance_valid(rig) and rig.has_method("reseat_behind_player"):
+		rig.call("reseat_behind_player")
 
 
 # ============================================================================= camera shake

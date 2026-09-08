@@ -479,8 +479,72 @@ func _process(delta: float) -> void:
 		_model.tick(delta, _speed_factor)
 
 
+## THE BASIS "move_forward" IS RESOLVED AGAINST, on the tangent plane.
+##
+## ASKS THE RIG FIRST, and only falls back to the active camera's own basis. That order is the fix
+## for "tap an emote, push the stick, and you walk sideways or backwards for a beat".
+##
+## WHAT WAS WRONG. This function read `-camera.basis.z` — where the LENS points — and
+## `CameraRig.orbit_front` deliberately swings the lens round to a three-quarter FRONT view for the
+## length of an emote, 180 - ORBIT_YAW_DEG = 154 deg off the astronaut's facing, so the player can
+## see the pose (that is a feature; see `CameraRig.orbit_front`). For those ~2 s "forward" therefore
+## meant "roughly backwards". The rig keeps the player's control heading intact throughout — it is
+## `_fwd_saved`, and it measured 0.0 deg of error for the whole swing — and now exposes it as
+## `CameraRig.get_planar_forward()`, with `get_camera_forward()` for anything that really wants the
+## lens. Reading the lens here was what kept the two welded together.
+##
+## MEASURED on a cold start with a player-triggered "dance" emote, no landing involved
+## (Compatibility renderer, `--ui=mobile`, Director timeline; a 1.0 s `move_forward` push starting
+## at the given delay after the emote, displacement projected on the astronaut's facing at the
+## moment the push began, `--no-control-basis` for the before arm):
+##
+##                        BEFORE (m along facing)            AFTER (m along facing)
+##     delay          home     zorp     bolt             home     zorp     bolt
+##     +0.3 s        +3.01    +2.89    +2.45            +3.71    +3.63    +3.63
+##     +0.8 s        -1.29    -1.13    -1.78            +3.55    +2.06    +3.63
+##     +1.5 s        -2.17    -2.17    -2.21            +3.61    +3.63    +3.64
+##     +2.5 s        -1.39    -1.38    -1.16            +3.75    +3.64    +3.63
+##
+## 9 of 12 pushes were NEGATIVE before (the astronaut walking away from where they were pointed);
+## 12 of 12 are positive after, and 11 of those 12 are within 0.1 m of the 3.6-3.7 m an unobstructed
+## 1.0 s walk covers. The exception is zorp at +0.8 s: 2.06 m along a total displacement of 2.18 m,
+## i.e. straight but SHORT — the astronaut walked into something. Heading error sampled every 0.15 s
+## for 4 s from the emote peaked at 154.0 deg on all three planets before and 0.0 deg on all three
+## after, while the camera's own heading still peaks at 154.0 deg after — the emote camera is
+## untouched, it just no longer steers the stick. The +0.3 s row is positive in both arms only
+## because the orbit is still winding in at that point; it is not evidence of anything working.
+##
+## THE LANDING CASE, which this must not regress, re-measured the same way after the change (one
+## landing per run, `Rocket.launch_to`, a 1.0 s push at +0.3 / +0.8 / +1.5 / +2.5 / +3.8 s after
+## control returns, on zorp / bolt / hub): 15 of 15 positive, +3.63 to +3.68 m on zorp and bolt and
+## +2.85 to +2.89 m on hub (a shorter run there, and consistent across all five delays), with
+## head_err 0.0 deg at every mark. The +3.8 s row is outside `LANDING_ORBIT_GRACE`, so it checks the
+## window the grace does NOT cover; no emote is running by then either way, so it is a regression
+## check on ordinary walking rather than a second reading of the bug.
+##
+## PROVENANCE, because the before/after arms are not symmetrical. The BEFORE column is a run of the
+## code as it stood — this function reading the lens — in which the rig's `--no-control-basis`
+## toggle was a no-op precisely BECAUSE nothing here consulted the rig; the arm with the toggle off
+## measured the same thing (home -1.61 / -2.26 / -1.36 at the three later delays) which is the
+## clearest evidence that the rig-side change alone fixed nothing. `--no-control-basis` is only a
+## faithful "before" for the rig; with this function now asking the rig, it restores the bug in a
+## milder form (the heading is already easing back as the push starts), so the honest before/after
+## comparison is the one tabulated above.
+##
+## WHY THE FALLBACK STAYS, and why it is gated on the rig owning the ACTIVE camera. Two showcases
+## (`jetpack_showcase --chase/--side`, and anything else that makes its own Camera3D current) rely
+## on movement being relative to the camera the viewer is actually looking through — the jetpack
+## chase camera comment spells that out. Asking a rig that is not on screen would silently change
+## what "forward" means in those scenes. So: rig's heading when the rig's camera is the one
+## rendering, otherwise exactly the old behaviour.
 func _camera_planar_forward() -> Vector3:
 	var cam := get_viewport().get_camera_3d()
+	var rig := _camera_rig()
+	if rig != null and cam != null and rig.get_camera() == cam:
+		var rf: Vector3 = rig.get_planar_forward()
+		rf -= up * rf.dot(up)
+		if rf.length_squared() > 0.0001:
+			return rf.normalized()
 	var fwd: Vector3
 	if cam:
 		fwd = -cam.global_transform.basis.z

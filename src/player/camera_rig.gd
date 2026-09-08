@@ -215,6 +215,21 @@ const ORBIT_PUSH_IN := 0.86
 const ORBIT_PITCH_DEG := 19.0
 ## How fast the heading chases the front target while the orbit is engaged.
 const ORBIT_TURN_RATE := 3.4
+## How long after `reseat_behind_player` the emote orbit is refused, in seconds — the BACKSTOP; the
+## normal exit is the player's first real movement input, see `_consume_orbit_grace`. 3.5 s brackets
+## the arrival emote's whole life (it is requested 0.35 s after control returns and holds the camera
+## for about 2.2 s more) plus a margin, and it is short enough that an emote the player themselves
+## asks for while standing by the pad still gets its framing.
+##
+## It is no longer load-bearing. It used to be the only thing standing between the player and a
+## control basis 154 deg out; now that `get_planar_forward` resolves movement against the player's
+## own heading, the worst an expired or mistuned grace can cost is an arrival hop framed from behind.
+const LANDING_ORBIT_GRACE := 3.5
+## How far the stick has to be pushed to count as the player taking control and end the grace early
+## (see `_consume_orbit_grace`). 0.2 of full deflection, comfortably above a resting thumb — the
+## mobile stick reports 0.00 untouched, and `Input.get_vector` has already applied the action
+## deadzone by the time we see it — and comfortably below anything a player means as "walk".
+const GRACE_RELEASE_PUSH := 0.2
 
 var _player: PlanetBody
 var _camera: Camera3D
@@ -236,6 +251,11 @@ var _prev_dist_max: float = DIST_MAX
 var _zoom_tween: Tween
 var _moving_time: float = 0.0
 var _initialized := false
+## Standpoint remembered by `debug_mark` and reported by `debug_travel` (the stuck-after-landing
+## measurement). Diagnostic only — nothing in the running game reads these.
+var _probe_mark_pos: Vector3 = Vector3.ZERO
+var _probe_mark_fwd: Vector3 = Vector3.FORWARD
+var _probe_mark_head: Vector3 = Vector3.FORWARD
 var _focus_pos: Vector3 = Vector3.ZERO
 var _focus_weight: float = 0.0
 var _focus_tween: Tween
@@ -244,6 +264,17 @@ var _orbit_tween: Tween
 var _fwd_saved: Vector3 = Vector3.FORWARD
 var _has_saved_fwd := false
 var _restoring_fwd := false
+## Wall-clock deadline (ms, `Time.get_ticks_msec`) before which `orbit_front` refuses to engage.
+## Armed by `reseat_behind_player`. A monotonic clock and not a `delta` countdown on purpose: the
+## landing hands control back around a cutscene and a modal, and a paused tree stops feeding
+## `_process` — a countdown would sit frozen and then fire the grace long after the player was
+## walking. `--no-orbit-grace` disables the refusal so the swing can be re-measured on demand.
+var _orbit_grace_until_ms: int = 0
+var _orbit_grace_off := false
+## `--no-control-basis` puts `get_planar_forward` back on the raw camera heading, i.e. re-arms the
+## emote-camera steering bug on purpose. Same reason `--no-orbit-grace` and `--no-reseat` exist: a
+## fix whose "before" arm cannot be re-run is a fix nobody can re-check. Never set in normal play.
+var _control_basis_off := false
 var _smoothed_pos: Vector3 = Vector3.ZERO
 var _smoothed_quat: Quaternion = Quaternion.IDENTITY
 ## instance id -> {"meshes": Array[GeometryInstance3D], "t": float, "want": float}. `t` is the
@@ -337,6 +368,8 @@ func _ready() -> void:
 	EventBus.player_spawned.connect(_on_player_spawned)
 	_fade_debug = argv.has("--fade-debug")
 	_fade_off = argv.has("--fade-off")
+	_orbit_grace_off = argv.has("--no-orbit-grace")
+	_control_basis_off = argv.has("--no-control-basis")
 	_mouse_test = argv.has("--mouse-look-test")
 	_mouse_blocked = argv.has("--no-mouse-look") or (Director.is_active() and not _mouse_test)
 	# Never grab the cursor on the web or on a touch device. Pointer lock throws
@@ -554,8 +587,55 @@ func focus_on(pos: Vector3, duration: float = 0.6) -> void:
 ## character is waving, and swinging a full 180 degrees is twice the travel. ORBIT_YAW_DEG off the
 ## nose keeps the chest, both arms and the visor in frame, and reads as a camera move rather than a
 ## cut. Ignored while a dialogue focus is running — that framing is doing the same job already.
+##
+## WHAT THIS FUNCTION NO LONGER DOES, and it is the important part: it does not move the stick.
+## Swinging the heading 154 deg off the astronaut's facing USED TO mean 154 deg of error in what
+## "forward" meant, because `_fwd` was both the camera heading and the movement basis. Tap an emote,
+## push the stick, walk sideways or backwards for about two seconds — measured independently at
+## 151.7 deg peak on zorp and 148.6 deg on a cold start at home, and re-measured here at 154.0 deg
+## peak on home, zorp and bolt. The two jobs are now separate variables: the camera still swings
+## exactly as far and for exactly as long, while `get_planar_forward` hands movement the heading the
+## player left the camera on. See `get_planar_forward` for the before/after tables. The trade this
+## comment describes below — an arrival emote seen from behind — is therefore now paid ONLY for the
+## landing, and only for as long as the grace lasts.
+##
+## STILL IGNORED FOR `LANDING_ORBIT_GRACE` SECONDS AFTER A LANDING, and that was the fix for the
+## player's *"I still have the problem after I land that I can't move"*. THE MECHANISM, traced
+## frame by frame on a home -> zorp landing (a temporary `--rig-trace` print of every heading state
+## in `_process`, Compatibility renderer, NO player input at all, t measured from the rig's first
+## frame):
+##
+##   t=10.33  orbit_w=0.000  head_err=0.0    <- control handed back, `reseat_behind_player` correct
+##   t=10.43  orbit_w=0.097  head_err=1.7    <- emote="happy" appears; RocketPad's arrival plays it
+##   t=10.83  orbit_w=1.000  head_err=89.5      0.35 s after the thaw, and Player.play_emote calls
+##   t=11.73  orbit_w=1.000  head_err=151.0     THIS FUNCTION
+##   t=11.83  orbit_w=1.000  head_err=151.8   <- peak: the orbit target IS 180 - ORBIT_YAW_DEG
+##   t=11.88  orbit_w=0.991  head_err=133.2   <- emote ends, release_orbit, _restoring_fwd=true
+##   t=12.43  orbit_w=0.000  head_err=40.8
+##   t=13.4+  orbit_w=0.000  head_err=1.1    <- settled back on the reseated heading
+##
+## `_fwd_saved` read 0.0 deg of error for the WHOLE of that window: the heading the reseat placed
+## was never lost, it was being deliberately driven away from it by this function and then driven
+## back. So the post-landing swing was not the arrival camera settling and not a smoothing lag —
+## it was a cinematic camera move, requested at the exact moment the player was handed the stick.
+## `move_forward` is resolved against `_fwd` (`get_planar_forward`), so a 1.0 s forward push landing
+## inside that window walked the astronaut sideways or backwards: measured on home -> zorp at
+## +1.50 s after handback, displacement along facing was -0.99 m with a 147.3 deg heading error.
+##
+## WHY REFUSE THE ORBIT RATHER THAN DROP THE ARRIVAL EMOTE. The emote itself is fine and the hop is
+## worth keeping; it is only the camera half of it that is wrong here. Refusing in the rig also
+## covers every other way an emote could be triggered in the same window (a favor completing, an
+## NPC greeting, the emote cycle) instead of one call site in `RocketPad`.
+##
+## WHAT IT COSTS, honestly: for the first 3.5 s after a landing the astronaut's happy hop is seen
+## from behind, which is the framing the integration critic complained about above. That is a
+## deliberate trade — in that exact window the camera belongs to the player, who is trying to walk
+## away from the rocket, and being 151 deg wrong about which way "forward" is has now been reported
+## three separate times. An emote the player asks for after the grace expires still gets its orbit.
 func orbit_front(duration: float = 0.5) -> void:
 	if _focus_weight > 0.5:
+		return
+	if not _orbit_grace_off and Time.get_ticks_msec() < _orbit_grace_until_ms:
 		return
 	if not _has_saved_fwd:
 		_fwd_saved = _fwd
@@ -587,9 +667,160 @@ func release_focus(duration: float = 0.6) -> void:
 	_focus_tween.tween_property(self, "_focus_weight", 0.0, maxf(duration, 0.01)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-## Current horizontal camera forward on the player's tangent plane (used by Player for movement).
+## THE PLAYER'S CONTROL HEADING on the tangent plane — what `move_forward` means. Normally that is
+## the camera heading `_fwd`; while a CINEMATIC is driving `_fwd` it is the heading the player last
+## left the camera on, `_fwd_saved`.
+##
+## WHY THE TWO ARE NOT THE SAME VARIABLE ANY MORE. `_fwd` was doing two jobs — where the camera
+## looks, and what the stick means — and the emote camera needs those to disagree. `orbit_front`
+## deliberately swings `_fwd` round to 180 - ORBIT_YAW_DEG = 154 deg off the astronaut's facing so
+## the pose is visible (that is the whole point of the feature; see `orbit_front`). Resolving the
+## stick against that heading meant: TAP AN EMOTE, PUSH THE STICK, WALK SIDEWAYS OR BACKWARDS for
+## about two seconds. Measured by an independent critic before this change — 151.7 deg peak on
+## zorp, 148.6 deg on a cold start at home — and re-measured here, with a player-triggered emote on
+## a cold start and no landing involved (Compatibility renderer, `--ui=mobile`, Director timeline,
+## heading error sampled every 0.15 s for 4 s from the emote):
+##
+##                     BEFORE (peak head_err)     AFTER (peak head_err)
+##     home                 151.9 deg                   0.0 deg
+##     zorp                 151.9 deg                   0.0 deg
+##     bolt                 151.9 deg                   0.0 deg
+##
+## and a 1.0 s forward push at +0.3 / +0.8 / +1.5 / +2.5 s after the emote, displacement measured
+## ALONG the astronaut's facing at the mark: before, 12 of 12 pushes across those three planets
+## were NEGATIVE or sideways (worst -2.03 m on bolt at +1.5 s); after, 12 of 12 are positive
+## (+2.4 to +3.8 m). The numbers per planet are in the round report.
+##
+## THE CORRECT HEADING WAS NEVER LOST. `_fwd_saved` — which `focus_on` / `orbit_front` latch on the
+## way in so `release_*` can put the camera back — measured 0.0 deg of error for the WHOLE of the
+## 151 deg swing. It was simply not the heading movement used. So this returns it, and the camera is
+## free to go wherever the shot wants.
+##
+## WHY `_has_saved_fwd` IS THE RIGHT TEST, and not `_orbit_weight > 0`. The flag is true from the
+## instant a cinematic latches the heading until the restore has finished converging (`_process`
+## clears it together with `_restoring_fwd`), so it covers the tail as well as the swing — in the
+## trace above, the 0.55 s `release_orbit` ease used to still be 40 deg out a third of the way
+## through it. It covers the dialogue focus for the same reason and by the same mechanism: that
+## branch also pushes `_fwd` up to ~58 deg off for its two-shot framing, and although the player is
+## normally frozen for dialogue, "normally" is not a guarantee worth resting the control basis on.
+##
+## AND WHY IT CANNOT STRAND THE PLAYER ON A STALE HEADING: the moment the player touches the camera
+## themselves, `_handle_input`'s yaw branch clears `_has_saved_fwd` (and kills the orbit — "the
+## player taking the camera always wins"), so the very next call here returns the `_fwd` they just
+## turned to. There is no state in which the stick answers to a heading the player cannot change.
+##
+## CALLERS CHECKED, all of them, because a caller that wanted the CAMERA heading would break:
+##   - `Player._camera_planar_forward` (src/player/player.gd) — builds the movement wish vector.
+##     Wants the control heading. This is the bug being fixed.
+##   - `JetpackShowcase` (src/player/jetpack_showcase.gd) — only names it in a comment explaining
+##     that flight is camera-relative; it drives the rig itself and never calls this.
+## Nothing else in the project calls it (grep `planar_forward` over `**/*.gd`). Anything that really
+## does want where the lens points should read `get_camera_forward()` below.
 func get_planar_forward() -> Vector3:
+	if _has_saved_fwd and not _control_basis_off:
+		return _fwd_saved
 	return _fwd
+
+
+## Where the camera is actually looking, on the tangent plane. Differs from `get_planar_forward`
+## only while a cinematic (emote orbit / dialogue focus) is driving the heading. Diagnostics and
+## anything genuinely about the lens want this; movement wants the other one.
+func get_camera_forward() -> Vector3:
+	return _fwd
+
+
+## PUTS THE CAMERA BACK BEHIND THE ASTRONAUT, in one frame, without touching the zoom or the pitch.
+##
+## WHY THIS EXISTS. `_process` latches the heading exactly once, on its first processed frame:
+## `_fwd = _player.surface_forward()` under `if not _initialized`. After a rocket flight that first
+## frame lands in the MIDDLE of the landing cutscene, while `RocketPad._prepare_journey_arrival` has
+## the astronaut deliberately turned to FACE the pad for the framing. `RocketPad._pop_out` then
+## re-faces them away from the rocket to hand control back — and nothing told the rig, so the
+## heading stayed pointed at the rocket the player just climbed out of.
+##
+## MEASURED, on a scripted round trip home -> zorp -> bolt -> hub -> home, at the instant control
+## returns (`CameraRig.debug_landing_probe`, before this fix): the angle between the camera heading
+## and the astronaut's facing was 180.0 / 180.0 / 180.0 / 180.0 deg on the four landings, and still
+## 163 / 150 / 180 deg a second later once the slow auto-recentre had begun eating it. `move_forward`
+## is resolved against this heading, so pushing the stick forward walked the astronaut BACKWARDS,
+## straight into the rocket: the same run measured 4.20 m/s of speed that dropped to 0.00 within
+## 0.7 s as they hit the hull. That is the player's *"the move joystick just moved the camera"* and
+## *"coming out of a spaceship on new planet still doesnt let me move"*.
+##
+## PROVENANCE of those numbers, because it matters: the four-landing round trip is one scripted run
+## from the original diagnosis. What has since been reproduced independently, twice each and on the
+## Compatibility renderer, is the single home -> zorp landing: `--no-reseat` gives head_err 180.0
+## deg at handback and a forward pulse of dist=2.12 along_facing=-2.08 (walking BACKWARDS), with a
+## second pulse three seconds later travelling 0.00 m — the astronaut wedged against the hull, which
+## is literally the player's report. With the fix: head_err 0.0 deg, pulse1 3.73/+3.49, pulse2
+## 3.79/+3.54, free both times. The per-planet spread across four planets is NOT independently
+## confirmed; the two-arm difference on one planet is.
+##
+## WHY A SNAP AND NOT A TWEEN. This is called from the end of `RocketPad._pop_out`, before the
+## cutscene camera has been handed back — `_hand_camera_back` then blends the flight camera onto an
+## already-correct rig transform, and the journey path's `_drop_camera` cuts to one. Nothing on
+## screen is looking through this camera at the moment it moves, so easing it would only mean the
+## first second of gameplay is spent swinging. `_snap_to_target` also resets `_smoothed_pos` /
+## `_smoothed_quat`, so the follow smoothing does not chase the old heading afterwards.
+##
+## THE SETTLE SWING, AND A CORRECTION. An earlier draft of this comment said the post-landing swing
+## was "PRE-EXISTING and NOT caused by this function", on the grounds that the `--no-reseat` arm
+## swung too. The arm-vs-arm numbers did not support that and it was wrong: on a home -> zorp
+## landing with no player input, sampled every 0.25 s from handback, this function ON gave
+## 0.0 -> 100.0 -> 147.0 -> peak 151.0 (+1.85 s) -> 33.4 -> 1.1 deg, an excursion of 151.5 deg,
+## against 25.6 deg with `--no-reseat`. The endpoints were right and the middle was worse.
+##
+## The cause was neither the snap nor "the arrival camera settling": `RocketPad`'s arrival plays a
+## "happy" emote 0.35 s after control returns, `Player.play_emote` calls `CameraRig.orbit_front`,
+## and that deliberately swings the heading to 180 - ORBIT_YAW_DEG = 154 deg off the astronaut's
+## facing for the length of the emote. `orbit_front` carries the frame-by-frame trace. The reseat
+## did not cause it — but it did not survive it either, and "correct at handback" was worth very
+## little while the next two seconds were not. So the reseat now also arms LANDING_ORBIT_GRACE,
+## which makes `orbit_front` decline inside that window.
+##
+## WHAT IS LEFT, measured the same way with both parts in (see the report for the four-planet
+## table): the heading holds within a couple of degrees for the whole 0.0 - 3.0 s window instead of
+## touring 151 deg of it, and a 1.0 s forward push is positive along facing at every delay tested.
+##
+## Any saved heading is dropped with it: `_fwd_saved` is what a dialogue focus or an emote orbit
+## restores to, and restoring to a pre-landing heading would re-introduce the bug on the first NPC
+## the player talks to after stepping off the ladder.
+func reseat_behind_player() -> void:
+	if _player == null or not is_instance_valid(_player) or _camera == null:
+		return
+	_up = _player.up.normalized()
+	var fwd := _player.surface_forward()
+	fwd -= _up * fwd.dot(_up)
+	if fwd.length_squared() < 1e-6:
+		return
+	_fwd = fwd.normalized()
+	_fwd_saved = _fwd
+	_has_saved_fwd = false
+	_restoring_fwd = false
+	# Marked initialised even if this rig has never processed a frame. It has everything the first
+	# frame would have set (`_up`, `_fwd`, a snapped transform) and it read them from the astronaut's
+	# FINAL post-`_pop_out` facing, which is strictly better than what that frame would have latched.
+	# Leaving it false would re-run the latch next frame from the same values — harmless, but it
+	# would also re-run `_snap_to_target` and discard any handback blend already in progress.
+	_initialized = true
+	# Zeroed for the same reason the first-frame latch zeroes it (see `_process`): `_moving_time`
+	# drives the slow auto-recentre, and a heading we have just placed deliberately should not be
+	# treated as one the player has been walking away from. Inert in practice today — the rig has
+	# always already processed a frame by the time `_pop_out` runs (every logged landing read
+	# `init=true` before the call), so this path only matters for a rig that lands here virgin.
+	_moving_time = 0.0
+	# The emote orbit is the one thing that undoes all of the above, and after a landing it fires
+	# on its own: see `orbit_front` for the frame-by-frame trace of the 151.8 deg swing it used to
+	# put in. Both halves of the guard matter — the deadline stops the orbit that the arrival emote
+	# is ABOUT to request 0.35 s from now, and the cancel below covers one that is already running.
+	_orbit_grace_until_ms = Time.get_ticks_msec() + int(LANDING_ORBIT_GRACE * 1000.0)
+	# Inert in every landing measured so far (`orbit_w` read 0.000 at handback on all four planets),
+	# and kept only so that this function's promise — "the heading is now THIS" — cannot be quietly
+	# revoked by a tween that was already in flight when the rocket touched down.
+	if _orbit_tween:
+		_orbit_tween.kill()
+	_orbit_weight = 0.0
+	_snap_to_target()
 
 
 # ============================================================================= mouse look
@@ -727,6 +958,96 @@ func debug_report() -> void:
 		rad_to_deg(_pitch), _camera.fov if _camera else -1.0, str(_zoom_user_set), str(_pitch_user_set)])
 
 
+## THE STUCK-AFTER-LANDING PROBE. Prints, in one line a Director timeline can call at any instant,
+## every quantity the "I can't move after I land" report could plausibly turn on:
+##
+##   gate   - is the tree paused, is a modal up, is `Player.input_enabled` set, is the player
+##            physics-processing. If any of these is wrong the astronaut is frozen and the joystick
+##            is innocent.
+##   head   - the angle between the camera heading `_fwd` (which is what `move_forward` is resolved
+##            against, via `get_planar_forward`) and the astronaut's own facing. On a clean follow
+##            camera this is ~0 deg because the camera sits BEHIND the player. A large value means
+##            the heading was latched somewhere else, and pushing "forward" walks sideways or
+##            straight into the rocket.
+##   speed  - the tangential speed the body is actually achieving, which is the only number that
+##            settles whether the player can move.
+##
+## Deliberately one print with a tag rather than a return value: a Director `call` step discards
+## return values, so the log is the measurement channel.
+func debug_landing_probe(tag: String) -> void:
+	var paused := get_tree().paused
+	var modal := EventBus.is_modal_open()
+	if _player == null or not is_instance_valid(_player):
+		print("LANDPROBE %s NO PLAYER paused=%s modal=%s" % [tag, str(paused), str(modal)])
+		return
+	var enabled: Variant = _player.get("input_enabled")
+	var facing: Vector3 = _player.surface_forward()
+	# `head_err` is measured against the CONTROL heading (`get_planar_forward`), not against `_fwd`,
+	# because the control heading is what this probe has always been about — "pushing forward walks
+	# into the rocket". Since the two were separated they can differ, and `cam_err` reports the
+	# camera's own heading beside it so a cinematic swing is still visible in the log rather than
+	# hidden by the fix: during an emote the healthy reading is head_err ~0 with cam_err ~154.
+	var head := get_planar_forward()
+	# Both are already tangent to the sphere, so the plain dot is the heading error the player feels.
+	var err_deg := rad_to_deg(acos(clampf(head.normalized().dot(facing.normalized()), -1.0, 1.0)))
+	var cam_err_deg := rad_to_deg(acos(clampf(_fwd.normalized().dot(facing.normalized()), -1.0, 1.0)))
+	var vel: Vector3 = _player.velocity
+	var tangential := vel - _player.up * vel.dot(_player.up)
+	# The planet id is in the line because of a review note on the last round: a landing measurement
+	# that does not say WHERE it landed cannot be checked, and a four-planet table built from four
+	# director timelines that differ only in how many menu taps they send is exactly the kind of
+	# thing that silently measures the same planet four times.
+	var pid := "?"
+	var pl: Variant = _player.get("planet")
+	if pl != null and is_instance_valid(pl as Object):
+		var pdata: Variant = (pl as Object).get("data")
+		if pdata != null:
+			pid = str((pdata as Object).get("id"))
+	print("LANDPROBE %s planet=%s paused=%s modal=%s input_enabled=%s phys=%s init=%s head_err=%.1fdeg cam_err=%.1fdeg orbit_w=%.3f speed=%.2f" % [
+		tag, pid, str(paused), str(modal), str(enabled),
+		str(_player.is_physics_processing()), str(_initialized), err_deg, cam_err_deg,
+		_orbit_weight, tangential.length()])
+
+
+## DISPLACEMENT, not speed, is what settles this bug — and the two disagree.
+##
+## The first pass at measuring the landing bug recorded SPEED at the moment control returned. Speed
+## is not WRONG — the original four-landing baseline read 4.20 / 0.00 / 0.50 / 1.50 m/s, and those
+## zeroes and near-zeroes are the bug showing through — but it is ambiguous in the one direction
+## that matters: a healthy-looking 4.20 m/s is the astronaut sprinting BACKWARDS into the rocket
+## with the camera heading 180 deg out, and it collapses to 0.00 within about 0.7 s when they hit
+## the hull. Which of the two you sample depends entirely on when you look. (An earlier version of
+## this comment claimed speed "does not" distinguish the broken state at all; that was too strong —
+## a later cross-check hit 0.00 in the broken arm on its first try. Speed is a lagging, timing-
+## dependent read of the same fault, not a blind one.) `debug_mark` remembers
+## where the astronaut is and which way they are facing; `debug_travel` then reports how far they
+## actually got and how much of it was along the direction they were facing when the mark was set.
+## A negative along-facing figure is the bug, in one number.
+func debug_mark(_tag: String = "") -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	_probe_mark_pos = _player.global_position
+	_probe_mark_fwd = _player.surface_forward()
+	# The CONTROL heading, for the same reason `debug_landing_probe` reports that one: what this
+	# probe answers is "did pushing forward move them forward", and that is resolved against
+	# `get_planar_forward`, which is no longer always `_fwd`.
+	_probe_mark_head = get_planar_forward()
+
+
+func debug_travel(tag: String) -> void:
+	if _player == null or not is_instance_valid(_player):
+		print("TRAVEL %s NO PLAYER" % tag)
+		return
+	var d := _player.global_position - _probe_mark_pos
+	# Only the tangential part: a landing hop and a bit of settle onto the surface are not travel.
+	var up := _player.up.normalized()
+	d -= up * d.dot(up)
+	var head_err := rad_to_deg(acos(clampf(_probe_mark_head.normalized().dot(
+		_probe_mark_fwd.normalized()), -1.0, 1.0)))
+	print("TRAVEL %s dist=%.2f along_facing=%+.2f head_err_at_mark=%.1fdeg" % [
+		tag, d.length(), d.dot(_probe_mark_fwd.normalized()), head_err])
+
+
 func debug_click() -> void:
 	var ev := InputEventMouseButton.new()
 	ev.button_index = MOUSE_BUTTON_LEFT
@@ -772,6 +1093,7 @@ func _process(delta: float) -> void:
 			_restoring_fwd = false
 			_has_saved_fwd = false
 
+	_consume_orbit_grace()
 	_handle_input(delta)
 	_auto_recenter(delta)
 
@@ -791,7 +1113,31 @@ func _process(delta: float) -> void:
 		pivot = pivot.lerp(mid, _focus_weight * 0.75)
 		dist = lerpf(_dist, _dist * FOCUS_PUSH_IN, _focus_weight)
 		pitch = lerpf(_pitch, deg_to_rad(20.0), _focus_weight)
-		_fwd = _fwd.slerp(look_fwd, 1.0 - exp(-2.0 * delta * _focus_weight)).normalized()
+		# Rotated about an EXPLICITLY normalised axis rather than `_fwd.slerp(look_fwd, ...)`.
+		#
+		# `Vector3.slerp` derives its axis as `cross(a, b) / sqrt(cross(a, b).length_squared())`,
+		# and once this ease has CONVERGED — which it does within about a second, and then stays
+		# converged for as long as the dialogue is held — `_fwd` and `look_fwd` are parallel to
+		# within a few ULPs. The cross product is then almost entirely cancellation error, and
+		# normalising it in float32 lands outside `Math::is_equal_approx(1, len)`, so the
+		# `rotated()` inside slerp asserts:
+		#     ERROR: The axis Vector3 (0.0, -1.000509, 0.0) must be normalized.
+		# once per frame. A two-minute run in which the intro dialogue was never dismissed logged
+		# 13,342 of those lines; an ordinary run, where dialogue is read and closed, logs zero,
+		# which is why it went unnoticed. Pre-existing, and cosmetic in the sense that the returned
+		# heading was still fine — but it is a real un-normalised axis and it drowns the log.
+		#
+		# So: bail out below the angle where the axis stops being meaningful (1e-4 rad ~ 0.006 deg,
+		# far finer than the ROT_SMOOTH follow can express) and otherwise rotate about the axis we
+		# normalised ourselves. Same curve as before — slerp of two unit vectors IS a rotation
+		# about that axis by `w` of the angle between them.
+		var fw := 1.0 - exp(-2.0 * delta * _focus_weight)
+		var dp := clampf(_fwd.dot(look_fwd), -1.0, 1.0)
+		var ang_f := acos(dp)
+		if ang_f > 1e-4:
+			var ax := _fwd.cross(look_fwd)
+			if ax.length_squared() > 1e-12:
+				_fwd = _fwd.rotated(ax.normalized(), ang_f * fw).normalized()
 		_fwd = (_fwd - _up * _fwd.dot(_up)).normalized()
 	elif _orbit_weight > 0.001:
 		# Emote orbit. The camera looks ALONG _fwd at the player, so to see the astronaut's front
@@ -923,6 +1269,56 @@ func _set_zoom(target: float) -> void:
 		_zoom_tween.kill()
 	_zoom_tween = create_tween()
 	_zoom_tween.tween_property(self, "_dist", _dist_target, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+## ENDS `LANDING_ORBIT_GRACE` ON THE PLAYER'S FIRST REAL MOVEMENT INPUT, keeping the timer only as
+## a backstop.
+##
+## WHY. 3.5 s was chosen to bracket an OBSERVED sequence — the arrival emote is requested 0.35 s
+## after the thaw and holds the camera about 2.2 s more — rather than derived from one, and nothing
+## in the code enforces the link. Move the arrival emote later, or lengthen it, and the constant
+## silently stops covering the window it exists for. The event the grace is really waiting for is
+## not a duration at all: it is "has the player started driving yet". Once they have, an emote
+## camera can no longer surprise them, because a surprise is only a surprise before you take the
+## wheel — and after the separation of the control basis from the camera heading (see
+## `get_planar_forward`) the orbit cannot misdirect the stick even if it does fire. That is the
+## point of doing both fixes: this constant stops being load-bearing.
+##
+## WHAT COUNTS AS "FIRST REAL INPUT", precisely: gameplay is live (tree not paused, no modal,
+## `Player.input_enabled` true — a cutscene's own scripted presses therefore do not count), and
+## `Input.get_vector` over the four move actions has a magnitude above GRACE_RELEASE_PUSH. It is the
+## same vector `Player._physics_process` builds its wish direction from, read the same polled way,
+## so it cannot disagree with what the astronaut is doing; and a resting thumb at push 0.00 — or a
+## drifting one anywhere under 0.2 — does not count. Camera input is deliberately NOT included:
+## looking around is not taking control of the walk, and `_handle_input`'s yaw branch already
+## cancels an orbit outright.
+##
+## Only ever SHORTENS the window, never extends it, so the measured landing behaviour can only be
+## preserved or improved by it: with no input the deadline is still 3.5 s of wall clock.
+##
+## MEASURED, home -> zorp landing, both runs identical apart from the push (Compatibility renderer,
+## `--ui=mobile`; `play_emote("dance")` requested 2.0 s after control returns, i.e. well inside the
+## 3.5 s window; `orbit_w` and `cam_err` sampled at +0.2 / +0.5 / +0.9 / +1.4 s from that request):
+##
+##   no input at all      orbit_w 0.000 0.000 0.000 0.000   cam_err 0.0 0.0 0.0 0.0    <- refused
+##   0.4 s push at +0.9 s orbit_w 0.345 1.000 1.000 1.000   cam_err 10.9 86.3 136.6 150.8
+##
+## and `head_err` — the control basis — read 0.0 deg on every one of those eight samples, in both
+## runs. So the player who takes the stick gets their emote framing back immediately, the player who
+## has not touched it still gets the quiet arrival camera, and neither of them can be steered by it.
+## The five-delay post-landing push table (15/15 positive, in `Player._camera_planar_forward`) was
+## measured with this code in, so it is a reading of both fixes together.
+func _consume_orbit_grace() -> void:
+	if _orbit_grace_until_ms == 0:
+		return
+	if Time.get_ticks_msec() >= _orbit_grace_until_ms:
+		_orbit_grace_until_ms = 0
+		return
+	if EventBus.is_modal_open() or not _gameplay_active():
+		return
+	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if move.length() > GRACE_RELEASE_PUSH:
+		_orbit_grace_until_ms = 0
 
 
 ## Slowly drifts behind the player after they have been moving for a while.
