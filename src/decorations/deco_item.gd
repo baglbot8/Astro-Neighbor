@@ -41,6 +41,7 @@ var _light_energy: Array[float] = []
 var _night: float = 0.0
 var _ghost_mode: bool = false
 var _body: StaticBody3D
+var _contact_shadow: MeshInstance3D
 var _rng := RandomNumberGenerator.new()
 
 static var _glow_mat: ShaderMaterial
@@ -52,6 +53,14 @@ func _ready() -> void:
 	_rng.seed = hash(get_script().resource_path)
 	_build()
 	_make_collider()
+	# AFTER _make_collider(): the blob is a MeshInstance3D and _visual_aabb() walks every mesh under
+	# the item, so adding it first would flatten the derived collider out to the blob's radius.
+	# DEFERRED, and it has to be: DecorationManager._spawn() calls add_child() — which runs this
+	# _ready() — and only sets `transform` on the NEXT line, so global_transform is still identity
+	# here. The contact shadow now measures the ground it is standing on, and measuring it at the
+	# planet's centre with a world-space up axis gives a garbage fit. One idle frame later the
+	# manager has placed the item and the transform is real.
+	_add_contact_shadow.call_deferred()
 	set_meta("footprint", footprint)
 	set_meta("blocking", blocking)
 	_night = night_factor()
@@ -84,6 +93,36 @@ func _process(delta: float) -> void:
 	_animate(_t, delta)
 
 
+## CONTACT SHADOW, Compatibility only. The browser/phone renderer has the sun's shadow pass switched
+## off (`_no_cast_shadows` in src/world/environment.gd — it is what closes a 26-63 luma-code gap
+## against the desktop reference, and the mechanism is written up there), so a decoration that used
+## to sit in its own shadow now reads as hovering. The art review of that trade named the hub bench
+## specifically, and named the astronaut as the counter-example: the player keeps a blob under its
+## boots and does NOT float. So the decorations get the same blob, from the same shader.
+## The cost is one draw call and two triangles per decoration — see the note on
+## PlanetProps.contact_shadow_quad() for why that is affordable here and is NOT how the planet's
+## scattered props do it. Null on Forward+, where nothing has changed.
+##
+## Half-extents go through PlanetProps.fit_blob() with this item's own ground contact transform, so
+## an item on or beside a bank gets a smaller pool instead of one the ground cuts a hard line
+## through; see the rule at PlanetProps.BLOB_MAX_SAG. planet_under() returns null in the decoration
+## gallery, where the ground really is flat and the fit is a no-op by construction.
+func _add_contact_shadow() -> void:
+	# Deferred (see _ready), so re-check the things that could have changed in that one frame.
+	if _ghost_mode or not is_inside_tree() or _contact_shadow != null:
+		return
+	# `footprint` is the CLEARANCE the placement grid keeps around this item, not its size, so it is
+	# an upper bound only; the pool is sized off the item's own geometry. Same correction, and the
+	# same reason, as PlanetProps._note_contact_shadow().
+	var ab := _visual_aabb()
+	var rx: float = minf(footprint, maxf(absf(ab.position.x), absf(ab.end.x)))
+	var rz: float = minf(footprint, maxf(absf(ab.position.z), absf(ab.end.z)))
+	_contact_shadow = PlanetProps.contact_shadow_quad(rx, rz,
+		PlanetProps.planet_under(self), global_transform)
+	if _contact_shadow != null:
+		add_child(_contact_shadow)
+
+
 ## Turns this instance into an inert preview: lamp lights and ground pools stay off no matter what
 ## the clock does. PlacementController calls this on the ghost, which used to keep casting the item's
 ## real lamp light onto the grass under the hologram.
@@ -97,6 +136,9 @@ func set_ghost_mode(on: bool) -> void:
 			l.visible = false
 		for g in _ground_glows:
 			g.visible = false
+		# A hologram is not standing anywhere yet; a contact shadow under it would say it is.
+		if _contact_shadow != null:
+			_contact_shadow.visible = false
 
 
 # ============================================================================================ build helpers

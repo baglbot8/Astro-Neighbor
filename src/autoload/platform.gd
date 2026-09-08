@@ -46,6 +46,14 @@ func _ready() -> void:
 ## glow — and a phone GPU pays for all of it every frame at full screen resolution. This is
 ## applied ONLY when the renderer is Compatibility or the UI is mobile, so the desktop build
 ## the player likes is untouched.
+##
+## The largest lever here is the 3D RESOLUTION, not any individual effect — see the long note on
+## `scaling_3d_scale` below. Two things this deliberately does NOT do: it does not touch the
+## grass or the props (hiding every prop and every tuft on the home planet moved the frame by
+## 0.18 ms out of 6-12 ms, distributions overlapping, and in two of four batches hiding the
+## props measured SLOWER because they occlude a ground shader that costs more per pixel than
+## they do), and it does not change ambient/lighting sources, which would make the palette work
+## unattributable and repeats a regression that was already reverted once.
 func _apply_quality_profile() -> void:
 	if not (is_compatibility_renderer() or is_mobile()):
 		return
@@ -54,7 +62,33 @@ func _apply_quality_profile() -> void:
 		# MSAA is a per-pixel cost across the whole frame and is the single most expensive
 		# setting here on mobile hardware.
 		vp.msaa_3d = Viewport.MSAA_DISABLED
-		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+		# `screen_space_aa = FXAA` USED TO BE SET HERE AND WAS DELETED: it is a confirmed no-op on
+		# the renderer this branch exists for. The Compatibility backend has no screen-space AA
+		# pass, so the property was stored and never read — it cost nothing and did nothing, and
+		# leaving it in implied an edge-smoothing we were not actually getting.
+		# RENDER 3D AT HALF LINEAR RESOLUTION. This is the fix for "the phone gets warm", and the
+		# reason is a property of the SHIPPED BUILD, not of any one handset:
+		#   * build/web/index.html ships `canvasResizePolicy: 2`, so Godot sizes the WebGL
+		#     drawing buffer as floor(innerWidth * devicePixelRatio) x floor(innerHeight * dpr).
+		#     Measured live in a desktop browser at DPR 2: exactly 4.00x the CSS pixel count.
+		#   * project.godot sets NO `display/window/dpi/allow_hidpi` and NO
+		#     `rendering/scaling_3d/scale`, and `window/stretch/mode="canvas_items"` scales only
+		#     2D — so the 3D pass runs at the full buffer size.
+		# On a DPR-3 iPhone that is 9.00x the pixels of the CSS layout, and the ground fragment
+		# shader runs ~250 procedural-noise hash evaluations per pixel. At 0.5 the 3D pass still
+		# resolves at 1.5x device pixels on that phone — denser than a desktop 1x render — while
+		# the HUD, text and touch controls stay at full canvas resolution because canvas_items
+		# stretch and 2D are unaffected by scaling_3d.
+		#
+		# NO MILLISECOND FIGURE IS CLAIMED. A cross-check on this Mac could not reproduce a
+		# frame-time decomposition (it holds 60 fps at 8.3 megapixels and is not fill-bound at
+		# any resolution a phone would ask for), so the case rests only on the pixel count above.
+		#
+		# 0.5, not 0.35: 0.35 was rendered and compared and is visibly rougher on the ground's
+		# concentric bands. And NOT `allow_hidpi = false`, which would drop the UI to 1x as well
+		# and make the HUD and text soft — the whole point is to keep 2D sharp.
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		vp.scaling_3d_scale = 0.5
 	# Filter quality 4 takes many taps per pixel and is far too expensive on a phone. But HARD is
 	# too far the other way: with no filtering at all the shadow edge aliases into hard dark lines
 	# and self-shadowing shows up as dark patches — reported from a real iPhone as 'shadows look
@@ -62,7 +96,7 @@ func _apply_quality_profile() -> void:
 	# fraction of quality 4's cost.
 	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
 	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
-	print("[Platform] low-power profile applied (no MSAA, soft-low shadows)")
+	print("[Platform] low-power profile applied (no MSAA, 3D scale 0.5, soft-low shadows)")
 
 
 ## Compatibility is the renderer WITHOUT a RenderingDevice. True for the web export (forced onto

@@ -19,6 +19,12 @@ var _path_a: PackedVector3Array = PackedVector3Array()
 var _path_b: PackedVector3Array = PackedVector3Array()
 var _path_width := 1.9
 var _label_counts: Dictionary = {}
+## Contact-shadow blobs collected during a build; see _build_contact_shadows(). Empty on Forward+.
+var _blob_dirs: PackedVector3Array = PackedVector3Array()
+var _blob_rx: PackedFloat32Array = PackedFloat32Array()
+var _blob_rz: PackedFloat32Array = PackedFloat32Array()
+## The prop's own +X axis, so a long thin prop gets a long thin pool aimed the way the prop is.
+var _blob_axes: PackedVector3Array = PackedVector3Array()
 ## Surface-area scale for scatter counts: 1.0 at PlanetData.REFERENCE_RADIUS, (R/16)^2 elsewhere.
 ## Every count in a .tres and every hard-coded count below is a DENSITY expressed at 16 m, so the
 ## same world at any radius keeps the same props per square metre. Without this the shrink in
@@ -56,6 +62,7 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 		_:
 			_meadow()
 	_collectibles()
+	_build_contact_shadows()
 
 # ============================================================================================ helpers
 func _collect_paths() -> void:
@@ -178,6 +185,12 @@ func _spawn_blocking(mesh: ArrayMesh, mats: Array, dir: Vector3, scale: float, f
 	b.transform = _surface_xf(dir, y, sink * scale, align_ground, forward_hint)
 	root.add_child(b)
 	planet.register_prop(dir, footprint * scale)
+	# Contact patch: the collider cylinder AND the mesh's own extents, whichever is smaller on each
+	# axis, capped by the clearance. See _note_contact_shadow() for why `footprint` alone is wrong.
+	var e := _mesh_ground_extents(mesh)
+	_note_contact_shadow(dir, footprint * scale,
+		minf(minf(footprint, col_radius), e.x) * scale,
+		minf(minf(footprint, col_radius), e.y) * scale, b.transform.basis.x)
 	return b
 
 ## Non-blocking prop (mushrooms, tufts clusters, benches' flowers...).
@@ -193,6 +206,10 @@ func _spawn_simple(mesh: ArrayMesh, mats: Array, dir: Vector3, scale: float, foo
 	root.add_child(n)
 	if footprint > 0.0:
 		planet.register_prop(dir, footprint * scale)
+		if shadow:
+			var e := _mesh_ground_extents(mesh)
+			_note_contact_shadow(dir, footprint * scale, minf(footprint, e.x) * scale,
+				minf(footprint, e.y) * scale, n.transform.basis.x)
 	return n
 
 ## Non-blocking prop that must FACE something (a gate across a path, a shelf across a step edge).
@@ -208,6 +225,10 @@ func _spawn_oriented(mesh: ArrayMesh, mats: Array, dir: Vector3, scale: float, f
 	root.add_child(n)
 	if footprint > 0.0:
 		planet.register_prop(dir, footprint * scale)
+		if shadow:
+			var e := _mesh_ground_extents(mesh)
+			_note_contact_shadow(dir, footprint * scale, minf(footprint, e.x) * scale,
+				minf(footprint, e.y) * scale, n.transform.basis.x)
 	return n
 
 func _omni(parent: Node3D, pos: Vector3, color: Color, energy: float, range_m: float) -> void:
@@ -261,6 +282,672 @@ func _multimesh(mesh: ArrayMesh, xfs: Array[Transform3D], tints: PackedColorArra
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mmi)
 	return mmi
+
+## ============================================================ prop contact shadows (Compatibility)
+##
+## WHY THIS EXISTS. src/world/environment.gd::_no_cast_shadows switches the sun's shadow pass OFF
+## under Compatibility. That is not a stylistic choice: the pass is combined in sRGB-ENCODED space
+## on that renderer (C = s2l(l2s(ambient) + l2s(direct))), which is what put the ground 26-63 luma
+## codes away from the Forward+ reference, and dropping the pass is the only fix that does not need
+## a fitted constant. The trade was accepted with its cost written down, and the cost is that every
+## prop lost its contact: the art review of the before/after pair said the hub plaza bench "does
+## read as hovering a few centimetres above the tiles", while noting the astronaut does NOT float
+## because src/player/blob_shadow.gdshader is still under its boots. So the props get the same blob.
+##
+## WHAT THIS IS NOT. It does not reproduce a cast shadow and no claim here says otherwise. The same
+## review's first complaint — the long raking bars the six lamp posts and the bunting masts throw
+## across the whole plaza at h19 — is a projection of geometry away from the prop, and nothing
+## drawn at the prop's own base can bring it back. This restores CONTACT only. The raking bars stay
+## lost on Compatibility until the encoded-blend bug itself is fixed engine-side.
+##
+## COST, MEASURED. One MultiMeshInstance3D per planet — +1 draw call for the WHOLE world, against
+## the +1 draw call PER PROP a child quad each would have cost — plus 2 triangles per blob. Blobs
+## drawn per world: home 39, zorp 26, bolt 32, hub 69, fen 21, grig 35, vela 21, so the worst world
+## is +1 draw call and +138 triangles. The buildings and a player-placed decoration are one mesh
+## each on top of that; they cannot join a batch that was sealed before they existed. The material
+## is unshaded, writes no depth and casts no shadow, so the per-pixel cost is one blend.
+## Build-time cost of the whole pass, including the ground sampling in fit_blob(): 3.8 ms on home,
+## 4.8 ms on hub, 2.9 ms on grig, once per planet load. Nothing here runs per frame.
+##
+## THE BUILDING FIGURE HERE ONCE READ "+4 and +1 draw calls, 2 triangles each" WHEN THE TRUE COST
+## WAS ZERO (fit_blob() rejected all five buildings outright — the origin bug written up above
+## Building._add_contact_shadow()), and then read "+1 draw call and +128 triangles per pool" for
+## geometry no camera could see (the shape bug written up above _contact_shadow_patch()). Both are
+## fixed and this is the third measurement, taken on pools that were confirmed visible in the same
+## build by the shipped-vs-suppressed A/B recorded above _contact_shadow_patch(). Compatibility,
+## --stats, two runs of each configuration, all four numbers stable to the digit across runs:
+##   hub_buildings --focus=deco_store --dist=12 (two pools in frame)   55 vs 53 draw calls,
+##                                                                    331,366 vs 329,766 primitives
+##   hub_buildings --focus=town_hall --dist=25 (four pools in frame)  101 vs 97, 379,394 vs 376,194
+##   hub_buildings --home --focus=player_home --dist=10 (one pool)     43 vs 42, 249,146 vs 248,346
+## That is exactly +1 draw call and +800 triangles per building pool ON SCREEN, so the hub's four
+## buildings cost at most +4 / +3,200 and the home planet's habitat +1 / +800, and a pool that is off
+## camera costs nothing at all. The triangles are up from the flat quad's 2 because a building's pool
+## is a subdivided curved patch (BLOB_PATCH_FLAT / _IN / _OUT); 3,200 triangles against the hub's
+## ~376,000 is 0.85 %, they are unshaded, depth-write-off single-blend fragments, and most of them
+## are under the building and never shade a pixel. The DRAW CALL count — the number the phone's heat
+## budget actually cares about — is +1 per building, which is what the old comment promised and what
+## the batch above exists to avoid paying per PROP.
+##
+## FORWARD+ IS NOT TOUCHED. The gate below is the same `Platform.is_compatibility_renderer()` the
+## environment uses. On Forward+ nothing is collected, nothing is built, and — this is the part
+## that had to be right — nothing here draws from `rng` or calls `planet.register_prop`, so the
+## placement stream is bit-for-bit the sequence it was before. Verified by capture at h13 on all
+## seven worlds: home and bolt byte-identical whole-frame, and on hub, home and fen (the three with
+## region masks) the GROUND region is byte-identical, max delta 0. The other five worlds differ on
+## a few hundred to a few thousand pixels of animated content — NPCs, particles — and the SAME
+## build captured twice differs by the same amount in the same places, so that is the scene's own
+## frame-to-frame nondeterminism and not this change.
+
+## Contact shadows are only drawn where the real cast shadows are gone.
+func _contact_shadows_on() -> bool:
+	return Platform.is_compatibility_renderer()
+
+## Two jobs, and they are both "too small to be worth a draw call". As the GATE in
+## _note_contact_shadow() it is tested against the prop's registered `footprint`: a prop the
+## placement grid did not even keep a quarter-metre clear of is scatter, and the small scatter it
+## would cover (grass, flowers) is already MultiMesh'd in its thousands. As the floor on the fitted
+## blob it drops a pool the sag fit has shrunk past the point of reading as anything but a smudge —
+## dropping it is the right answer there, because the alternative is a blob that clips.
+const BLOB_MIN_R := 0.25
+## A blob is a FLAT quad and the ground is not flat, so the quad and the ground pull apart away from
+## the contact point. Two numbers bound that, and they are the same two the first build used — what
+## has changed is that the ground they are measured against is now SAMPLED instead of assumed.
+##
+##   BLOB_MAX_SAG  the ground RELIEF the quad may span: (highest - lowest) ground sample under it.
+##   BLOB_LIFT     the clearance held above the HIGHEST of those samples.
+##
+## The quad is placed at (highest sample + BLOB_LIFT), so nothing the fit sampled can rise through
+## it, and the worst hover — at the lowest sample, which for a round blob on a round planet is the
+## rim — is their sum. Hover there is invisible: the rim's alpha is zero (a*a of a smoothstep that
+## has just reached 1.0). Poke-through would not be invisible, which is why the lower bound is a
+## hard yes/no rather than a tolerance: the moment the ground rises through the quad the depth test
+## cuts it along the intersection line and leaves a hard edge with no falloff.
+##
+## HONEST NOTE ON WHY THIS IS HERE. The art review of the first build reported the hub grass-ring
+## patches (0 -> 62 codes across three pixels, peak 75) AS clipping, and asked for exactly this
+## measurement. The measurement was built and it says the diagnosis was wrong: casting a ray at
+## every one of 512 points per blob against the planet's own trimesh — the same geometry the depth
+## buffer holds — found 0 of 69 hub blobs cut by the ground, and a dense analytic sweep of the
+## height field agreed. The real cause was size, not sag: see _note_contact_shadow(). This rule is
+## kept anyway because it is a genuine invariant a flat quad on a curved noisy planet can violate,
+## it is now measured rather than assumed, and it costs 3-5 ms once per planet load. It is not what
+## fixed the reported defect and nothing here should claim it was.
+##
+## What the first build actually got wrong HERE was narrower: it took the sphere-sag identity
+## r*r/(2R), solved it for one global r_max = sqrt(2*R*BLOB_MAX_SAG) and applied that single number
+## to every blob on the planet — and applied it to the batch only, never to the one-off quads in
+## contact_shadow_quad(), so a building's 2.5 x 2.0 m half-extents were bounded by nothing at all.
+## On ground that really is a sphere fit_blob() returns the identical answer the closed form did
+## (relief r*r/(2R) <= 0.04 at R = 16 gives 1.13 m); on the flat-zone blend in
+## Planet._terrain_offset(), where the plaza meets the grass ring, it returns a smaller one, and no
+## closed form for a sphere can.
+const BLOB_MAX_SAG := 0.04
+const BLOB_LIFT := 0.02
+## Sag fit sampling. Two rings, because a bank crossing a blob raises the ground in a BAND and 8 rim
+## spokes alone straddle it; the inner ring is also the one that would matter for how a poke-through
+## READS, since alpha is a*a and is still near full at 0.55r while it is zero at the rim. BLOB_LIFT
+## doubles as the margin against relief BETWEEN the samples. The bisection is on the blob's scale
+## and 6 steps resolve it to 1/64 of the footprint, well under a pixel of blob edge at any distance
+## the game frames a prop from.
+const BLOB_FIT_SPOKES := 8
+const BLOB_FIT_INNER := 0.55
+const BLOB_FIT_ITERS := 6
+## Penumbra width in METRES, not as a fraction of the blob. A prop's contact shadow has a soft edge
+## whose width is set by the light source, not by how big the prop is, so a 0.3 m bench blob is all
+## penumbra and a 1.1 m fountain blob keeps a core. That is the whole reason softness is per-instance
+## custom data instead of a uniform: one number here, one batch, correct edge on every footprint.
+const BLOB_PENUMBRA := 0.30
+## Floor on `softness`, which is the smoothstep width as a FRACTION of the blob radius, so a big
+## blob would otherwise get BLOB_PENUMBRA/r -> a thin edge: the 2.5 m half-extent of a default
+## building works out at 0.12, and at the 22 m review distance that falloff spans about two pixels
+## and reads as a DRAWN LINE around the building rather than as shade. It is the same complaint the
+## sag rule above exists to prevent, arriving through the alpha ramp instead of through the depth
+## test, so it gets the same answer: never let the edge be less than ~a quarter of the blob. This
+## is an authored art floor, not a derived quantity — it is the one number in this feature that a
+## measurement did not set, and it only ever makes a blob SOFTER, never darker or larger.
+const BLOB_SOFT_MIN := 0.3
+## PEAK OCCLUSION, and the reason the blob is BLACK rather than the planet's ground_shadow_color.
+## The first build tinted it with data.ground_shadow_color and it was wrong on sight: over the hub's
+## warm tan tiles a mid-value teal at 26% reads as a green STAIN, not as shade, because a blend_mix
+## toward a mid value barely darkens and drags the hue instead. A contact shadow is not a colour
+## laid on the ground, it is light that did not arrive, and the operator for that is multiplicative.
+## Mixing toward black IS that operator: out = ground * (1 - ALPHA), hue-preserving by construction
+## on any world, so nothing here has to know what colour the ground under a given prop is. The one
+## authored number left is the peak, and it is deliberately low — the user's standing note is
+## "shadows look too dark and leave notably dark places and lines", so trading the hover for a hard
+## dark disc would trade one complaint for another. 0.26 against the player blob's 0.5 (which is a
+## navy, not a black): the astronaut is the thing you look at, a bench is not.
+## What this does NOT reproduce is the sky-ambient tint the Forward+ shadow picks up; that colour
+## comes from the light that DOES arrive and is not available to an unlit blend. Measured cost is
+## in the round report.
+## KNOWN DIVERGENCE, WRITTEN DOWN BECAUSE NOBODY HAD: this alpha is constant over the clock. At
+## 02:00 the Forward+ reference has essentially no cast shadow at all (the moon's is off under
+## Compatibility and weak under Forward+), yet the blobs are still at full 0.26. Captured at hub
+## h02 before/after/Forward+ by the art review: the pools are soft and read fine — they land as
+## ground contact rather than as sun shadow, which is what a contact term is — so this is recorded
+## as a divergence and not a defect. Anything that faded it with the clock would need a curve
+## fitted to the sun, and this project has already reverted three of those.
+const BLOB_ALPHA := 0.26
+
+static var _blob_shader: Shader
+static var _blob_mesh: QuadMesh
+
+## Shared 2x2 quad in the XY plane. Sized 2x2 so a basis scaled by r gives a blob of RADIUS r.
+static func _blob_quad() -> QuadMesh:
+	if _blob_mesh == null:
+		_blob_mesh = QuadMesh.new()
+		_blob_mesh.size = Vector2(2.0, 2.0)
+	return _blob_mesh
+
+## Batched material. `instanced = 1.0` is what makes blob_shadow.gdshader read softness from
+## INSTANCE_CUSTOM.x; see the comment block at the top of that file. The SHADER is shared (one
+## compile); a fresh material per planet costs nothing and keeps showcase/planets.tscn — several
+## live worlds at once — from sharing mutable shader state.
+static func contact_shadow_material() -> ShaderMaterial:
+	if _blob_shader == null:
+		_blob_shader = load("res://src/player/blob_shadow.gdshader")
+	var m := ShaderMaterial.new()
+	m.shader = _blob_shader
+	m.set_shader_parameter("instanced", 1.0)
+	m.set_shader_parameter("strength", 1.0)
+	m.set_shader_parameter("color", Color(0.0, 0.0, 0.0, BLOB_ALPHA))
+	return m
+
+## MEASURED SAG FIT, and the placement that goes with it. Returns
+##   .x  the scale in (0, 1] to apply to a candidate blob of world half-extents `rx`/`rz`, or 0.0
+##       when even a BLOB_MIN_R blob cannot meet the rule at BLOB_MAX_SAG — on ground that rough the
+##       honest answer is NO blob, not a clipped one;
+##   .y  the height above `o`, along `n`, to put the quad at, which is BLOB_LIFT above the highest
+##       ground sample under the fitted blob and therefore never less than BLOB_LIFT.
+## `o` is the ground contact point in world space, `n` the ground normal there, `ax`/`az` the blob's
+## two in-plane axes (unit). A null `ground` means flat ground — the decoration and building
+## galleries — where there is nothing to fit, so it returns (1.0, BLOB_LIFT) unchanged.
+##
+## Cost is build-time only; nothing here runs per frame. The common case — a prop whose blob already
+## fits — is one _blob_relief() call, 16 height samples, and returns 1.0; only a blob straddling a
+## bank or a hill pays the six bisection steps on top.
+static func fit_blob(ground: Planet, o: Vector3, n: Vector3, ax: Vector3, az: Vector3, rx: float, rz: float,
+		base_dev: float = 0.0) -> Vector2:
+	if ground == null:
+		return Vector2(1.0, BLOB_LIFT)
+	var d := _blob_relief(ground, o, n, ax, az, rx, rz, base_dev)
+	if d.y - d.x <= BLOB_MAX_SAG:
+		return Vector2(1.0, d.y + BLOB_LIFT)
+	# Smallest scale worth keeping: the one that lands the blob's SHORT axis on BLOB_MIN_R.
+	var k_min := BLOB_MIN_R / maxf(minf(rx, rz), 0.0001)
+	if k_min >= 1.0:
+		return Vector2.ZERO
+	d = _blob_relief(ground, o, n, ax, az, rx * k_min, rz * k_min, base_dev)
+	if d.y - d.x > BLOB_MAX_SAG:
+		return Vector2.ZERO
+	var lo := k_min          # known to fit
+	var hi := 1.0            # known not to
+	var lift := d.y + BLOB_LIFT
+	for _i in BLOB_FIT_ITERS:
+		var mid := 0.5 * (lo + hi)
+		var m := _blob_relief(ground, o, n, ax, az, rx * mid, rz * mid, base_dev)
+		if m.y - m.x <= BLOB_MAX_SAG:
+			lo = mid
+			lift = m.y + BLOB_LIFT
+		else:
+			hi = mid
+	return Vector2(lo, lift)
+
+## (lowest, highest) ground sample under the candidate blob, as signed heights above the tangent
+## plane through `o` along `n`. The contact point itself is height 0 by construction and is included
+## in both, so a blob on flat ground gets exactly (0, 0) and the placement collapses to BLOB_LIFT —
+## the behaviour every prop on a flat plaza had before the fit existed. The half-spoke offset on the
+## inner ring staggers the two rings so sixteen samples cover sixteen bearings rather than eight.
+static func _blob_relief(ground: Planet, o: Vector3, n: Vector3, ax: Vector3, az: Vector3, rx: float, rz: float,
+		base_dev: float = 0.0) -> Vector2:
+	var lo := base_dev
+	var hi := base_dev
+	for ring in 2:
+		var k := 1.0 if ring == 0 else BLOB_FIT_INNER
+		for i in BLOB_FIT_SPOKES:
+			var a := TAU * (float(i) + 0.5 * float(ring)) / float(BLOB_FIT_SPOKES)
+			var p := o + ax * (cos(a) * rx * k) + az * (sin(a) * rz * k)
+			var g := ground.surface_point(p - ground.global_position)
+			var dev := (g - o).dot(n)
+			lo = minf(lo, dev)
+			hi = maxf(hi, dev)
+	return Vector2(lo, hi)
+
+## The Planet whose surface `node` stands on, or null. Ancestors first, because every prop, building
+## and decoration is parented under the planet it was placed on; the "planet" group is the fallback
+## for a node re-parented elsewhere, and it picks the NEAREST planet because showcase/planets.tscn
+## has several live worlds in one tree at once.
+static func planet_under(node: Node3D) -> Planet:
+	var a := node.get_parent()
+	while a != null:
+		if a is Planet:
+			return a
+		a = a.get_parent()
+	var best: Planet = null
+	var best_d := INF
+	for p in node.get_tree().get_nodes_in_group("planet"):
+		if p is Planet:
+			var d: float = node.global_position.distance_squared_to((p as Planet).global_position)
+			if d < best_d:
+				best_d = d
+				best = p
+	return best
+
+## ONE-OFF contact shadow for a prop that cannot join a planet's batch. The hub buildings
+## (src/hub/building_base.gd) and the placeable decorations (src/decorations/deco_item.gd) are each
+## their own scene, added and removed at runtime by the DecorationManager long after PlanetProps has
+## finished, so there is no batch to append to; they get a child quad instead. That IS one draw call
+## and two triangles each, which is exactly what the batch above exists to avoid — it is affordable
+## here only because the counts are small (single-digit buildings per world) and because a
+## decoration the player placed is a thing they are looking at. If a garden ever grows to hundreds
+## of decorations this is the first thing that should become a batch.
+##
+## `rx`/`rz` are the half-extents of the prop's ground rectangle IN THE PARENT'S LOCAL UNITS, so a
+## wide building gets an ellipse rather than a disc — the shader's radial falloff is in UV space, so
+## a non-uniform scale is free. Returns null on Forward+ (real cast shadows are still on there) and
+## for anything too small to read. The caller parents it at its own origin, which is the ground
+## contact point by convention.
+##
+## `base_xf` is the WORLD transform of that contact point: origin ON THE GROUND, basis.y the up
+## axis, basis.x / basis.z the two axes rx and rz are measured along. It is what feeds the same
+## measured sag fit the batch uses — the first build of this feature applied the cap to the batch
+## and NOT here, which left a default building's 2.5 x 2.0 m quad bounded by nothing at all. It
+## must be the transform the prop ENDS UP with: both callers place their node after add_child(), so
+## both defer this past _ready(); see the notes there. Pass Transform3D.IDENTITY with a null
+## `ground` only where the ground really is flat (the galleries); the fit is then a no-op.
+## `base_xf.basis` may carry the parent's scale: its column LENGTHS convert rx/rz to world metres
+## for the fit, and the scale that comes back is dimensionless, so it applies straight to the local
+## half-extents.
+##
+## "ORIGIN ON THE GROUND" IS LOAD-BEARING AND WAS SILENTLY VIOLATED. fit_blob() measures ground
+## relief as signed heights above this origin, and _blob_relief() used to SEED its running (lo, hi)
+## at (0, 0) on the assumption that the contact point is height 0 by construction — true for the
+## batch, where `o` is literally `planet.surface_point(dir)`. building_base.gd used to pass the
+## building's local y = 0, which attach_to_planet() has already sunk `ground_sink` (0.16 m, an
+## @export any subclass may change) below the surface, so every one of the sixteen samples came back
+## at about +0.16, the span blew past BLOB_MAX_SAG, and — the offset being a constant bias that does
+## not shrink when the blob shrinks — the k_min probe failed too. fit_blob() returned ZERO and every
+## building on every world got no pool at all, with nothing printed. Measured before the fix, on the
+## real hub: `lo 0.0000 hi 0.1795`, `hi 0.1595` x3, `hi 0.1395` — never a fit.
+##
+## BOTH ENDS OF THAT ARE FIXED, and it took both. The caller (Building._add_contact_shadow) now
+## projects its footprint centre onto the planet and hands over the real surface point, which is
+## what the contract always asked for. And the ASSUMPTION ITSELF IS GONE from the fit: fit_blob()
+## and _blob_relief() take a `base_dev` seed, and the line above measures it here instead of
+## assuming it. That matters because the assumption failed for a caller other than the buildings
+## too — instrumented on tests/director/critic_deco_stress.json, a handful of placed decorations
+## come out 0.55-0.65 m above the height field (an item set down on a bank or on top of another
+## item), and every one of them was silently getting no pool for exactly the same reason. They fit
+## now.
+##
+## THE BATCH IS BYTE-IDENTICAL BY CONSTRUCTION, NOT BY MEASUREMENT, and that is why `base_dev` is a
+## parameter with a 0.0 default rather than a sample taken inside _blob_relief(). _build_contact_
+## shadows() does not pass it, so its arithmetic is the literal 0.0 it always was. Sampling inside
+## would instead re-project `o` — already `planet.surface_point(dir)` — through a re-normalised
+## direction and come back a float ulp or two off zero, moving every batched blob's fitted lift by
+## ~1e-7 on a path this change has to keep stable.
+##
+## Note for anyone reading this while looking at a building: the caller-side half of the fix is,
+## on its own, INERT for a building's shipped pixels. A building takes the `curved` branch, which
+## returns before fit_blob() is reached, and the curved patch measures the ground at every one of
+## its own vertices, so it lands in the same place either way. It is kept because it is the contract,
+## and because the flat path is one `curved = false` away.
+##
+## `curved` picks the CURVED PATCH instead of a flat quad, and only the buildings ask for it. A flat
+## quad on a sphere can only be as big as BLOB_MAX_SAG allows — on the 21 m hub that is a 1.30 m
+## half-extent (sqrt(2*R*SAG)), which is fine for a 0.7 m bench and useless for a building, because
+## a 2.56 x 2.10 m pool centred under a 5.1 x 4.0 m shop is entirely HIDDEN BY THE SHOP. Measured:
+## with the origin bug fixed and the flat path kept, all four hub buildings fitted at scale 0.457 and
+## rendered no visible pool whatsoever at h6.5 / h13 / h19.3. Simply letting the flat quad run at full
+## size is not the answer either — it would hover 0.155 m off the tiles right where the wall meets the
+## ground (d^2/2R at d = 2.55), which is a worse version of the float this feature exists to remove.
+## So a building's pool is a subdivided patch whose every vertex is placed BLOB_LIFT above its own
+## ground sample: it follows the flattened disc, the disc's blend into the grass ring and any bank
+## under it, poke-through is impossible by construction rather than by a size cap, and no sag fit is
+## needed. Props and decorations keep the flat quad — theirs already fit at scale 1.0.
+static func contact_shadow_quad(rx: float, rz: float, ground: Planet = null,
+		base_xf: Transform3D = Transform3D.IDENTITY, curved: bool = false) -> MeshInstance3D:
+	if not Platform.is_compatibility_renderer():
+		return null
+	var sx: float = maxf(base_xf.basis.x.length(), 0.0001)
+	var sz: float = maxf(base_xf.basis.z.length(), 0.0001)
+	if curved and ground != null:
+		if minf(rx * sx, rz * sz) < BLOB_MIN_R:
+			return null
+		return _contact_shadow_patch(rx, rz, ground, base_xf, sx, sz)
+	# rx/rz arrive as the prop's CONTACT half-extents; the visible pool is that plus the soft ring.
+	# See _note_contact_shadow() for why a pool the size of the base alone is invisible.
+	rx += BLOB_PENUMBRA / sx
+	rz += BLOB_PENUMBRA / sz
+	# The contact point's OWN height above the ground, which is the seed the relief fit measures
+	# every other sample against. Zero for a caller that honours the "origin on the ground" contract
+	# above; the reason it is measured rather than assumed is written up there too.
+	var up := base_xf.basis.y.normalized()
+	var dev := 0.0
+	if ground != null:
+		dev = (ground.surface_point(base_xf.origin - ground.global_position) - base_xf.origin).dot(up)
+	var fit := fit_blob(ground, base_xf.origin, up,
+		base_xf.basis.x / sx, base_xf.basis.z / sz, rx * sx, rz * sz, dev)
+	if fit.x <= 0.0:
+		return null
+	rx *= fit.x
+	rz *= fit.x
+	# fit.y is in world metres; the quad's own y is in the parent's local units.
+	var lift: float = fit.y / maxf(base_xf.basis.y.length(), 0.0001)
+	if minf(rx * sx, rz * sz) < BLOB_MIN_R:
+		return null
+	var mi := MeshInstance3D.new()
+	mi.name = "ContactShadow"
+	mi.mesh = _blob_quad()
+	var m := contact_shadow_material()
+	# Not batched: one material per prop, so softness is a uniform and INSTANCE_CUSTOM stays unread.
+	# Softness is a fraction of the blob, so it is measured on the WORLD half-extents.
+	m.set_shader_parameter("instanced", 0.0)
+	m.set_shader_parameter("softness", clampf(BLOB_PENUMBRA / minf(rx * sx, rz * sz), BLOB_SOFT_MIN, 1.0))
+	mi.material_override = m
+	# QuadMesh lies in XY facing +Z; -90 deg about X lays it flat with its normal along +Y.
+	mi.transform = Transform3D(
+		Basis(Vector3(rx, 0.0, 0.0), Vector3(0.0, 0.0, -rz), Vector3(0.0, 1.0, 0.0)),
+		Vector3(0.0, lift, 0.0))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+## Subdivision of a curved contact patch, per HALF axis. Three zones, because the patch has three
+## jobs across its width and they want very different sample spacings.
+##
+## BLOB_PATCH_FLAT covers centre -> (footprint - ring), where alpha is ZERO and the only thing the
+## subdivision has to buy is following the ground: the patch is a chord between its samples, so
+## between two samples h metres apart it dips h*h/(8R) below a sphere of radius R and that dip has to
+## stay inside BLOB_LIFT (0.02 m). The widest flat zone in the game is the event space's 2.96 m half,
+## so h = 1.48 m and the dip is 1.48^2/(8*21.2) = 0.013 m. Two segments is enough and one is not.
+##
+## BLOB_PATCH_IN and BLOB_PATCH_OUT carry the two halves of the alpha BAND (see _contact_shadow_patch
+## for why it is a band and not a filled disc), and they have to resolve a RAMP, not a surface. The
+## ramp is baked per vertex, so it interpolates linearly across a cell and too few cells show as
+## facets. The narrowest ring in the game is the home habitat's 1.02 m: four segments put a vertex
+## every 0.26 m, which at the 8 m review distance is under two pixels of ramp per cell. Three was
+## visibly banded on the h13 capture of the town hall, where the ring is 1.58 m and the camera close.
+##
+## Cost: (2*(2+4+4)+1)^2 = 441 vertices and 2*(2*10)^2 = 800 triangles per building, built once at
+## load and drawn in the ONE draw call the pool already cost. The interior of the grid is alpha 0 and
+## is under the building anyway, so it is not overdraw anybody pays for. See the cost paragraph at
+## the top of this section for the measured draw-call and primitive numbers.
+const BLOB_PATCH_FLAT := 2
+const BLOB_PATCH_IN := 4
+const BLOB_PATCH_OUT := 4
+
+## A contact pool that FOLLOWS the ground instead of hovering over it — see the `curved` paragraph
+## on contact_shadow_quad() for why a building cannot use the flat quad. Every grid vertex is
+## dropped onto the planet with the same radial projection _blob_relief() samples with, then raised
+## BLOB_LIFT along the local up axis, so the ground can never rise through the patch and there is
+## no sag rule left to fail. Measured on showcase/hub_buildings.tscn, every vertex of all four hub
+## patches sits between 0.020 and 0.370 m above the height field it was built from.
+##
+## Returned with an IDENTITY basis and a ZERO origin: the vertices already carry the full offset
+## from `base_xf.origin`, expressed in the PARENT's local units (world metres divided by the
+## parent's own column scales), so the caller places the node at the local coordinates of
+## `base_xf.origin` and nothing else. That is why Building._add_contact_shadow() adds `q.position.y`
+## to the ground's local y rather than overwriting it — the flat quad carries its lift there, this
+## one carries zero.
+##
+## `cx`/`cz` are the half-extents of the GROUND CONTACT RECTANGLE — for a building, the rectangle its
+## own geometry actually stands in, measured off its vertices by Building._ground_contact_rect().
+##
+## ======================= WHY THIS IS A BAND ROUND A RECTANGLE, NOT A FILLED ELLIPSE ==============
+## The build before this one made this patch a filled ellipse — r = patch / (1 - BLOB_SOFT_MIN), the
+## shader's radial-in-UV falloff, core semi-axes landing on the footprint — and an art review found
+## the pools INVISIBLE on every building, then proved it: with the material forced to opaque red the
+## deco store's 7.9 x 6.1 m disc showed a 2 px sliver, the town hall's 8.0 m disc showed nothing at
+## all, and a shipped-vs-suppressed A/B at nine camera/hour combinations moved zero ground pixels.
+## Three separate faults, all of them about SHAPE rather than size, and all three are fixed here.
+##
+## 1. THE PATCH WAS SIZED OFF THE COLLIDER, WHICH IS SMALLER THAN THE BUILDING AND NOT CONCENTRIC
+##    WITH IT. That half is fixed at the call site; the measurements are in the block above
+##    Building._ground_contact_rect(). Short version: the plinths, aprons and steps that actually
+##    meet the tiles stick out past `_primary_footprint()` by 0.6-2.5 m and sit up to 1.7 m off its
+##    centre, so the old ellipse had its whole soft ring INSIDE the building on the deep side.
+##
+## 2. AN ELLIPSE THROUGH A RECTANGLE'S SIDES MISSES ITS CORNERS COMPLETELY. With the core ellipse
+##    inscribed in the footprint, a point at the footprint's CORNER sits at UV radius
+##    sqrt(2) * (1 - soft) = 0.99 of the way to the rim, so alpha there is (1 - smoothstep(0.7, 1,
+##    0.99))^2 = 0.001 % — nothing. A rectangular shop would have had a pool at the middle of each
+##    wall and none at the four corners it is most obviously standing on. Growing the ellipse until
+##    it circumscribes the rectangle instead throws the mid-side ring out to 1.41 * patch, which on
+##    the event space is 5.9 m of darkened plaza on a side with nothing standing on it.
+##
+## 3. A FILLED CORE STAINS ANY DECK THE BUILDING DOES NOT COVER. Two of the five buildings stand on
+##    a flat deck that is level with the plaza — the event space's 8.1 x 9.4 m dance floor and the
+##    town hall's stone plinth — and a pool at full BLOB_ALPHA over its whole footprint paints that
+##    deck, which is lit ground, a flat 26 % darker. Captured at h19.3 on the event space and it is
+##    exactly the "shadows leave notably dark places" note the user has standing.
+##
+## So the field is the DISTANCE TO THE FOOTPRINT RECTANGLE'S EDGE, with rounded corners, and alpha
+## peaks ON that edge and falls to zero over one ring width in BOTH directions. That is what a
+## contact shadow is: the ground is darkest where the building touches it. Inwards the falloff is
+## invisible on a solid building (the mass is standing on it) and is exactly what saves the two
+## decks; outwards it is the pool the plaza sees. Both halves are one ring wide, so the band hugs
+## the building on all four sides and round the corners at one constant width.
+##
+## It costs no shader change and no per-frame work. `blob_shadow.gdshader` computes its ramp from
+## `length(UV - 0.5) * 2`, and NOTHING says that has to be the geometric radius. Each vertex is given
+## the UV (0.5 + 0.5 * r, 0.5), so that expression returns exactly `r`, and `r` is written as
+## (1 - soft) + soft * t with t the normalised distance from the footprint EDGE. The shader then maps
+## t = 0 (on the edge) to full alpha and t = 1 (a ring width away, either side) to zero, with its own
+## smoothstep-squared in between, unchanged. Putting every UV on the v = 0.5 line with u >= 0.5 is
+## what makes this exact rather than approximate: `length` of a linearly interpolated UV is not the
+## interpolation of the lengths in general, but on that line it is u - 0.5, which is linear. It is
+## also why the two ramps need their own segment counts — the falloff is piecewise linear in the
+## vertices now instead of per-fragment radial.
+##
+## RING WIDTH. One width all the way round, from the same BLOB_SOFT_MIN the ellipse used, applied to
+## the SHORT half-extent so a long building does not get a wider skirt on its long side than its
+## short one: ring = patch_min * soft / (1 - soft) = 0.43 * patch_min, floored at BLOB_PENUMBRA so a
+## small building can never end up tighter than a prop. Measured: home habitat 1.02 m, Suit-Up
+## 1.11 m, deco store 1.28 m, town hall 1.58 m, event space 1.73 m. That is the right direction for
+## the user's standing note — penumbra width scales with the occluder, so the biggest thing on the
+## plaza gets the softest edge, and the peak stays at the props' own BLOB_ALPHA rather than going
+## darker.
+static func _contact_shadow_patch(cx: float, cz: float, ground: Planet, base_xf: Transform3D,
+		sx: float, sz: float) -> MeshInstance3D:
+	var soft := BLOB_SOFT_MIN
+	# Ring width in the PARENT's local units, like cx/cz; sx/sz turn it into metres for the floor.
+	var ring: float = maxf(minf(cx * sx, cz * sz) * soft / (1.0 - soft), BLOB_PENUMBRA)
+	var ring_x: float = ring / sx
+	var ring_z: float = ring / sz
+	var sy: float = maxf(base_xf.basis.y.length(), 0.0001)
+	var ax := base_xf.basis.x / sx
+	var up := base_xf.basis.y / sy
+	var az := base_xf.basis.z / sz
+	var o := base_xf.origin
+	# Graded coordinate table per axis: a coarse flat interior, then the two ramps. Built per axis so
+	# the two footprint half-extents can differ while the band keeps one width.
+	var col := _patch_coords(cx, ring_x)
+	var row := _patch_coords(cz, ring_z)
+	var n := col.size()
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for j in n:
+		for i in n:
+			var x: float = col[i]
+			var z: float = row[j]
+			var p := o + ax * (x * sx) + az * (z * sz)
+			var g := ground.surface_point(p - ground.global_position)
+			verts.append(Vector3(x, ((g - o).dot(up) + BLOB_LIFT) / sy, z))
+			# Distance from the footprint rectangle's EDGE, in metres. Outside: the straight-line
+			# distance to the rectangle, which rounds the corners. Inside: the distance to the
+			# nearest side. Zero exactly on the edge, which is where the band peaks.
+			var ex: float = maxf(absf(x) - cx, 0.0) * sx
+			var ez: float = maxf(absf(z) - cz, 0.0) * sz
+			var d: float = sqrt(ex * ex + ez * ez)
+			if d <= 0.0:
+				d = minf((cx - absf(x)) * sx, (cz - absf(z)) * sz)
+			var t: float = clampf(d / ring, 0.0, 1.0)
+			uvs.append(Vector2(0.5 + 0.5 * ((1.0 - soft) + soft * t), 0.5))
+	for j in n - 1:
+		for i in n - 1:
+			var a := j * n + i
+			idx.append_array([a, a + n, a + 1, a + 1, a + n, a + n + 1])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mi := MeshInstance3D.new()
+	mi.name = "ContactShadow"
+	mi.mesh = mesh
+	var m := contact_shadow_material()
+	# Not batched: softness is a uniform here. It is no longer a fraction of a radius — the UVs above
+	# are written so that the shader's own `1 - smoothstep(1 - soft, 1, r)` reads the baked ramp
+	# parameter directly — but it still has to MATCH the number they were written against.
+	m.set_shader_parameter("instanced", 0.0)
+	m.set_shader_parameter("softness", soft)
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+## Sample coordinates along one axis of a contact patch, from -(half + ring) to +(half + ring),
+## graded into the three zones the band needs. Symmetric, and it always lands a vertex exactly on the
+## footprint edge (index +/- (BLOB_PATCH_FLAT + BLOB_PATCH_IN)), which is what keeps the peak of the
+## band square with the building instead of stepping across it. `half - ring` clamps at zero for a
+## building small enough that the inward ramp reaches its centre.
+static func _patch_coords(half: float, ring: float) -> PackedFloat32Array:
+	var inner: float = maxf(half - ring, 0.0)
+	var out := PackedFloat32Array()
+	var n := BLOB_PATCH_FLAT + BLOB_PATCH_IN + BLOB_PATCH_OUT
+	for k in range(-n, n + 1):
+		var a := absf(float(k))
+		var d := 0.0
+		if a <= float(BLOB_PATCH_FLAT):
+			d = inner * a / float(BLOB_PATCH_FLAT)
+		elif a <= float(BLOB_PATCH_FLAT + BLOB_PATCH_IN):
+			d = inner + (half - inner) * (a - float(BLOB_PATCH_FLAT)) / float(BLOB_PATCH_IN)
+		else:
+			d = half + ring * (a - float(BLOB_PATCH_FLAT + BLOB_PATCH_IN)) / float(BLOB_PATCH_OUT)
+		out.append(d if k >= 0 else -d)
+	return out
+
+## Half-extents of a prop's own geometry on the ground, from its mesh, in the mesh's own units and
+## its own axes: (x, z). Per axis and not a single radius, because a bench is 1.4 m long and 0.5 m
+## deep and a disc that covers it also covers a metre of lit tile either side of it.
+static func _mesh_ground_extents(mesh: Mesh) -> Vector2:
+	var ab := mesh.get_aabb()
+	return Vector2(maxf(absf(ab.position.x), absf(ab.end.x)), maxf(absf(ab.position.z), absf(ab.end.z)))
+
+## Called by the three spawners with the CONTACT radius of the prop they just placed. Collect only;
+## the batch is built once, after the biome has finished placing.
+##
+## THE RADIUS IS NOT THE `footprint` THE PROP REGISTERED, and the first build of this feature made
+## exactly that mistake. `footprint` is a CLEARANCE: Planet.register_prop() uses it to keep the next
+## placement away, so it is deliberately larger than the prop and, for anything tall and thin, very
+## much larger. The hub's bunting masts are the extreme case — footprint 1.90 m around a pole whose
+## collider is 0.10 m — and a 3.8 m wide pool under a 20 cm pole is not a contact shadow, it is a
+## dark patch on the grass with no visible owner. That is what an art review found on the hub grass
+## ring and reported as clipping (0 -> 62 codes across three pixels, peak 75); the geometry turned
+## out to be fine, and a ray cast against the planet's own trimesh at 512 points per blob confirmed
+## that not one blob was cut by the ground. The blob was simply far too big for its prop, and the
+## hard edge was the ground's own relief occluding a huge quad at a grazing angle.
+##
+## So the size is MEASURED off the prop instead, from whichever of the two descriptions of it is
+## real: `col_radius` for a blocking prop (that cylinder is the ground the prop stands on, authored
+## per prop and already trusted by physics) AND the mesh's own XZ half-extents, whichever is smaller
+## on each axis, capped by `footprint`, which stays an upper bound. Measured on the hub plaza:
+## bunting 1.90 -> 0.10, lamp post 0.40 -> 0.16, bench 0.90 -> 0.70 x 0.25, fountain 2.20 -> 2.00,
+## potted trees 1.07-1.38 -> 0.32-0.41.
+##
+## PER AXIS, and that is what closed the noon regression the first build caused. A bench is 1.4 m
+## long and 0.5 m deep; a disc big enough to cover it also covers a metre of LIT tile either side,
+## and at 13:00 the Forward+ shadow is short and tight under the bench, so every one of those
+## pixels is a 40-code error against the reference. Measured on showcase/planet_hub.tscn at 13:00,
+## ground region against the Forward+ capture: MAE 4.43 with no blobs at all, 5.89 with the round-1
+## disc, 4.81 with this ellipse; p95 13.0 / 50.0 / 22.0. The ellipse is aimed down the PROP's own
+## X axis (see _build_contact_shadows), which costs one more PackedVector3Array at build time and
+## nothing at all per frame.
+##
+## THE BLOB IS THAT CONTACT PATCH PLUS ONE BLOB_PENUMBRA, and it has to be: a pool exactly the size
+## of the prop's base is hidden UNDER the prop and does nothing. Sizing the potted trees at their
+## collider alone was captured and looked at — the pot covers its own pool completely and the tree
+## reads exactly as it did with no blob at all. The ring that reads as contact is the soft edge, so
+## the blob is the core plus the soft edge, and the width of that edge is already a measured number
+## with a reason attached (BLOB_PENUMBRA, below). No new constant. Same construction for the
+## one-off quads in contact_shadow_quad(), which take contact half-extents and add the same ring.
+##
+## `footprint` is still the GATE — a prop too small to have been given clearance is too small to be
+## worth a draw — but it no longer sets the size.
+##
+## AND THE ORDER OF THOSE TWO LINES BELOW MATTERS, because a round-1 report got it backwards and
+## claimed the hub's ten lamp posts and three bunting masts end up with NO pool at all, their
+## 0.16 m and 0.10 m contact patches falling under BLOB_MIN_R. They do not. BLOB_PENUMBRA (0.30 m)
+## is added HERE, when the blob is collected, and _build_contact_shadows() only tests
+## `minf(rx, rz) < BLOB_MIN_R` afterwards, on the summed radius. All thirteen are kept — instrumented
+## on showcase/planet_hub.tscn, the 69 batched blobs include rx 0.460 ten times (lamp posts) and
+## rx 0.400 three times (masts), both comfortably over the 0.25 m floor. Nothing needs fixing; do not
+## "restore" a pool that was never missing.
+func _note_contact_shadow(dir: Vector3, footprint: float, cx: float, cz: float, axis: Vector3) -> void:
+	if not _contact_shadows_on() or footprint < BLOB_MIN_R:
+		return
+	_blob_dirs.append(dir)
+	_blob_rx.append(cx + BLOB_PENUMBRA)
+	_blob_rz.append(cz + BLOB_PENUMBRA)
+	_blob_axes.append(axis)
+
+## One MultiMesh for every prop blob on the planet.
+func _build_contact_shadows() -> void:
+	if _blob_dirs.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	# Same WEB/COMPATIBILITY reason as _multimesh() above: with use_colors off, Compatibility feeds
+	# COLOR as (0,0,0,0). This shader never reads COLOR, but the attribute is still bound, and
+	# leaving it unsupplied is the configuration that black-silhouetted the grass. White = no-op.
+	mm.use_colors = true
+	mm.mesh = _blob_quad()
+	# Two passes: fit every candidate first, because a blob the fit rejects must not take an instance
+	# slot. instance_count is set once and MultiMesh has no "skip this one" — a leftover slot would
+	# draw the identity quad at the planet's centre.
+	var xfs: Array[Transform3D] = []
+	var softs: PackedFloat32Array = PackedFloat32Array()
+	for i in _blob_dirs.size():
+		var dir: Vector3 = _blob_dirs[i]
+		# Lie in the local ground plane, not the sphere's tangent plane, so a blob on a slope stays
+		# in contact with the slope. ground_normal() samples the height field either side of dir.
+		var n := planet.ground_normal(dir)
+		# Aim the ellipse down the PROP's own X axis, projected into that plane, so a bench's pool
+		# lies along the bench. Nothing here may touch `rng`: the placement stream has to stay
+		# identical to the Forward+ build, which never runs this function at all.
+		var tx: Vector3 = _blob_axes[i]
+		tx = tx - n * tx.dot(n)
+		if tx.length_squared() < 1e-6:
+			tx = n.cross(Vector3.UP)
+			if tx.length_squared() < 1e-6:
+				tx = n.cross(Vector3.RIGHT)
+		tx = tx.normalized()
+		var tz := n.cross(tx)
+		var o := planet.surface_point(dir)
+		var fit := fit_blob(planet, o, n, tx, tz, _blob_rx[i], _blob_rz[i])
+		var rx: float = _blob_rx[i] * fit.x
+		var rz: float = _blob_rz[i] * fit.x
+		if minf(rx, rz) < BLOB_MIN_R:
+			continue
+		xfs.append(Transform3D(Basis(tx * rx, tz * rz, n), o + n * fit.y))
+		softs.append(clampf(BLOB_PENUMBRA / minf(rx, rz), BLOB_SOFT_MIN, 1.0))
+	if xfs.is_empty():
+		return
+	mm.instance_count = xfs.size()
+	for i in xfs.size():
+		mm.set_instance_transform(i, xfs[i])
+		mm.set_instance_color(i, Color.WHITE)
+		mm.set_instance_custom_data(i, Color(softs[i], 0.0, 0.0, 0.0))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "ContactShadows"
+	mmi.multimesh = mm
+	mmi.material_override = contact_shadow_material()
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mmi)
 
 func _vary(c: Color, amount: float) -> Color:
 	var k := 1.0 + rng.randf_range(-amount, amount)

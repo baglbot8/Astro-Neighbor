@@ -93,6 +93,7 @@ var _night_target: float = 0.0
 var _poll: float = 0.0
 var _env: Node = null
 var _rng := RandomNumberGenerator.new()
+var _contact_shadow: MeshInstance3D
 
 static var _glow_mat: ShaderMaterial
 ## Cache of R2.9 building materials, keyed by their option dictionary. Five buildings share about
@@ -106,12 +107,18 @@ func _ready() -> void:
 		display_name = UIStyle.pretty_id(building_id)
 	_build()
 	_make_footprint()
+	# DEFERRED, and it has to be: World._spawn_buildings() calls add_child() — which runs this
+	# _ready() — and only then attach_to_planet(), so global_transform is still identity here and the
+	# contact shadow now MEASURES the ground it stands on. attach_to_planet() calls this itself the
+	# moment the transform is real; this deferred call is the fallback for a building that is never
+	# attached to a planet at all (the building gallery), and it no-ops if the first one won.
 	door = add_interactable("Door", door_local, door_prompt, 3.0, _on_door)
 	_night = night_factor()
 	_night_target = _night
 	_apply_night()
 	EventBus.day_phase_changed.connect(_on_phase_changed)
 	set_process(_animated or not _lights.is_empty())
+	_add_contact_shadow.call_deferred()
 
 
 func _process(delta: float) -> void:
@@ -168,6 +175,7 @@ func attach_to_planet(p: Planet) -> void:
 	# -Z of the returned basis points along the hint, and the model's door faces -Z.
 	global_transform = p.surface_transform(dir, toward_plaza)
 	global_position -= global_transform.basis.y * ground_sink
+	_add_contact_shadow()
 	_on_attached(p, dir)
 
 
@@ -189,6 +197,205 @@ func _footprint_shapes() -> Array:
 	var box := BoxShape3D.new()
 	box.size = footprint_size
 	return [[box, footprint_offset + Vector3(0.0, footprint_size.y * 0.5, 0.0)]]
+
+
+## CONTACT SHADOW, Compatibility only. That renderer runs with the sun's shadow pass off
+## (`_no_cast_shadows` in src/world/environment.gd, which is what closes a 26-63 luma-code gap
+## against the desktop reference), so nothing on the hub plaza sits in its own shade any more. The
+## art review of that trade called the loss out on the plaza props; a building is the largest thing
+## standing on those tiles, so it gets the same blob the astronaut and the props now have. Null on
+## Forward+, where the real cast shadows are untouched.
+##
+## SIZED FROM `_ground_contact_rect()` — the rectangle this building's own VERTICES stand in, not
+## the rectangle its collider blocks the player with. That distinction is the whole reason this
+## feature shipped twice without producing a visible pixel; the measurements are in the block above
+## that function, and the shape the size feeds into is in PlanetProps._contact_shadow_patch(). The
+## pool is a curved patch that follows the ground, and its alpha is a soft BAND on the line where
+## the building meets the plaza, not a filled disc under it.
+##
+## THE POOL IS OFF-CENTRE FROM THE BUILDING'S ORIGIN, AND HAS TO BE. A shop's steps and porch make
+## its ground rectangle up to 1.7 m deeper on the door side than the back, so the node is placed at
+## the rectangle's own centre (`base.z`, `base.w`) rather than at the building's origin.
+##
+## `base_xf.origin` HAS TO BE THE POINT ON THE GROUND. `attach_to_planet()` has already pushed the
+## whole building `ground_sink` metres (0.16 by default, an @export any subclass may change) down its
+## own basis.y, so the building's local y = 0 is BELOW the surface — the one place in the game where
+## the model convention "origin at the ground contact point" is deliberately not true. Handing that
+## buried point to PlanetProps.fit_blob() is what produced ZERO building pools on every world two
+## builds ago, silently; the whole mechanism, and the matching fix inside the fit, is written up
+## above PlanetProps.contact_shadow_quad(). So: sample the planet along the radial through the
+## rectangle's centre — the same projection _blob_relief() uses for its own samples — and hand it
+## that point. `to_local(...).y` puts the answer back into the building's own sunk local frame.
+##
+## Be aware, if you are here to change it, that this correction currently changes NO PIXEL for a
+## building on a planet: the curved patch takes its own ground sample at every vertex and returns
+## before fit_blob() runs. It is here because it is the documented contract and because a building
+## is one `curved = false` away from depending on it. With no planet at all (the building gallery)
+## the ground really is flat AND the building was never sunk, so the contact point is local y = 0,
+## the offset is zero, and that path takes the flat quad because there is nothing to follow.
+func _add_contact_shadow() -> void:
+	if _contact_shadow != null or not is_inside_tree():
+		return
+	# FORWARD+ LEAVES HERE, before anything is measured. contact_shadow_quad() gates on the same
+	# call and would return null anyway, but the vertex scan in _ground_contact_rect() below is a
+	# few thousand transforms per building and the desktop renderer, which still draws real cast
+	# shadows, must not pay for a pool it will not get. It also makes "Forward+ is untouched by this
+	# feature" true by construction rather than by capture.
+	if not Platform.is_compatibility_renderer():
+		return
+	var ground: Planet = planet if planet != null else PlanetProps.planet_under(self)
+	var base := _ground_contact_rect()
+	var centre := Vector3(base.z, 0.0, base.w)
+	# The footprint rectangle's centre at local y = 0, in world space: ground_sink under the surface.
+	var base_xf := global_transform
+	base_xf.origin = global_transform * centre
+	# Local y of the ground above that point, which every height in the pool is measured from.
+	var ground_local_y := 0.0
+	if ground != null:
+		base_xf.origin = ground.surface_point(base_xf.origin - ground.global_position)
+		ground_local_y = to_local(base_xf.origin).y
+	var q := PlanetProps.contact_shadow_quad(base.x, base.y, ground, base_xf, true)
+	if q == null:
+		return
+	# The curved patch carries its lift per vertex and returns position.y = 0; the flat quad (no
+	# planet) carries it in position.y. Adding covers both.
+	q.position = Vector3(centre.x, ground_local_y + q.position.y, centre.z)
+	_contact_shadow = q
+	add_child(q)
+
+
+## CONTACT BAND. Height above the surface inside which a vertex counts as "standing on the ground",
+## and the lower guard that keeps a stray mesh out of the measurement.
+##
+## 0.35 m is picked off a plateau, not tuned: the measured rectangle is IDENTICAL at 0.25, 0.35, 0.50
+## and 1.00 m on the town hall, the deco store and Suit-Up, and moves once on the event space (its
+## z half goes 4.36 -> 4.69 as the stage's back rail comes in above 0.35). Anything wide enough to
+## matter here is a plinth, an apron or a step, and those are all in the first quarter metre; the
+## next thing up is a roof eave at 3-5 m, so there is a wide gap to sit in.
+##
+## The -2.0 m guard is not theoretical. Suit-Up carries a mesh whose local AABB starts at y = -21.5
+## (its hanging sign's billboard geometry, authored around a far-away pivot); without a lower bound
+## the band test "y <= surface + 0.35" is true for every vertex in it and the shop's contact
+## rectangle grows to whatever that mesh spans. Real buried geometry — the plinths, which reach
+## -0.85 m — is well inside the guard.
+const CONTACT_BAND := 0.35
+const CONTACT_BAND_BELOW := 2.0
+
+## THE RECTANGLE THE BUILDING ACTUALLY STANDS IN, as (half_x, half_z, centre_x, centre_z) in local
+## units — measured off its own vertices, unioned with the collider rectangle as a floor.
+##
+## THIS EXISTS BECAUSE `_primary_footprint()` IS THE WRONG NUMBER FOR A POOL, and sizing the pool
+## from it is what made the previous build's building pools invisible even though they were being
+## created, were geometrically above the height field, and were the right shape. `_primary_footprint()`
+## is the largest volume the PLAYER IS BLOCKED BY; the plinth, apron and steps that actually meet the
+## tiles stick out past it, and not symmetrically. Measured on showcase/hub_buildings.tscn, collider
+## half-extents -> vertex-measured ground rectangle (half-extents @ centre):
+##   town hall      2.79 x 2.79 @ (0.00,  0.00)  ->  3.69 x 3.73 @ (-0.23, -0.31)
+##   deco store     2.75 x 2.15 @ (0.00,  0.00)  ->  3.33 x 2.98 @ (-0.14, -0.84)
+##   Suit-Up        2.55 x 2.00 @ (0.00,  0.00)  ->  3.15 x 2.58 @ (-0.05, -0.59)
+##   event space    3.50 x 2.20 @ (0.00,  0.55)  ->  4.04 x 4.69 @ ( 0.01, -1.49)
+## The centre offsets are the point: the deco store's real base sits 0.84 m back in z from its
+## collider, so a pool centred on the collider had its whole soft ring INSIDE the apron on the deep
+## side while overshooting on the shallow one. An art review of that build measured the deco store's
+## pool as a 2 px sliver and the town hall's as nothing at all, with the material forced to opaque
+## red — so this is not a subtlety about alpha, the geometry was in the wrong place.
+##
+## This is the same correction, at building scale, that PlanetProps._note_contact_shadow() had to
+## make for the props: size the pool off the prop's own geometry, not off a number that was authored
+## for something else (clearance there, collision here). The props read a mesh AABB because a prop is
+## one mesh; a building is dozens of meshes with a roof on top, so an AABB of the whole thing is the
+## ROOF, and the band test below is what an AABB cannot do.
+##
+## OVER-COVERING IS STILL THE FAILURE MODE TO AVOID, and the union with the collider rectangle is
+## deliberately a FLOOR and not the answer: nothing here grows the rectangle past real geometry. A
+## flagpole or a bunting mast standing 3.7 m out does widen it — it is a thing standing on the ground
+## at 3.7 m — but only by the pole's own width, because this measures vertices and not bounding
+## boxes. The event space's 4.69 m z half is its stage deck, which is 9.4 m of timber lying on the
+## plaza, and a pool that stopped at the collider's 2.2 m would leave two thirds of that deck floating.
+##
+## Cost: one pass over every vertex of the building, once, at load — 5,400 vertices on the largest
+## (Suit-Up), under a millisecond, and never again. Nothing here runs per frame.
+func _ground_contact_rect() -> Vector4:
+	var box := _primary_footprint()
+	var mnx: float = box.z - box.x
+	var mxx: float = box.z + box.x
+	var mnz: float = box.w - box.y
+	var mxz: float = box.w + box.y
+	# `attach_to_planet()` has sunk the whole building `ground_sink` down its own basis.y, so the
+	# surface it stands on is at local y = ground_sink, not 0. Unattached (the building gallery) the
+	# sink was never applied and ground_sink is still the right answer only by accident — but there
+	# the ground is flat and the band is generous enough either way.
+	var top: float = ground_sink + CONTACT_BAND
+	var bottom: float = ground_sink - CONTACT_BAND_BELOW
+	var inv := global_transform.affine_inverse()
+	for mi in _all_meshes(self):
+		if mi == _contact_shadow or mi.mesh == null:
+			continue
+		var xf: Transform3D = inv * mi.global_transform
+		for si in mi.mesh.get_surface_count():
+			var arr: Array = mi.mesh.surface_get_arrays(si)
+			if arr.is_empty() or arr[Mesh.ARRAY_VERTEX] == null:
+				continue
+			for v: Vector3 in (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				var w: Vector3 = xf * v
+				if w.y > top or w.y < bottom:
+					continue
+				mnx = minf(mnx, w.x)
+				mxx = maxf(mxx, w.x)
+				mnz = minf(mnz, w.z)
+				mxz = maxf(mxz, w.z)
+	return Vector4((mxx - mnx) * 0.5, (mxz - mnz) * 0.5, (mxx + mnx) * 0.5, (mxz + mnz) * 0.5)
+
+
+func _all_meshes(n: Node) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	for c in n.get_children():
+		if c is MeshInstance3D:
+			out.append(c)
+		if c is Node3D:
+			out.append_array(_all_meshes(c))
+	return out
+
+
+## The building's real ground rectangle, as (half_x, half_z, centre_x, centre_z) in local units:
+## the LARGEST single shape `_footprint_shapes()` blocks with, by XZ area.
+##
+## Largest single shape, and not the union of all of them, and that is the same correction
+## PlanetProps._note_contact_shadow() had to make for the props — over-covering is the failure mode
+## that gets noticed. The union would drag the pool out to whatever thin member sticks out furthest:
+## the event space's two 0.30 m bunting poles at x = ±3.70 would take its half-extent from the stage
+## deck's 3.50 m to 4.00 m and its pool from 10.0 m to 11.4 m across, and the town hall's flagpole
+## and notice board would do the same, so a plaza of buildings would each grow most of a metre of
+## darkened ground on a side with nothing but a pole standing on it. The largest shape is the
+## MASS — the drum, the shell, the stage deck — which is what a viewer reads as touching the ground.
+## Steps and poles are left to under-cover rather than over-cover, because the user's standing note
+## is that shadows leave notably dark places, and a pool that stops at the wall still plants the
+## building while a pool that overshoots it is a stain.
+##
+## Falls back to `footprint_size` / `footprint_offset` for a subclass that authors neither a box nor
+## a cylinder (none does today) or overrides `_footprint_shapes()` to nothing.
+func _primary_footprint() -> Vector4:
+	var best := Vector4(footprint_size.x * 0.5, footprint_size.z * 0.5, footprint_offset.x, footprint_offset.z)
+	var best_area := 0.0
+	for entry: Array in _footprint_shapes():
+		var half := Vector2.ZERO
+		if entry[0] is BoxShape3D:
+			var b := entry[0] as BoxShape3D
+			half = Vector2(b.size.x * 0.5, b.size.z * 0.5)
+		elif entry[0] is CylinderShape3D:
+			var r: float = (entry[0] as CylinderShape3D).radius
+			half = Vector2(r, r)
+		elif entry[0] is SphereShape3D:
+			var r2: float = (entry[0] as SphereShape3D).radius
+			half = Vector2(r2, r2)
+		else:
+			continue
+		var area := half.x * half.y
+		if area > best_area:
+			best_area = area
+			var pos: Vector3 = entry[1]
+			best = Vector4(half.x, half.y, pos.x, pos.z)
+	return best
 
 
 ## A low blocking slab in front of the door so the player stops at the steps.
