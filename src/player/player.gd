@@ -211,6 +211,23 @@ func _exit_tree() -> void:
 		_boost_loop_on = false
 
 
+## THE ONLY WRITER OF `input_enabled` THAT TRACKS THE MODAL GATE, and it is a RECOMPUTE from the
+## gate rather than a per-signal toggle — deliberately, because `EventBus.reset_modals()` now calls
+## it a second way. That reset zeroes the gate on a scene change and then replays one
+## `ui_modal_closed` per modal it cleared, precisely so this line runs again; before it did, a reset
+## left `input_enabled` false with `is_modal_open()` already false and the astronaut could look
+## around but never walk. Measured: two `ui_modal_opened("shop")` then `reset_modals()` left
+## `en=N modal=0` for the whole 16 s run and a 1.0 s forward push travelled 0.00 m; with the replay
+## the next frame reads `en=Y` and the same push travels +3.80 m along facing.
+##
+## So this must stay a recompute of the CURRENT gate. `input_enabled = false` on open / `true` on
+## close would look identical in normal play and would break the replay: a reset that cleared two
+## modals emits two closes, and the second one would re-enable input that the first had already
+## handled — or, worse, an ordering where an open follows and never gets its close.
+##
+## The rocket pad (`_freeze_player` / `_thaw_player`) and the dialogue runner write `input_enabled`
+## too, and those are NOT modal-driven. That is why the launch cutscene still reads `en=N` here with
+## `modal=0`: physics is off as well, which is the pad's freeze, not a stale gate.
 func _on_modal_changed(_name: String) -> void:
 	input_enabled = not EventBus.is_modal_open()
 
