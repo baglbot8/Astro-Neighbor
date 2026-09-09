@@ -201,6 +201,16 @@ func _ready() -> void:
 	_stardust_label.text = str(GameState.stardust)
 	_on_time_changed(GameState.time_of_day)
 
+	# *** TEMPORARY INSTRUMENTATION — REMOVE WITH src/ui/mobile/touch_diag.gd. ***
+	# On-screen touch/input state readout for the "I can't move until I pause and resume" report
+	# (five playtests, four failed fixes, and no measurement has ever observed the real touch event
+	# path). Added as a SIBLING of TouchControls under this CanvasLayer, and last so it draws on
+	# top: if the fault turns out to be a stuck modal, TouchControls is hidden and a child of it
+	# would be hidden with it. It draws only on the mobile front end, and `--no-diag` (or
+	# `TouchDiag.ENABLED = false`) removes it entirely.
+	if TouchDiag.wanted():
+		add_child(TouchDiag.new())
+
 # ----------------------------------------------------------------------------- build
 func _build_stardust() -> void:
 	_stardust_pill = PanelContainer.new()

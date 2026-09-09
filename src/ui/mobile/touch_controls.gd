@@ -69,7 +69,8 @@ var _pause: TouchButton
 ## name -> TouchButton, for hit testing and for the timeline hooks.
 var _buttons: Dictionary = {}
 
-## id -> {"role": String, "pos": Vector2}
+## id -> {"role": String, "pos": Vector2, "t": int}. `"t"` is `Time.get_ticks_msec()` at claim time
+## and is TEMPORARY diag only (see `_entry`); nothing in the routing reads it.
 var _pointers: Dictionary = {}
 ## True once a real InputEventScreenTouch has arrived; the mouse fallback switches off for good.
 var _saw_touch := false
@@ -94,6 +95,27 @@ var _cam_drag := Vector2.ZERO
 var _pinch_ref := -1.0
 ## Metres of zoom gathered this frame, handed to `CameraRig.add_zoom`.
 var _pinch_zoom := 0.0
+
+# ----------------------------------------------------------------------------- diag counters
+## *** TEMPORARY INSTRUMENTATION, paired with `src/ui/mobile/touch_diag.gd`. Remove both together
+## once the stuck-after-start/landing cause is known. ***
+##
+## These count what happens INSIDE `_input`, which is the one path no measurement in this project
+## has ever observed: `Input.action_press` emits no InputEvent and `debug_touch` / `debug_drag`
+## call `_pointer_down` / `_pointer_move` directly, so four rounds of fixes have shipped without a
+## single reading from the code a real finger actually runs through. `_n_dropped` is counted BEFORE
+## the `if not visible` gate on purpose — "no touch event ever arrived" and "touch events arrive
+## and are thrown away" are different faults with the same symptom.
+var _n_touch := 0
+var _n_drag := 0
+var _n_mouse := 0
+var _n_dropped := 0
+var _n_adopt := 0
+## Where the last pointer-down landed, what role it resolved to, and whether it was claimed at all.
+var _last_down_pos := Vector2.ZERO
+var _last_down_role := "-"
+var _last_down_ok := false
+var _last_down_ms := -1
 
 var _layer_alpha := MobileUI.ALPHA_IDLE
 var _idle_timer := 0.0
@@ -250,20 +272,63 @@ func _on_mode_changed(_mobile: bool) -> void:
 
 
 func _apply_mode() -> void:
-	var mobile := MobileUI.is_mobile()
-	set_process(mobile)
-	set_process_input(mobile)
-	if not mobile:
-		_release_everything()
-	visible = mobile and not EventBus.is_modal_open()
-	if mobile:
+	_sync_state()
+	if MobileUI.is_mobile():
 		_layout()
 
 
+## Reached from `ui_modal_opened` / `ui_modal_closed`, and — since this round — from
+## `EventBus.reset_modals()`, which replays one `ui_modal_closed` per modal it clears so that this
+## runs. Before that replay existed, a reset on a scene change left `visible` false with
+## `EventBus.is_modal_open()` already false: a joystick that was not on screen at all, with nothing
+## open to explain it, until the player opened and closed the pause menu. MEASURED, `--ui=mobile`,
+## `ui_modal_opened("cutscene")` then `reset_modals()`: `vis=N modal=0` for the rest of the run and
+## the overlay reading `STUCK: controls hidden, no modal open`; with the replay, `vis=Y` on the next
+## frame. Nothing here had to change for that — `_sync_state` recomputes from the gate, which is the
+## point of it.
 func _on_modal_changed() -> void:
-	var want := MobileUI.is_mobile() and not EventBus.is_modal_open()
-	if want == visible:
-		return
+	_sync_state()
+
+
+## THE ONLY WRITER OF `visible`, `set_process` AND `set_process_input` IN THIS FILE. That is the
+## whole point of the function, and it replaced a real latent bug rather than a hypothetical one:
+##
+## `_apply_mode()` used to be the only caller of `set_process_input(mobile)`, and
+## `_on_modal_changed()` set `visible` and NOTHING ELSE. So the two could disagree. If
+## `MobileUI.is_mobile()` were ever false at the moment `_apply_mode()` ran — `Platform._detect()`
+## resolves the web case through `JavaScriptBridge.eval` and falls back to
+## `DisplayServer.is_touchscreen_available()` when the eval returns null, and neither is guaranteed
+## to have settled the way a later `mode_changed` will — then input processing went OFF, and any
+## later modal close called `_on_modal_changed()`, which turned the controls VISIBLE again without
+## ever putting processing back. The result is a joystick you can SEE and cannot USE, which is
+## exactly what the player has been reporting. `_input` and `_process` both gate on `visible`, so
+## nothing else in the file would have noticed.
+##
+## The second half of the same bug shape was `_on_modal_changed`'s early-out, `if want == visible:
+## return`. An early-out that skips a needed state RESTORE behaves identically to never having
+## written the state: with `visible` already true and processing off, that line returned before it
+## could have helped. There is no early-out here for that reason — the cost is two `set_process*`
+## calls and one `visible` assignment on a signal that fires when a menu opens, a handful of times
+## a minute.
+##
+## NOT FIXED WITH A TIMER. A `_apply_mode()` on a timeout would hide the divergence instead of
+## removing it, and would have made the readout in `touch_diag.gd` useless — the overlay's
+## "input processing off while mobile" verdict now means "a second writer of `visible` has
+## appeared", which is a thing worth being told.
+##
+## Note which state tracks which condition, because they are deliberately different:
+##   * processing tracks `mobile` ALONE, so the node keeps receiving events while a modal is up
+##     (`_input` drops them itself, and counts them — see `_n_dropped`),
+##   * `visible` tracks mobile AND no modal, which is what actually hides the controls.
+## The invariant a test can assert is therefore `is_processing_input() == MobileUI.is_mobile()`,
+## with no exceptions and no ordering in which it can fail.
+func _sync_state() -> void:
+	var mobile := MobileUI.is_mobile()
+	var want := mobile and not EventBus.is_modal_open()
+	set_process(mobile)
+	set_process_input(mobile)
+	# Unconditional, not "only on the visible -> hidden edge": letting go of a held action can
+	# never be wrong, and making it conditional is how the early-out above got there.
 	if not want:
 		_release_everything()
 	visible = want
@@ -272,6 +337,11 @@ func _on_modal_changed() -> void:
 ## Lets go of every action this node can hold. Called whenever the controls leave the screen, so a
 ## modal can never open with the astronaut still walking or the thruster still lit.
 func _release_everything() -> void:
+	# `_sync_state` now calls this unconditionally whenever the controls are not wanted, including
+	# paths that can run before `_build()` has made the widgets in a future edit.
+	if _stick == null:
+		_pointers.clear()
+		return
 	_pointers.clear()
 	_stick.end()
 	for id in _buttons:
@@ -316,7 +386,21 @@ func _on_planet_loaded(_id: String) -> void:
 
 # ----------------------------------------------------------------------------- pointer routing
 func _input(event: InputEvent) -> void:
+	# TEMPORARY DIAG (touch_diag.gd): counted BEFORE the visibility gate, so the readout can tell
+	# "the touch path never reaches this node" apart from "it reaches it and is discarded".
+	var pointer_event := false
+	if event is InputEventScreenTouch:
+		_n_touch += 1
+		pointer_event = true
+	elif event is InputEventScreenDrag:
+		_n_drag += 1
+		pointer_event = true
+	elif event is InputEventMouseButton or event is InputEventMouseMotion:
+		_n_mouse += 1
+		pointer_event = true
 	if not visible:
+		if pointer_event:
+			_n_dropped += 1
 		return
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
@@ -354,24 +438,44 @@ func _input(event: InputEvent) -> void:
 ## Refuses while the controls are off screen, so the timeline hooks can never do something a
 ## finger could not - a modal is up and the controls are hidden, so nothing is touchable.
 func _pointer_down(id: int, pos: Vector2) -> bool:
+	# TEMPORARY DIAG (touch_diag.gd): remember every attempt, refusals included, so the readout can
+	# say WHERE the last finger landed and WHAT role the hit tests gave it.
+	_last_down_pos = pos
+	_last_down_ms = Time.get_ticks_msec()
+	_last_down_role = "refused"
+	_last_down_ok = false
 	if not visible:
+		_last_down_role = "hidden"
 		return false
 	_wake()
 	for bid in _buttons:
 		var b: TouchButton = _buttons[bid]
 		if b.contains(pos):
-			_pointers[id] = {"role": "btn:" + str(bid), "pos": pos}
+			_pointers[id] = _entry("btn:" + str(bid), pos)
 			b.press()
+			_last_down_role = "btn:" + str(bid)
+			_last_down_ok = true
 			return true
 	if _stick.zone.has_point(pos) and not _stick.active:
-		_pointers[id] = {"role": "stick", "pos": pos}
+		_pointers[id] = _entry("stick", pos)
 		_stick.begin(pos)
+		_last_down_role = "stick"
+		_last_down_ok = true
 		return true
 	if _in_camera_zone(pos):
-		_pointers[id] = {"role": "cam", "pos": pos}
+		_pointers[id] = _entry("cam", pos)
 		_update_pinch_ref()
+		_last_down_role = "cam"
+		_last_down_ok = true
 		return true
 	return false
+
+
+## One `_pointers` row. `"t"` is TEMPORARY DIAG (touch_diag.gd): a pointer's AGE is what separates a
+## thumb the player is still using from a ghost left behind by a scene swap, and nothing else in
+## the file reads it.
+func _entry(role: String, pos: Vector2) -> Dictionary:
+	return {"role": role, "pos": pos, "t": Time.get_ticks_msec()}
 
 
 func _pointer_move(id: int, pos: Vector2) -> void:
@@ -483,7 +587,8 @@ func _adopt_late_pointer(id: int, pos: Vector2) -> void:
 		if b.contains(pos):
 			return
 	# Can now only resolve to "stick" or "cam" inside `_pointer_down`, both of which begin at rest.
-	_pointer_down(id, pos)
+	if _pointer_down(id, pos):
+		_n_adopt += 1  # TEMPORARY DIAG (touch_diag.gd)
 
 
 func _pointer_up(id: int) -> void:
@@ -660,6 +765,46 @@ func debug_stick(dx: float, dy: float, amount: float, hold: bool = true) -> void
 	_pointer_move(DEBUG_ID_BASE + 91, home + d * MobileUI.STICK_TRAVEL * clampf(amount, 0.0, 1.0))
 
 
+## THE DESKTOP MOUSE, THROUGH `_input` ITSELF, and it is not the same test as `debug_touch`.
+##
+## `debug_touch` / `debug_drag` / `debug_stick` call `_pointer_down` / `_pointer_move` directly with
+## a DEBUG_ID_BASE id, i.e. a POSITIVE id, which is what a real finger has. The desktop `--ui=mobile`
+## fallback is the opposite case: `_input` calls `_pointer_move(-1, ...)` for every
+## `InputEventMouseMotion`, with no button held, because a mouse reports where the cursor is whether
+## or not it is pressed. `_adopt_late_pointer` refuses ids below zero for exactly that reason (a
+## reviewer who merely moved the cursor over the stick zone used to walk the astronaut: measured
+## `pointers=2 [.., -1:stick@(240,500)] stick_active=true`, then `push=1.00 move=1.000 run=true
+## speed=4.50`, no button ever pressed). These two hooks let a timeline re-measure that guard.
+##
+## They synthesise REAL events through `Input.parse_input_event`, so the whole chain runs — `_input`,
+## the `_saw_touch` / `mouse_mode` gate, the mouse branch, `_pointer_move`, `_adopt_late_pointer` —
+## rather than the middle of it. Position is authored in VIEWPORT coordinates and mapped with the
+## root's final transform, for the reason spelled out on `MobileUI.synth_tap`: `push_input` applies
+## the inverse stretch transform, so an event authored in the logical space lands a third of the way
+## up and to the left of where it was aimed.
+func debug_mouse_hover(x: float, y: float) -> void:
+	var ev := InputEventMouseMotion.new()
+	ev.position = _window_pos(Vector2(x, y))
+	ev.global_position = ev.position
+	Input.parse_input_event(ev)
+
+
+## Left mouse button at a viewport position. `pressed` false lifts it.
+func debug_mouse_button(x: float, y: float, pressed: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	ev.position = _window_pos(Vector2(x, y))
+	ev.global_position = ev.position
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+
+func _window_pos(pos: Vector2) -> Vector2:
+	var vp := get_viewport()
+	return pos if vp == null else vp.get_final_transform() * pos
+
+
 ## Two fingers on the camera side, spread or pinched by `px`.
 func debug_pinch(px: float) -> void:
 	var c := Vector2(size.x * 0.75, size.y * 0.55)
@@ -713,3 +858,99 @@ func debug_pointers(tag: String = "") -> void:
 	print("TOUCHPTR %s vis=%s pointers=%d [%s] stick_active=%s stick_push=%.2f cam_drag=(%.1f,%.1f)" % [
 		tag, str(visible), _pointers.size(), ", ".join(rows),
 		str(_stick.active), _stick.push, _cam_drag.x, _cam_drag.y])
+
+
+# ----------------------------------------------------------------------------- diag state
+## *** TEMPORARY INSTRUMENTATION, paired with `src/ui/mobile/touch_diag.gd`. Remove both together. ***
+##
+## EVERY FIELD IN HERE EXISTS TO RULE OUT A DIFFERENT CAUSE of "I can't move until I pause and
+## resume", which has now been reported five times and survived four fixes. This is the single
+## source: the on-screen overlay and `debug_diag` below both format THIS dictionary, so a scripted
+## run cannot measure one set of fields while the player photographs another.
+func diag_state() -> Dictionary:
+	var tree := get_tree()
+	var player: Node = tree.get_first_node_in_group("player") if tree != null else null
+	var now := Time.get_ticks_msec()
+	var ptrs: Array = []
+	for id in _pointers:
+		var p: Dictionary = _pointers[id]
+		ptrs.append({
+			"id": int(id), "role": str(p["role"]), "pos": p["pos"] as Vector2,
+			"age": float(now - int(p.get("t", now))) * 0.001})
+	var counts: Dictionary = EventBus.modal_counts()
+	var summed := 0
+	for k in counts:
+		summed += int(counts[k])
+	var rst: Dictionary = EventBus.modal_reset_info()
+	var speed := 0.0
+	if player != null and player.has_method("get_tangent_velocity"):
+		speed = (player.call("get_tangent_velocity") as Vector3).length()
+	return {
+		"mobile": MobileUI.is_mobile(),
+		"visible": visible,
+		"in_tree": is_visible_in_tree(),
+		"proc": is_processing(),
+		"proc_in": is_processing_input(),
+		"modal_total": EventBus.modal_total(),
+		"modal_counts": counts,
+		"modal_names_sum": summed,
+		"reset_count": int(rst.get("count", 0)),
+		"reset_names": str(rst.get("names", "")),
+		"reset_age": float(rst.get("age", -1.0)),
+		"pointers": ptrs,
+		"stick_active": _stick != null and _stick.active,
+		"stick_push": _stick.push if _stick != null else 0.0,
+		"stick_zone": _stick.zone if _stick != null else Rect2(),
+		"size": size,
+		"move_vec": Input.get_vector("move_left", "move_right", "move_forward", "move_back"),
+		"run": Input.is_action_pressed("run"),
+		"paused": tree != null and tree.paused,
+		"player_found": player != null,
+		"input_enabled": player != null and bool(player.get("input_enabled")),
+		"phys": player != null and player.is_physics_processing(),
+		"pproc": player != null and player.is_processing(),
+		"speed": speed,
+		"n_touch": _n_touch, "n_drag": _n_drag, "n_mouse": _n_mouse,
+		"n_dropped": _n_dropped, "n_adopt": _n_adopt, "saw_touch": _saw_touch,
+		"adopt_off": _adopt_off,
+		"last_down_role": _last_down_role,
+		"last_down_pos": _last_down_pos,
+		"last_down_ok": _last_down_ok,
+		"last_down_age": -1.0 if _last_down_ms < 0 else float(now - _last_down_ms) * 0.001,
+	}
+
+
+## Prints EXACTLY the text `TouchDiag` draws on screen, one line per row plus the verdict, so a
+## Director run and the player's screenshot are the same measurement. TEMPORARY.
+func debug_diag(tag: String = "") -> void:
+	var s := diag_state()
+	for l in TouchDiag.lines(s):
+		print("DIAG %s | %s" % [tag, l])
+	print("DIAG %s | VERDICT: %s" % [tag, TouchDiag.verdict(s)])
+
+
+## FAULT INJECTION for the overlay's own tests. TEMPORARY, and the only reason it is a method on
+## the shipping class is that a Director timeline can reach nothing else. Each name breaks exactly
+## one thing, so the verdict line can be checked against a KNOWN fault instead of a guess:
+##   zone_empty    - collapse the stick zone (a stale layout: the ring is drawn where the zone is
+##                   not, so a thumb on it falls through to the camera role)
+##   stick_active  - stick active with no owning pointer (the pre-fix landing bug)
+##   cam_in_stick  - pin a "cam" pointer inside the stick zone
+##   age           - back-date every live pointer by `amount` seconds (ghost detection)
+##   paused        - pause the tree without opening a modal
+func debug_force(what: String, amount: float = 0.0) -> void:
+	match what:
+		"zone_empty":
+			_stick.zone = Rect2(_stick.zone.position, Vector2.ZERO)
+		"stick_active":
+			_pointers.clear()
+			_stick.active = true
+		"cam_in_stick":
+			_pointers[DEBUG_ID_BASE + 95] = _entry("cam", _stick.home_position())
+		"age":
+			for id in _pointers:
+				(_pointers[id] as Dictionary)["t"] = Time.get_ticks_msec() - int(amount * 1000.0)
+		"paused":
+			get_tree().paused = amount > 0.0
+		_:
+			push_warning("TouchControls.debug_force: unknown fault '%s'" % what)
