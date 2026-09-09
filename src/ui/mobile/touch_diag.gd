@@ -54,7 +54,15 @@ extends Control
 ## drifting copy of the same fields.
 
 ## Master switch. Flip to false (or pass `--no-diag`) to remove the readout from the game.
-const ENABLED := true
+## OFF as of 2026-09-08. The reset_modals fix shipped and the player reported the readout as
+## unwanted UI, so the plate is not built at all and nothing draws.
+##
+## The node, its wiring and the counters TouchControls feeds it are deliberately LEFT IN PLACE.
+## This overlay is what found the modal-reset bug in one run after four rounds of reasoning had
+## missed it, and the one thing still unobserved by anybody - the real iOS touch event path
+## through `_input()` - is exactly what it was built to catch. Flip this back to `true` (or drop
+## `--no-diag`) to put it back on screen; nothing else has to change.
+const ENABLED := false
 
 # ----------------------------------------------------------------------------- geometry
 ## Type size and plate padding, in the 1560x720 logical viewport a landscape phone resolves to.
