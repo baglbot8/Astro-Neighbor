@@ -66,7 +66,7 @@ func _apply_quality_profile() -> void:
 		# the renderer this branch exists for. The Compatibility backend has no screen-space AA
 		# pass, so the property was stored and never read — it cost nothing and did nothing, and
 		# leaving it in implied an edge-smoothing we were not actually getting.
-		# RENDER 3D AT HALF LINEAR RESOLUTION. This is the fix for "the phone gets warm", and the
+		# RENDER 3D BELOW NATIVE RESOLUTION. This is the fix for "the phone gets warm", and the
 		# reason is a property of the SHIPPED BUILD, not of any one handset:
 		#   * build/web/index.html ships `canvasResizePolicy: 2`, so Godot sizes the WebGL
 		#     drawing buffer as floor(innerWidth * devicePixelRatio) x floor(innerHeight * dpr).
@@ -84,11 +84,16 @@ func _apply_quality_profile() -> void:
 		# frame-time decomposition (it holds 60 fps at 8.3 megapixels and is not fill-bound at
 		# any resolution a phone would ask for), so the case rests only on the pixel count above.
 		#
-		# 0.5, not 0.35: 0.35 was rendered and compared and is visibly rougher on the ground's
-		# concentric bands. And NOT `allow_hidpi = false`, which would drop the UI to 1x as well
-		# and make the HUD and text soft — the whole point is to keep 2D sharp.
+		# 0.75, NOT 0.5. 0.5 shipped first and the player reported it from the phone: "everything
+		# seems a bit blurrier / lower quality now." Bilinear upscaling from half resolution is soft
+		# on silhouettes and on the ground's fine detail, and Compatibility has no AA pass to hide
+		# it. 0.75 renders 56% of the native pixel count (0.5 rendered 25%), so it keeps a bit under
+		# half of the fill saving while landing at ~2.25x device pixels on a DPR-3 iPhone. If the
+		# phone runs hot again, 0.6 is the next step down; 0.35 was rendered and is visibly rough.
+		# And NOT `allow_hidpi = false`, which would drop the UI to 1x as well and make the HUD and
+		# text soft — the whole point is to keep 2D sharp.
 		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		vp.scaling_3d_scale = 0.5
+		vp.scaling_3d_scale = 0.75
 	# Filter quality 4 takes many taps per pixel and is far too expensive on a phone. But HARD is
 	# too far the other way: with no filtering at all the shadow edge aliases into hard dark lines
 	# and self-shadowing shows up as dark patches — reported from a real iPhone as 'shadows look

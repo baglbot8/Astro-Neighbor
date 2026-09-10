@@ -398,6 +398,12 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton or event is InputEventMouseMotion:
 		_n_mouse += 1
 		pointer_event = true
+	# A SCREEN EVENT PROVES A TOUCHSCREEN EVEN WHILE THE CONTROLS ARE HIDDEN. This used to be learned
+	# only below the visibility gate, so every touch made during the intro dialogue or a cutscene
+	# was dropped WITHOUT teaching it - and the first event to reach the node once the controls
+	# reappeared could be the emulated mouse copy of the very tap that dismissed the modal.
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_saw_touch = true
 	if not visible:
 		if pointer_event:
 			_n_dropped += 1
@@ -406,7 +412,7 @@ func _input(event: InputEvent) -> void:
 		var t := event as InputEventScreenTouch
 		_saw_touch = true
 		if t.pressed:
-			if _pointer_down(t.index, t.position):
+			if _pointer_down(t.index, t.position, true):
 				get_viewport().set_input_as_handled()
 		else:
 			_pointer_up(t.index)
@@ -419,14 +425,25 @@ func _input(event: InputEvent) -> void:
 	# Mouse fallback for a desktop reviewer running --ui=mobile. Disabled the moment a real touch
 	# appears (a phone emulates a mouse from finger 0 and would double up), and never while the
 	# cursor is captured, which is CameraRig's mouse look owning the pointer.
-	if _saw_touch or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+	#
+	# *** THE JAMMED JOYSTICK, reported five times: "the joystick doesnt react when i touch it" while
+	# jump, fly and the camera all worked, and "when I click pause, the favors, or the bag, i can
+	# move again." *** Godot emulates a mouse from touch, so every tap on a phone arrives TWICE: a
+	# ScreenTouch and a MouseButton copy. `_saw_touch` was learned lazily, so the copy of the tap
+	# that closed the intro could reach this branch first, claim the stick as pointer -1, and then
+	# its release was dropped here once `_saw_touch` flipped true. `_stick.active` stayed true with
+	# nothing ever able to end it, `_pointer_down` refused every later stick touch, and only
+	# `_release_everything()` - which every modal open runs - cleared it. That is the workaround.
+	# A touchscreen device never needs this fallback; it exists for `--ui=mobile` on a desktop.
+	if _saw_touch or DisplayServer.is_touchscreen_available() \
+			or Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if mb.pressed:
-			if _pointer_down(-1, mb.position):
+			if _pointer_down(-1, mb.position, true):
 				get_viewport().set_input_as_handled()
 		else:
 			_pointer_up(-1)
@@ -437,7 +454,9 @@ func _input(event: InputEvent) -> void:
 ## Claims a new pointer. Returns true when this node took it.
 ## Refuses while the controls are off screen, so the timeline hooks can never do something a
 ## finger could not - a modal is up and the controls are hidden, so nothing is touchable.
-func _pointer_down(id: int, pos: Vector2) -> bool:
+## `fresh` is true only for a genuine press (a ScreenTouch or mouse button going DOWN), never for a
+## drag adopted late by `_adopt_late_pointer`.
+func _pointer_down(id: int, pos: Vector2, fresh := false) -> bool:
 	# TEMPORARY DIAG (touch_diag.gd): remember every attempt, refusals included, so the readout can
 	# say WHERE the last finger landed and WHAT role the hit tests gave it.
 	_last_down_pos = pos
@@ -456,7 +475,17 @@ func _pointer_down(id: int, pos: Vector2) -> bool:
 			_last_down_role = "btn:" + str(bid)
 			_last_down_ok = true
 			return true
-	if _stick.zone.has_point(pos) and not _stick.active:
+	# A FRESH PRESS ON THE STICK ALWAYS WINS. It used to be first-touch-wins with no way back:
+	# while `_stick.active` was true every new press was refused, so ANY path that lost a stick
+	# owner's release - the emulated-mouse ghost in `_input`, a release swallowed during a scene
+	# swap, anything not yet found - jammed the joystick until a modal happened to run
+	# `_release_everything()`. Taking over on a fresh press makes that deadlock structurally
+	# impossible whatever the cause. The cost is that a second finger landing in the stick zone
+	# steals it from the first, which nobody does on purpose: the stick is one thumb's job.
+	# A late-adopted drag (`fresh` false) still cannot steal a live stick.
+	if _stick.zone.has_point(pos) and (fresh or not _stick.active):
+		if _stick.active:
+			_drop_stick_owner()
 		_pointers[id] = _entry("stick", pos)
 		_stick.begin(pos)
 		_last_down_role = "stick"
@@ -469,6 +498,15 @@ func _pointer_down(id: int, pos: Vector2) -> bool:
 		_last_down_ok = true
 		return true
 	return false
+
+
+## Forgets whichever pointer holds the stick and releases it. `keys()` is a copy, so erasing while
+## walking it is safe.
+func _drop_stick_owner() -> void:
+	for pid in _pointers.keys():
+		if str(_pointers[pid]["role"]) == "stick":
+			_pointers.erase(pid)
+	_stick.end()
 
 
 ## One `_pointers` row. `"t"` is TEMPORARY DIAG (touch_diag.gd): a pointer's AGE is what separates a
@@ -728,7 +766,7 @@ func _open_pause() -> void:
 ##             "args": [0, 240.0, 560.0, true]}}
 func debug_touch(id: int, x: float, y: float, pressed: bool) -> void:
 	if pressed:
-		_pointer_down(DEBUG_ID_BASE + id, Vector2(x, y))
+		_pointer_down(DEBUG_ID_BASE + id, Vector2(x, y), true)
 	else:
 		_pointer_up(DEBUG_ID_BASE + id)
 
