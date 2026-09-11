@@ -27,7 +27,8 @@ below exist to make that drift visible.
 1. **Gender is a shape vocabulary, not accessories.** What read as male was heavy brows, lid ridges,
    toothy grins, blunt jaws and broad wedges. The fix is WIDENING that vocabulary — plates, drapes,
    ribs, asymmetry, growth — not adding lashes. **Lashes on at most ONE character in the whole cast.**
-   Prefer eye shape, head shape, proportion, palette and manner, which is how Animal Crossing does it.
+   Prefer eye shape, head shape, proportion, palette and manner: they cost no parts, and they still read
+   at 8 m where a lash or a surface pattern does not (see "The other differentiators, which are free").
 2. **Cap the hard vocabulary.** No character may wear more than TWO of
    {brow ridge, heavy lid, horns, tusks, fangs, shoulder yoke}, and at least one of the three elders
    (Fen, Grig, Mayor Orbit) wears NONE. The cast total must go DOWN, not be re-sorted onto one

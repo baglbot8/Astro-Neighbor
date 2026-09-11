@@ -59,7 +59,7 @@ const GEAR: Array = [
 	["hat_antenna", "Antenna Bobble", "hat", "uncommon", 380, "hat_id", "hat_antenna", "#7fffd4",
 		"A springy antenna with a glowing bobble. Zorp approves loudly."],
 	["hat_crown", "Star Crown", "hat", "legendary", 1150, "hat_id", "hat_crown", "#ffe27a",
-		"Mayor Orbit says it is ceremonial. He wears his around the house."],
+		"Professor Comet says it is ceremonial. He wears his to watch the stars."],
 	# BACKPACKS ARE COSMETIC SHELLS, and their names and copy have to say so. Every astronaut flies
 	# with a working thruster pack from minute one (docs/STYLE_GUIDE.md R2.8), so a store selling a
 	# "Jet Pack" with "twin thrusters that puff blue when you hop" was selling the player something

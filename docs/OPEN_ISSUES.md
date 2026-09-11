@@ -957,3 +957,52 @@ keeps delivering `touchmove` for a finger whose `touchstart` was swallowed, is r
 Godot source and has never been observed. USER TEST: land while holding your thumb on the stick and,
 without lifting, drag. Walking = fixed. Nothing until you lift and re-plant = the adoption is not
 reaching the real event path, and it needs a different mechanism.
+
+
+## 40. [2026-09-11] Phase 1 (Stranded start): builder D STOPPED after two critic fails - the scrap looks like a golf tee
+
+Per the user's rule for this phase ("If a step fails its critic twice, stop that step, write down why, and go
+on with whatever does not depend on it"), builder D (scrap and economy) is stopped. It is NOT reverted: what
+it built works and stays in the tree.
+
+**What passed (critic, both rounds, measured live):**
+* Scrap is on all seven worlds. home and hub now spawn 8 pickups a day, ALL scrap; zorp, bolt, fen, grig and
+  vela spawn 10 a day with scrap as one of five kinds (2 scrap a day). home, hub and grig have no stardust shards.
+* Picking up scrap and cleaning a trash piece both pay scrap (seen live: "Cleaned up! +9 Scrap", pill 5 -> 14,
+  stardust unchanged at 40).
+* The HUD scrap pill sits beside stardust at 1280x720 and at --ui=mobile 1560x720 without touching the clock,
+  the bag/journal/pause buttons or the touch controls.
+* Reward numbers are named and marked as first guesses for BUILD_PLAN Phase 6. Only D's files changed.
+
+**Why it failed (round 2, blocking, item 3 "its own look"):** the pickup mesh (collectible.gd `_build_visual()`,
+scrap case) and the matching litter piece (trash_piece.gd `_build_scrap()`) are a flat rounded plate plus a
+~0.19-0.22 m thin vertical tube plus a small ball on top. At the real 28-degree gameplay camera it reads as a
+golf tee or a marker pin, not "a bent metal plate, a bolt, a scorched panel bit". Identical on all seven worlds,
+so it is systemic. The critic's suggested fix: cut the "bolt" to a stub about as tall as the plate is thick,
+and give the plate a bend or a dent so it reads as torn hull rather than a coaster.
+
+**Depends on it:** nothing functional. Phase 2 spends scrap through GameState (builder A, passed), which works.
+**Also left open in D's area:** builder C's critic found the nearest scrap 18.6 m from the crash site on a new
+campaign game, while the Professor says the rock scattered scrap "all over the place". A few pieces should sit
+within about 6-10 m of the pad. Not done, because the step is stopped.
+
+## 41. [2026-09-11] Phase 1 lead fixes, and what is still open at the Commons
+
+**Fixed by the lead after the Phase 1 final check:**
+* `town_hall.gd` wrote "Mayor Orbit" by hand in all six `say()` calls of the door flow. The door's
+  Interactable (reach 3.0 m) sits about 0.9 m from the Professor and usually wins over his own TalkArea
+  (2.6 m), so this was the name most players saw at the Commons. It now reads
+  `NpcData.get_data("mayor_orbit").display_name` through `_prof_name()`.
+* Fetch favors asked for scrap. Scrap is a counter (`GameState.scrap`), not a bag item, so
+  `GameState.item_count("scrap")` is always 0 and such a favor could never finish. home and hub grow ONLY
+  scrap since Phase 1, so every Commons neighbour's fetch was a soft-lock, and 1 in 5 fetches elsewhere.
+  `favor_system.gd` `_local_collectible()` now skips scrap; Commons neighbours offer bring and deliver only.
+  Probe, 60 rolls per neighbour: no neighbour asks for scrap or stardust_shard, and every bring material
+  grows on a tier-1 world (moon_flower and crystal_chunk on zorp, gear_bit on bolt).
+* The dormant fallback in `_foreign_material()` returned "stardust_shard", which no world grows now. It
+  returns `MATERIALS[0]`.
+
+**Still open (BUILD_PLAN Phase 4, builder I owns town_hall.gd):** walking up to the Professor at the Commons
+usually opens the Town Hall door flow, not his own talk. That flow is still the mayor's job (rename your
+planet, planet stats) and its lines still sound like a mayor ("Stamped, sealed and filed."). CORE_LOOP says
+no mayor role. Only the name is fixed here.

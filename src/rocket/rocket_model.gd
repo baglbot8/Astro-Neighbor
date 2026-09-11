@@ -9,10 +9,12 @@ extends Node3D
 ## ladder are all on the -Z side) and +Y is up, matching the character/prop convention.
 ##
 ## Colour blocking (STYLE_GUIDE "Colour-block the clothing like AC"): the hull is FOUR readable
-## blocks, not one near-white value zone — red nose cone, cream barrel, a saturated teal belt band
-## + shoulder band, and a dark navy engine skirt with navy fin feet. The darks come from real
-## albedo blocks and from a low `shade_floor` on the big cream surfaces (darkness from LIGHT, not
-## from muddy albedo), and the cream carries almost no specular/rim so it stops clipping to white.
+## blocks, not one near-white value zone — coral-red nose cone, cream barrel, a soft teal belt
+## band + shoulder band, and a dark slate engine skirt with slate fin feet (all softened
+## 2026-09-11 to pass the palette gates measured on the rocket's own pixels - see the palette
+## note). The darks come from real albedo blocks and from a low `shade_floor` on the big cream
+## surfaces (darkness from LIGHT, not from muddy albedo), and the cream carries almost no
+## specular/rim so it stops clipping to white.
 ##
 ## Public API:
 ##   set_engine(on, power)   flame + smoke + engine light on/off (power scales the burn)
@@ -23,6 +25,20 @@ extends Node3D
 ##   hatch_point()           world position a boarding astronaut walks into
 ##   engine_point()          world position of the nozzle mouth (dust, sfx)
 ##   triangle_count()        tris in the shipped model (ARCHITECTURE §10 budget check)
+##   refresh_finish()        re-read the finish stage and repaint (wired to EventBus part changes)
+##   set_finish_stage(n)     paint finish n now: 0 rusty after the crash .. 4 clean .. 5 gold
+##   finish_stage()          the finish stage painted right now
+##   set_review_mask(on)     REVIEW ONLY: flat magenta hull, for per-region palette scoring
+##
+## Finish review hook: the user arg `--rocket-finish=N` (after the `--`) pins every rocket in the
+## run to stage N (0-5) and ignores part changes. For captures only; nothing in the game passes it.
+##
+## Finish, in one place (details at each constant): the paint is one spliced pass in the hull's toon
+## shader (MaterialLib.rocket_finish_shader) - dust and soot LAYERS, a scorch, rust thresholded on one
+## fixed noise field, and at stage 5 the gold's reflection bands. Every finish-painted part has its
+## node transform baked into its vertices (_bake_to_hull_space), so that noise is sampled in hull
+## space on every part. The stage 4-5 glints are one merged billboard mesh (MaterialLib.rocket_glint)
+## that renders on both renderers.
 
 const SMOKE_SHADER := preload("res://src/rocket/smoke_puff.gdshader")
 const FLAME_SHADER := preload("res://src/rocket/rocket_flame.gdshader")
@@ -61,14 +77,45 @@ const SEG_SMALL := 10
 # every launch frame. Pulled toward their own pastels - lighter and softer, same hue, same
 # identity - not darkened toward brown. The emissive accents (beacon, engine, cabin) keep their
 # saturation: R2.6 allows a bright colour as a lamp.
+#
+# FINISH pass (2026-09-11), measured PER REGION - only the rocket's own pixels, from a flat-magenta
+# mask render of the same camera (docs/OPEN_ISSUES.md 38). The R2.6 numbers above were albedo
+# swatches; rendered, the rocket still failed: at the pad, noon, the red's shade side came out
+# #cd2a33 (S 0.79), 17.5% of the rocket sat above S 0.68, region sat p90 0.775. The cause is the
+# one toon_soft documents (albedo applied twice), so RENDERED chroma is roughly albedo chroma
+# SQUARED and a dark side goes far more saturated than its swatch. Pulled once more toward their own
+# pastels, hue kept, chosen from two sweeps in the real scene (both renderers, noon and dusk):
+#   red  #e07069 -> #d0968f, band #ad514e -> #a6756f   the only red that kept dusk under S 0.60
+#   teal #62a7cc -> #88b0c2                            its terminator rendered #4284a3 (S 0.59)
+#   navy #3a4459 -> #434650, dark #262d3c -> #2e3036   THE big one: the skirt in shade rendered
+#     near-black #080c23 at S 0.75, and under Compatibility it alone pushed region sat p90 to 0.80.
+#     At V 0.14 any hue is S 0.7, so a dark block has to be nearly neutral ("dark does not mean
+#     saturated", R2.6). Web far-view p90 0.797 -> 0.576 with this navy; it still reads as the dark
+#     slate skirt in the frames.
 const CREAM := Color("#e9dec5")
 const CREAM_SHADE := Color("#c2b596")
-const TEAL := Color("#62a7cc")
+const TEAL := Color("#88b0c2")
 const TEAL_DARK := Color("#417994")
-const NAVY := Color("#3a4459")
-const NAVY_DARK := Color("#262d3c")
-const RED := Color("#e07069")
-const RED_DARK := Color("#ad514e")
+#   Round 2 (critic, frozen-rocket close view, Forward+ noon): the CLEAN skirt in the hull's own
+#   cast shadow still rendered #0f0c20 at S 0.61 over 8.4% of the rocket - lit by the space sky's
+#   blue-violet ambient alone, a dark neutral takes the ambient's hue. Lifted x1.35 in linear, same
+#   near-neutral hue: #434650 -> #4f515b, #2e3036 -> #3b3d44. It now renders #19142a S 0.50, the
+#   S > 0.58 / V < 0.25 share falls 8.4% -> 0.8%, and it still reads as the dark slate block.
+const NAVY := Color("#4f515b")
+const NAVY_DARK := Color("#3b3d44")
+const RED := Color("#d0968f")
+const RED_DARK := Color("#a6756f")
+## The fins' own red. They shared the nose's material, but a nose faces the noon sun while a fin is a
+## vertical plate the sun grazes, so the fin sat in the ramp's mid band, where the squared albedo is
+## darkest and most saturated: it rendered #883339-#c14b52 at S 0.61-0.63 over 9-15% of the rocket
+## at close range on Forward+ (critic), with the nose fine at S 0.28. Same hue, softer chroma, and a
+## higher shade floor so the terminator band on the plate stops going deep red. Swept in the real
+## scene: the nose's red with only the floor raised (0.60) still rendered #cb5456 S 0.58 over 10% of
+## the rocket; this one renders #c1585e S 0.54 on Forward+ and #d8928c S 0.35 on the web renderer,
+## with the S > 0.58 share at 0.5%.
+const RED_FIN := Color("#cb9d97")
+const FIN_SHADE_FLOOR := 0.52
+const FIN_SHADE := 0.40
 const METAL := Color("#8d97a6")
 const METAL_DARK := Color("#4d5462")
 const GLASS_TINT := Color("#8fd4ff")
@@ -80,6 +127,104 @@ const BEACON_COLOR := Color("#ff5d5d")
 ## the hull a genuine dark side without touching the albedo hue.
 const HULL_SHADE_FLOOR := 0.34
 const DECK_SHADE_FLOOR := 0.38
+
+## ---- Finish (docs/CORE_LOOP.md "Changed after the build plan": the finish shows progress) ----
+## Stage = CampaignData.finish_stage(): 0 straight after the crash, 1-3 one part each and each one
+## cleaner, 4 clean with a sparkle (the everyday clean rocket, and what every old save and every
+## Director timeline without --campaign gets), 5 gold instead of the cream "white". Parts sit
+## inside the hull and are never drawn (same CORE_LOOP section); only the paint changes, so no
+## triangles move.
+## The dirt is ONE spliced pass in the hull's toon shader (MaterialLib.rocket_finish_shader).
+const FINISH_STAGE_COUNT := 6
+const FINISH_CLEAN := 4
+const FINISH_GOLD := 5
+const FINISH_ARG := "--rocket-finish="
+## Grime, bleach and scorch scale with wear; stage 4 and 5 are 0, which skips the pass entirely.
+const FINISH_WEAR: Array[float] = [1.0, 0.70, 0.45, 0.22, 0.0, 0.0]
+## Rust threshold per stage on the shader's noise field, chosen by COVERAGE rather than by eye:
+## each is the measured quantile of that field over the cream body (400k area-uniform samples of the
+## exact float32 maths, mean 0.504, std 0.110, the mean of the near and far octave) for 28 / 15 / 7 /
+## 2.5 % rust, less the 0.015 half-width of the shader's 0.03 edge ramp. So each part roughly halves
+## the rust. 2.0 = none. Re-measured for round 2's quieter fine octave (0.2 -> 0.12).
+const FINISH_RUST_THR: Array[float] = [0.551, 0.603, 0.655, 0.713, 2.0, 2.0]
+## Rust looks GREY as a swatch on purpose: rendered chroma is about albedo chroma squared (see the
+## palette note above), and the first rust (#a06a4c, S 0.52) rendered as dark maroon at S 0.73.
+## The edge (S 0.29) renders as orange-brown rust at S 0.55-0.58, picked over three real-scene
+## sweeps: the redder #b08a6c rendered S 0.63 close up, #b39278 sat at S 0.60-0.62 on the shaded
+## lower fins in the far view on the web renderer. The dark core is kept near-neutral (S 0.18, was
+## #8b7465 S 0.27) for the navy's reason - dark chroma renders hot - because the S > 0.60 pixels
+## left on a crashed rocket were the rust in shade on the lower fins; the lit edge carries the rust
+## colour, and close up it still reads as rust.
+const RUST := Color("#b2957e")
+const RUST_DEEP := Color("#8b7c72")
+## The dirt is two LAYERS mixed over the paint (MaterialLib _RF_PASS explains why not a multiply):
+## DUST for the mottle and the runs, SOOT for the engine soot and the crash scorch. Both are picked
+## for where they RENDER. The slate skirt sits in the hull's own cast shadow, lit only by the space
+## sky's blue-violet ambient, and any surface taken below about V 0.15 there renders S > 0.60: the
+## first pass's #3d3c40 soot at 0.75 made the crashed skirt #050512-#0e0b1d at S 0.62-0.73.
+## Swept (three dust/soot pairs, both renderers, noon): with these the crashed rocket's S > 0.58 /
+## V < 0.25 share is 0.0% at every standpoint (was 4-7%), and the soot sits a little above the lifted
+## slate, so on the skirt it greys rather than darkens.
+const DUST := Color("#8a857d")
+const SOOT := Color("#686663")
+const GRIME_DEPTH := 0.62
+## The flank that scraped the ground: front-right as you walk up to the hatch, so it is in view.
+const SCORCH_DIR := Vector2(-0.6, -0.8)
+## Stage 5. Only the cream "white" turns gold - the red nose, teal bands and slate skirt keep the
+## four colour blocks, so the gold rocket is still this rocket.
+## Same squared-chroma rule: the first gold (#d9bb6c, S 0.50) rendered brassy at S 0.66-0.68. This
+## one (S 0.40) renders S 0.53. On its own it read pale butter-yellow at gameplay distance (critic):
+## at noon the whole hull side sits in one band of the toon ramp, so lighting gives it no value
+## structure. Polished metal gets that from what it reflects, so the gold carries two reflection
+## bands (MaterialLib _RF_PASS): a pale warm highlight and a darker amber-olive band, placed by the
+## view-space normal's x, so they slide over the hull as the camera moves. The dark band is kept
+## near-neutral for the navy's reason (dark chroma renders hot) and still reads amber against gold.
+const GOLD := Color("#dcc284")
+const GOLD_SHADE := Color("#bb9e62")
+## Swept in the real scene: a dark band of #8e8563 (S 0.30) rendered amber at S 0.57 - the squared
+## albedo again - and pushed the web renderer's near view to a dominant swatch of 0.61. #7e7a66 (S
+## 0.19, and darker, for MORE value contrast) renders an olive-bronze band: near-view dominant 0.543
+## on Forward+ and 0.450 on the web (worst k-means seed 0.548 / 0.531); with no bands the same
+## frames read the flat butter-yellow the critic failed.
+const GOLD_HI := Color("#efe3bd")
+const GOLD_LO := Color("#7e7a66")
+const GOLD_HI_BAND := Vector2(0.20, 0.50)
+const GOLD_LO_BAND := Vector2(-0.62, -0.16)
+## The toon shade side: a warm olive instead of the shared lavender tint (which greyed the gold's
+## dark side toward mauve at dusk) and a deeper floor, so the terminator reads as metal turning away.
+const GOLD_SHADE_TINT := Color(0.74, 0.68, 0.50)
+const GOLD_SHADE_FLOOR := 0.26
+## sd_metal's brushed grain: at the default scale and strength its 320 cycles/m aliased into coarse
+## one-pixel vertical streaks that read as straw close up (critic). Finer, and a third of the contrast.
+const GOLD_GRAIN_SCALE := 2.0
+const GOLD_GRAIN_STRENGTH := 0.35
+const GOLD_SPEC := 0.30
+const GOLD_SPEC_SIZE := 70.0
+const GOLD_RIM := 0.18
+const GOLD_RIM_COLOR := Color("#f2dfa6")
+## toon_soft's own rim_color default, restored on every stage that is not gold.
+const TOON_RIM_COLOR := Color(1.0, 0.97, 0.9)
+## Stage 4-5 sparkle glints (star.gdshader's four-point twinkle, MaterialLib.rocket_glint).
+const GLINT_WHITE := Color("#fff8ea")
+const GLINT_GOLD := Color("#ffeec0")
+const GLINT_INTENSITY := 1.4
+const GLINT_SIZE := 0.34
+## softness 0 shrinks star.gdshader's soft disc to a falloff, so the four points carry the shape: at
+## 0.62 the disc filled 62% of the quad and every glint read as a white blob, not a sparkle.
+const GLINT_OPTS := {"points": 1.0, "blink": 1.0, "blink_speed": 2.3, "softness": 0.0, "core": 0.07}
+## Where the glints sit: (degrees from the hatch (-Z) toward +X, height, radius) - the
+## curved_panel convention. Spread round the whole hull so a few face the camera from any side;
+## the hull hides the rest, because the sprite depth-tests.
+const GLINTS: Array[Vector3] = [
+	Vector3(-38.0, 2.02, HULL_R + 0.06),
+	Vector3(24.0, 2.74, 0.52),
+	Vector3(62.0, 1.30, HULL_R + 0.06),
+	Vector3(-30.0, 0.56, 0.74),
+	Vector3(17.0, 2.10, HULL_R + 0.10),
+	Vector3(150.0, 1.55, HULL_R + 0.06),
+	Vector3(-140.0, 2.55, 0.55),
+	Vector3(100.0, 0.72, HULL_R + 0.06),
+]
 
 ## Flame plume. A *mesh* teardrop (crisp cartoon silhouette) painted by rocket_flame.gdshader —
 ## blue-white throat, orange body, deep orange-red tip — with a blue-white collar flared proud of it
@@ -125,11 +270,36 @@ var _flame_intensity := 1.15
 ## Scales the nozzle glow + engine light with `set_flame_intensity` (1.0 on a planet, ~0.35 in space).
 var _engine_energy := 1.0
 var _time := 0.0
+## Every hull material the finish repaints, and the look each was built with (restored at stage 4).
+var _finish_mats: Array[ShaderMaterial] = []
+var _finish_base: Array[Dictionary] = []
+var _finish_stage := -1
+var _sparkle: MeshInstance3D
+## GeometryInstance3D -> its real material_override while the review mask is on.
+var _mask_saved: Dictionary = {}
+var _mask_mat: StandardMaterial3D
 
 
 func _ready() -> void:
 	if _hull_root == null:
 		_build()
+	refresh_finish()
+
+
+func _enter_tree() -> void:
+	if not EventBus.rocket_parts_changed.is_connected(_on_rocket_parts_changed):
+		EventBus.rocket_parts_changed.connect(_on_rocket_parts_changed)
+	if not EventBus.campaign_changed.is_connected(refresh_finish):
+		EventBus.campaign_changed.connect(refresh_finish)
+	if _hull_root != null:
+		refresh_finish()
+
+
+func _exit_tree() -> void:
+	if EventBus.rocket_parts_changed.is_connected(_on_rocket_parts_changed):
+		EventBus.rocket_parts_changed.disconnect(_on_rocket_parts_changed)
+	if EventBus.campaign_changed.is_connected(refresh_finish):
+		EventBus.campaign_changed.disconnect(refresh_finish)
 
 
 func _process(delta: float) -> void:
@@ -275,19 +445,19 @@ func engine_point() -> Vector3:
 	return to_global(Vector3(0.0, NOZZLE_MOUTH_Y, 0.0))
 
 
-## Triangles in the built model. `include_fx` adds the flame plume meshes (they are hidden whenever
-## the engine is off). Used by the showcase's `--tris` report against the §10 2k prop budget.
+## Triangles in the built model. `include_fx` adds the flame plume meshes (hidden whenever the
+## engine is off) and the stage 4-5 sparkle glints (hidden below stage 4, and billboards, not hull).
+## Used by the showcase's `--tris` report against the §10 2k prop budget.
 func triangle_count(include_fx: bool = false) -> int:
 	var total := 0
 	for n in _walk(self):
+		if not include_fx and (n == _sparkle or (_flame != null and _flame.is_ancestor_of(n))):
+			continue
 		if n is MultiMeshInstance3D:
 			var mmi := n as MultiMeshInstance3D
 			total += mesh_triangles(mmi.multimesh.mesh) * mmi.multimesh.instance_count
 		elif n is MeshInstance3D:
-			var mi := n as MeshInstance3D
-			if not include_fx and _flame != null and _flame.is_ancestor_of(n):
-				continue
-			total += mesh_triangles(mi.mesh)
+			total += mesh_triangles((n as MeshInstance3D).mesh)
 	return total
 
 
@@ -327,6 +497,190 @@ static func deep_toon(color: Color, opts: Dictionary, floor_level: float) -> Sha
 	return m
 
 
+# ============================================================================= finish
+## Re-reads which finish to paint and paints it: the `--rocket-finish=N` review pin if this run
+## passed one, else CampaignData.finish_stage() - which is 4, the clean rocket, whenever the story's
+## gates are off (an old save, a finished story, a Director timeline without --campaign). Wired to
+## EventBus.rocket_parts_changed and campaign_changed, so fitting a part repaints the hull live.
+func refresh_finish() -> void:
+	var forced := _forced_finish_arg()
+	var stage := forced if forced >= 0 else CampaignData.finish_stage()
+	if stage != _finish_stage:
+		var source := "--rocket-finish" if forced >= 0 else "CampaignData"
+		print("[RocketModel] finish stage %d (%s)" % [stage, source])
+	set_finish_stage(stage)
+
+
+## Paints finish `stage` (clamped to 0-5) immediately. Public so a cutscene can hold the old finish
+## and then show the new one; the next part change or refresh_finish() puts the real stage back.
+func set_finish_stage(stage: int) -> void:
+	if _hull_root == null:
+		return
+	_finish_stage = clampi(stage, 0, FINISH_STAGE_COUNT - 1)
+	var wear: float = FINISH_WEAR[_finish_stage]
+	var gold := _finish_stage == FINISH_GOLD
+	for i in _finish_mats.size():
+		var m := _finish_mats[i]
+		var base: Dictionary = _finish_base[i]
+		var gold_col: Color = base["gold"]
+		var as_gold := gold and gold_col.a > 0.0
+		m.set_shader_parameter("rf_wear", wear)
+		m.set_shader_parameter("rf_rust_thr", FINISH_RUST_THR[_finish_stage])
+		m.set_shader_parameter("rf_gold", 1.0 if as_gold else 0.0)
+		m.set_shader_parameter("albedo", gold_col if as_gold else base["albedo"])
+		m.set_shader_parameter("surface_kind", MaterialLib.SURFACE_KINDS["metal"] if as_gold else 0)
+		m.set_shader_parameter("spec_size", GOLD_SPEC_SIZE if as_gold else base["spec_size"])
+		# A crashed hull has lost what little gloss its paint had: the spec goes first; the rim,
+		# which is also what separates the hull from a dark sky, mostly stays.
+		var spec := GOLD_SPEC if as_gold else float(base["spec"]) * (1.0 - 0.85 * wear)
+		var rim := GOLD_RIM if as_gold else float(base["rim"]) * (1.0 - 0.5 * wear)
+		m.set_shader_parameter("spec_strength", spec)
+		m.set_shader_parameter("rim_strength", rim)
+		m.set_shader_parameter("rim_color", GOLD_RIM_COLOR if as_gold else TOON_RIM_COLOR)
+		m.set_shader_parameter("shade_tint", GOLD_SHADE_TINT if as_gold else base["tint"])
+		m.set_shader_parameter("shade_floor", GOLD_SHADE_FLOOR if as_gold else base["floor"])
+		# Weathered bare metal is dull: oxidised, it loses its reflectance and goes matte grey. At the
+		# clean 0.55 the porthole and door-window rims render near-black (metallic takes the diffuse
+		# with it), and dark metal islands left between rust patches read as leopard print (critic).
+		m.set_shader_parameter("metallic", float(base["metallic"]) * (1.0 - wear))
+	if _sparkle != null:
+		_sparkle.material_override = MaterialLib.rocket_glint(GLINT_GOLD if gold else GLINT_WHITE,
+			GLINT_INTENSITY, GLINT_SIZE, GLINT_OPTS)
+		_sparkle.visible = _finish_stage >= FINISH_CLEAN and _mask_saved.is_empty()
+
+
+## The finish stage painted right now (0-5), or -1 before the model is built.
+func finish_stage() -> int:
+	return _finish_stage
+
+
+func _on_rocket_parts_changed(_count: int) -> void:
+	refresh_finish()
+
+
+## `--rocket-finish=N` (user arg, after the `--`): REVIEW ONLY. Pins every rocket in the run to
+## stage N and ignores part changes, so a capture can show any finish without a save holding N
+## parts. -1 when absent. Nothing in the shipped game passes it.
+static func _forced_finish_arg() -> int:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with(FINISH_ARG):
+			return clampi(int(a.substr(FINISH_ARG.length())), 0, FINISH_STAGE_COUNT - 1)
+	return -1
+
+
+## REVIEW ONLY. `on` paints every hull surface flat unshaded magenta and hides the sparkle, so a
+## frame captured from the same camera is an exact mask of the rocket's pixels for per-region
+## palette scoring (docs/OPEN_ISSUES.md 38: score per region, never the whole frame). `off` restores.
+func set_review_mask(on: bool) -> void:
+	if _hull_root == null:
+		return
+	if on and _mask_saved.is_empty():
+		if _mask_mat == null:
+			_mask_mat = StandardMaterial3D.new()
+			_mask_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			_mask_mat.albedo_color = Color(1.0, 0.0, 1.0)
+			_mask_mat.disable_fog = true
+		for n in _walk(_hull_root):
+			if n is GeometryInstance3D and n != _sparkle:
+				var gi := n as GeometryInstance3D
+				_mask_saved[gi] = gi.material_override
+				gi.material_override = _mask_mat
+	elif not on and not _mask_saved.is_empty():
+		for gi: GeometryInstance3D in _mask_saved:
+			if is_instance_valid(gi):
+				gi.material_override = _mask_saved[gi]
+		_mask_saved.clear()
+	if _sparkle != null:
+		_sparkle.visible = not on and _finish_stage >= FINISH_CLEAN
+
+
+## A hull material the finish repaints: `deep_toon` moved onto the finish shader and remembered with
+## the look it was built with, so stage 4 restores it exactly. `rust_bias` is how readily the surface
+## rusts (bare metal more than paint); `fade` how far its paint bleaches at full wear; `gold`
+## (alpha > 0) is what it turns at stage 5 - only the cream "white" of the hull does; `scorch` how
+## much of the crash scorch it takes (0 on the dark skirt, nozzle and fin feet, which it only blackened).
+func _finish_mat(color: Color, opts: Dictionary, floor_level: float, rust_bias: float, fade: float,
+		gold: Color = Color(0.0, 0.0, 0.0, 0.0), scorch: float = 1.0) -> ShaderMaterial:
+	var m := deep_toon(color, opts, floor_level)
+	m.shader = MaterialLib.rocket_finish_shader()
+	m.set_shader_parameter("rf_rust_bias", rust_bias)
+	m.set_shader_parameter("rf_fade", fade)
+	m.set_shader_parameter("rf_rust_color", RUST)
+	m.set_shader_parameter("rf_rust_deep", RUST_DEEP)
+	m.set_shader_parameter("rf_dust_color", DUST)
+	m.set_shader_parameter("rf_soot_color", SOOT)
+	m.set_shader_parameter("rf_grime_depth", GRIME_DEPTH)
+	m.set_shader_parameter("rf_scorch", scorch)
+	m.set_shader_parameter("rf_scorch_dir", SCORCH_DIR)
+	m.set_shader_parameter("rf_gold_hi", GOLD_HI)
+	m.set_shader_parameter("rf_gold_lo", GOLD_LO)
+	m.set_shader_parameter("rf_gold_hi_band", GOLD_HI_BAND)
+	m.set_shader_parameter("rf_gold_lo_band", GOLD_LO_BAND)
+	if gold.a > 0.0:
+		m.set_shader_parameter("surface_scale", GOLD_GRAIN_SCALE)
+		m.set_shader_parameter("surface_strength", GOLD_GRAIN_STRENGTH)
+	_finish_mats.append(m)
+	# MaterialLib.toon's own defaults for anything the opts leave out (rim 0.09, spec 0.05, size 60);
+	# the shade tint, floor and metallic are read back off the built material.
+	_finish_base.append({"albedo": color, "gold": gold, "spec": float(opts.get("spec", 0.05)),
+		"rim": float(opts.get("rim", 0.09)), "spec_size": float(opts.get("spec_size", 60.0)),
+		"tint": m.get_shader_parameter("shade_tint"), "floor": floor_level,
+		"metallic": float(m.get_shader_parameter("metallic"))})
+	return m
+
+
+## Bakes every finish-painted part's node transform into its vertices and gives the node the inverse
+## of its parents, so the part renders exactly where it did while the finish shader's v_objpos (the
+## mesh's own vertex position) is HULL space on every part. Without this the porthole rim, the door
+## window rim, the handle and the ladder - cylinders built at their own origin - all read y = 0 and
+## took the engine skirt's full soot and ground-level rust, and the three fins, one shared mesh in
+## their pivots' frames, rusted identically. Triangle count unchanged. The hatch pivot is closed
+## here, so the door parts keep swinging with it.
+func _bake_to_hull_space() -> void:
+	for n in _walk(_hull_root):
+		var mi := n as MeshInstance3D
+		# The type test first: a typed Array[ShaderMaterial].has() pushes an ERROR when handed the
+		# glass StandardMaterial3D.
+		if mi == null or mi == _sparkle or not (mi.material_override is ShaderMaterial) \
+				or not _finish_mats.has(mi.material_override):
+			continue
+		var chain := Transform3D.IDENTITY
+		var p: Node = mi
+		while p != _hull_root:
+			chain = (p as Node3D).transform * chain
+			p = p.get_parent()
+		if chain.is_equal_approx(Transform3D.IDENTITY):
+			continue
+		mi.mesh = _baked(mi.mesh, chain)
+		mi.transform = mi.transform * chain.affine_inverse()
+
+
+static func _baked(mesh: Mesh, xf: Transform3D) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	var nb := xf.basis.inverse().transposed()
+	for s in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		for i in v.size():
+			v[i] = xf * v[i]
+		arr[Mesh.ARRAY_VERTEX] = v
+		if arr[Mesh.ARRAY_NORMAL] is PackedVector3Array:
+			var nn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+			for i in nn.size():
+				nn[i] = (nb * nn[i]).normalized()
+			arr[Mesh.ARRAY_NORMAL] = nn
+		if arr[Mesh.ARRAY_TANGENT] is PackedFloat32Array:
+			var tt: PackedFloat32Array = arr[Mesh.ARRAY_TANGENT]
+			for i in range(0, tt.size() - 3, 4):
+				var t3 := (xf.basis * Vector3(tt[i], tt[i + 1], tt[i + 2])).normalized()
+				tt[i] = t3.x
+				tt[i + 1] = t3.y
+				tt[i + 2] = t3.z
+			arr[Mesh.ARRAY_TANGENT] = tt
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return out
+
+
 # ============================================================================= build
 func _build() -> void:
 	_hull_root = Node3D.new()
@@ -335,28 +689,55 @@ func _build() -> void:
 
 	# Big cream surfaces: no specular blob, barely any rim, a deep shade floor. This is where the
 	# blown-highlight budget is won (STYLE_GUIDE: blown luma > 0.92 must stay under 8%).
-	var cream := deep_toon(CREAM, {"shade": 0.54, "rim": 0.08, "spec": 0.04, "spec_size": 50.0,
-		"softness": 0.40}, HULL_SHADE_FLOOR)
-	var cream_shade := deep_toon(CREAM_SHADE, {"shade": 0.55, "rim": 0.08, "spec": 0.03}, HULL_SHADE_FLOOR)
-	var teal := deep_toon(TEAL, {"shade": 0.50, "rim": 0.12, "spec": 0.10, "spec_size": 90.0}, 0.40)
+	# Each hull colour is a finish material (see "Finish"): the same toon look as before at stage 4,
+	# plus how readily it rusts and how far its paint bleaches when the rocket is crashed-dirty.
+	# Bare metal rusts first, painted hull last; saturated paints (red, teal) bleach the most.
+	var cream := _finish_mat(CREAM, {"shade": 0.54, "rim": 0.08, "spec": 0.04, "spec_size": 50.0,
+		"softness": 0.40}, HULL_SHADE_FLOOR, 0.0, 0.15, GOLD)
+	var cream_shade := _finish_mat(CREAM_SHADE, {"shade": 0.55, "rim": 0.08, "spec": 0.03},
+		HULL_SHADE_FLOOR, 0.04, 0.15, GOLD_SHADE)
+	var teal := _finish_mat(TEAL, {"shade": 0.50, "rim": 0.12, "spec": 0.10, "spec_size": 90.0}, 0.40,
+		0.02, 0.25)
 	var teal_dark := deep_toon(TEAL_DARK, {"shade": 0.52, "rim": 0.10, "spec": 0.06}, 0.36)
-	var navy := deep_toon(NAVY, {"shade": 0.46, "rim": 0.16, "spec": 0.10, "spec_size": 80.0}, 0.42)
-	var navy_dark := deep_toon(NAVY_DARK, {"shade": 0.40, "rim": 0.10, "spec": 0.06}, 0.42)
-	var red := deep_toon(RED, {"shade": 0.50, "rim": 0.14, "spec": 0.10, "spec_size": 110.0}, 0.40)
-	var red_dark := deep_toon(RED_DARK, {"shade": 0.50, "rim": 0.10, "spec": 0.06}, 0.40)
-	var metal := deep_toon(METAL, {"metallic": 0.55, "roughness": 0.5, "spec": 0.22,
-		"spec_size": 120.0, "rim": 0.20}, 0.44)
+	var no_gold := Color(0.0, 0.0, 0.0, 0.0)
+	# Rust biases are set by stage-0 COVERAGE per part (the same float32 replica of the field, sampled
+	# over each part in hull space): rust has to read as patches ON a surface, never as a surface with
+	# holes in it (critic: "metal spots on rust"). The low skirt, nozzle and fin feet sit where the
+	# field's height bias is largest; at +0.05-0.06 they were 69-81% rust at stage 0 and read as black
+	# holes close up. At -0.07: skirt 33%, nozzle 29%, fin feet 39%.
+	var navy := _finish_mat(NAVY, {"shade": 0.46, "rim": 0.16, "spec": 0.10, "spec_size": 80.0}, 0.42,
+		-0.07, 0.20, no_gold, 0.0)
+	var navy_dark := _finish_mat(NAVY_DARK, {"shade": 0.40, "rim": 0.10, "spec": 0.06}, 0.42,
+		-0.07, 0.15, no_gold, 0.0)
+	# Sun-faded red: 0.35 against 0.20 moved the crashed rocket's worst dominant swatch from S 0.58 to
+	# 0.56 over noon, dusk and both renderers, and on the pastel red it reads dusty, not mauve.
+	var red := _finish_mat(RED, {"shade": 0.50, "rim": 0.14, "spec": 0.10, "spec_size": 110.0}, 0.40,
+		0.0, 0.35)
+	var red_dark := _finish_mat(RED_DARK, {"shade": 0.50, "rim": 0.10, "spec": 0.06}, 0.40,
+		0.04, 0.35)
+	# The fins stand in the low, rust-heavy band of the field: at bias 0 the lower half of each plate
+	# was 51% rust at stage 0 and read as light paint spots on dark rust close up. At -0.04: 26% of
+	# the plate, 37% of its lower half.
+	var fin := _finish_mat(RED_FIN, {"shade": FIN_SHADE, "rim": 0.14, "spec": 0.10, "spec_size": 110.0},
+		FIN_SHADE_FLOOR, -0.04, 0.35)
+	# Trim: -0.02, a touch below the paint. The rims are thin rings on the rocket's face; at +0.03 they
+	# were mostly rust around near-black metal islands (the leopard print). Stage-0 coverage at -0.02:
+	# porthole rim 2%, door-window rim 5%, handle 47%, ladder 43%, nose collar 9%.
+	var metal := _finish_mat(METAL, {"metallic": 0.55, "roughness": 0.5, "spec": 0.22,
+		"spec_size": 120.0, "rim": 0.20}, 0.44, -0.02, 0.20)
 	var metal_dark := deep_toon(METAL_DARK, {"metallic": 0.7, "roughness": 0.38, "spec": 0.2,
 		"rim": 0.16}, 0.40)
 
 	_build_skirt(navy, navy_dark)
 	_build_hull(cream, teal, metal)
 	_build_nose(red, red_dark, metal)
-	_build_fins(red, navy_dark)
+	_build_fins(fin, navy_dark)
 	_build_porthole(metal)
 	_build_hatch(cream, cream_shade, teal, metal)
 	_build_ladder(metal)
 	_build_rivets(cream_shade)
+	_bake_to_hull_space()
+	_build_sparkle()
 	_build_beacon()
 	_build_flame()
 	_build_collision()
@@ -548,6 +929,49 @@ func _build_rivets(mat: Material) -> void:
 	_rivets.visibility_range_end_margin = 4.0
 	_rivets.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	_hull_root.add_child(_rivets)
+
+
+## The stage 4-5 sparkle: GLINTS as ONE merged mesh on MaterialLib.rocket_glint (star.gdshader's
+## four-point twinkle, billboarded in its vertex function). All four corners of a glint sit on its
+## centre; UV names the corner and UV2.x is its blink phase, spread evenly so they twinkle in turn
+## rather than together. One draw call, 2 triangles a glint, hidden below stage 4.
+## It replaced a MultiMesh on star.gdshader that drew nothing under Compatibility - the web build the
+## phone runs - while still costing its draw call (critic probe; MaterialLib "rocket glints").
+func _build_sparkle() -> void:
+	if MaterialLib.rocket_glint_shader() == null:
+		return
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var phases := PackedVector2Array()
+	var idx := PackedInt32Array()
+	var corners: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]
+	for i in GLINTS.size():
+		var g := GLINTS[i]
+		var a := deg_to_rad(g.x)
+		var at := Vector3(g.z * sin(a), g.y, -g.z * cos(a))
+		var first := verts.size()
+		for c in corners:
+			verts.append(at)
+			uvs.append(c)
+			phases.append(Vector2(float(i) / float(GLINTS.size()), 0.0))
+		idx.append_array(PackedInt32Array([first, first + 1, first + 2, first, first + 2, first + 3]))
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_TEX_UV2] = phases
+	arr[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	# The vertices are only the centres, so pad the cull box by a glint: a glint at the edge of the
+	# view must not be culled while its quad is still on screen.
+	mesh.custom_aabb = mesh.get_aabb().grow(GLINT_SIZE)
+	_sparkle = MeshInstance3D.new()
+	_sparkle.name = "Sparkle"
+	_sparkle.mesh = mesh
+	_sparkle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sparkle.visible = false
+	_hull_root.add_child(_sparkle)
 
 
 func _build_beacon() -> void:

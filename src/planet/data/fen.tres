@@ -54,5 +54,5 @@ music_track = "dust"
 tree_count = 9
 rock_count = 24
 flower_patch_count = 5
-collectible_count = 8
-collectible_kind = "salt_bloom,crystal_chunk"
+collectible_count = 10
+collectible_kind = "salt_bloom,crystal_chunk,salt_bloom,crystal_chunk,scrap"

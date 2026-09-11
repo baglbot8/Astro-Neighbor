@@ -54,4 +54,4 @@ tree_count = 26
 rock_count = 18
 flower_patch_count = 16
 collectible_count = 8
-collectible_kind = "stardust_shard"
+collectible_kind = "scrap"

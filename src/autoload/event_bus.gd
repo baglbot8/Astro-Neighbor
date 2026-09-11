@@ -36,6 +36,16 @@ signal friendship_changed(npc_id: String, level: int)
 # --- Planet score / trash ---
 signal trash_changed(count: int)          # a piece landed on the home planet, or was cleaned up
 
+# --- campaign: the "Stranded" story (docs/CORE_LOOP.md, docs/BUILD_PLAN.md) ---
+# Added by the lead before Phase 1 so every builder codes against the same names.
+signal scrap_changed(new_amount: int, delta: int)   # scrap is the story's building currency; mirrors stardust_changed
+signal rocket_parts_changed(count: int)             # a part was fitted, or campaign state loaded; the finish and the range picker re-read
+signal campaign_changed()                           # campaign_active / story_done changed (new game, load, finale)
+# Phase 2 (docs/BUILD_PLAN.md) - added by the lead before Phase 2 so builders E, F, G and N share names.
+signal project_step_completed(npc_id: String, step_index: int)  # a neighbour's project advanced one step
+signal project_completed(npc_id: String, part_id: String)       # the project is done and the neighbour gave their part
+signal rocket_part_fitted(part_id: String)                      # fitted at the bench (NOT on load); starts the celebration
+
 # --- UI ---
 signal ui_modal_opened(name: String)   # inventory/shop/pause etc. Player should freeze while any modal is open.
 signal ui_modal_closed(name: String)

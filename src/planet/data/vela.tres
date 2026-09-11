@@ -54,5 +54,5 @@ music_track = "frost"
 tree_count = 0
 rock_count = 12
 flower_patch_count = 3
-collectible_count = 8
-collectible_kind = "crystal_chunk,moon_flower"
+collectible_count = 10
+collectible_kind = "crystal_chunk,moon_flower,crystal_chunk,moon_flower,scrap"

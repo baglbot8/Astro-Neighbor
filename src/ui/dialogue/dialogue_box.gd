@@ -1,10 +1,12 @@
 class_name DialogueBox
 extends Control
 ## ACNH-style speech box (ARCHITECTURE §6). Wide cream rounded panel at the bottom, blue pill name tag
-## overlapping the top-left corner, brown typewriter text with voice blips, bouncing yellow marker,
-## and stacked pill choices.
+## overlapping the top-left corner, brown typewriter text, bouncing yellow marker, and stacked pill
+## choices. SOUND: every line is a radio transmission (AudioManager "comms voices") - a key-up when the
+## line starts, one voiced gesture per PHRASE as it types (never per letter), and a squelch when it
+## finishes or is skipped ("over" on the last line of a turn).
 ##
-##   dialogue_box.show_lines("Zorp", ["Hi!", "Nice planet."], "alien", Color("#8a4fe8"))
+##   dialogue_box.show_lines("Zorp", ["Hi!", "Nice planet."], "zorp", Color("#8a4fe8"))
 ##   await dialogue_box.finished            # (or: await dialogue_box.show_lines(...))
 ##   var i: int = await dialogue_box.show_choice("Help me?", ["Sure!", "Later"])   # -1 on cancel
 ##
@@ -60,11 +62,11 @@ var _state: State = State.HIDDEN
 var _lines: PackedStringArray = []
 var _line_index := 0
 var _voice := "alien"
+var _voice_profile := ""
+var _voice_speaker := ""
 var _typing := false
 var _typed := 0.0
 var _visible_chars := 0
-var _blip_counter := 0
-var _next_blip := 2
 var _cooldown := 0.0
 var _close_timer := -1.0
 var _options: PackedStringArray = []
@@ -217,7 +219,11 @@ func show_lines(speaker: String, lines: Array, voice_profile: String = "alien", 
 		_lines.append(str(l))
 	if _lines.is_empty():
 		_lines.append("...")
-	_voice = voice_profile
+	# A neighbour id ("zorp"), a legacy profile the hub buildings still pass ("alien"), or "" - resolved
+	# with the speaker's name so "Pip & Pop" + "alien" is the twins, not Zorp, and "Mailbox" is silent.
+	# Resolved PER LINE in _start_line: a duo speaker ("Pip & Pop") takes turns line by line.
+	_voice_profile = voice_profile
+	_voice_speaker = speaker
 	_hide_choices(true)
 	_set_speaker(speaker, accent)
 	_open()
@@ -236,6 +242,7 @@ func show_choice(prompt: String, options: Array) -> int:
 	_hide_choices(true)
 	if _state == State.HIDDEN:
 		_set_speaker("", Color.WHITE)
+		_voice = ""        # a bare prompt with nobody speaking is not a transmission
 	# Set the line BEFORE _open() so a fresh box pops in already sized to the prompt.
 	_lines = PackedStringArray([prompt])
 	_line_index = 0
@@ -256,6 +263,8 @@ func hide_box() -> void:
 	_state = State.HIDDEN
 	_refresh_tap_catcher()
 	_close_timer = -1.0
+	if _typing:
+		UIStyle.comms_close_line(true)      # cut off mid-line: voice stops, squelch
 	_typing = false
 	_hide_choices(false)
 	EventBus.ui_modal_closed.emit("dialogue")
@@ -322,12 +331,31 @@ func _start_line() -> void:
 	_visible_chars = 0
 	_typed = 0.0
 	_typing = true
-	_blip_counter = 0
-	_next_blip = 2
 	_marker.visible = false
 	_cooldown = maxf(_cooldown, 0.08)
+	# A choice prompt keeps whoever spoke last (or "" for a bare prompt, set in show_choice).
+	if _state == State.LINES:
+		_voice = UIStyle.comms_voice_for(_voice_profile, _voice_speaker, _line_index)
+	UIStyle.comms_open_line(_voice, _lines[_line_index], _closes_turn())
+
+## True when the line now typing is the last one before the player answers or the box closes: it
+## ends with the roger "over" instead of a plain squelch, so a turn has an audible end.
+func _closes_turn() -> bool:
+	return _state == State.CHOICE or _line_index >= _lines.size() - 1
+
+## The pause menu freezes this box (PROCESS_MODE_PAUSABLE); the static bed goes down with it. Not only
+## while typing: a finished line can still be sounding its last gesture with its squelch owed, and
+## AudioManager.comms_hold knows whether anything is live (it is a no-op when nothing is).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PAUSED and _state != State.HIDDEN:
+		UIStyle.comms_hold(true)
+	elif what == NOTIFICATION_UNPAUSED and _state != State.HIDDEN:
+		UIStyle.comms_hold(false)
 
 func _complete_line() -> void:
+	# The player skipped the typewriter: let go of the talk button - voice cut, squelch now.
+	if _typing:
+		UIStyle.comms_close_line(true)
 	_typing = false
 	_text.visible_characters = -1
 	_visible_chars = _text.get_total_character_count()
@@ -421,20 +449,16 @@ func _process(delta: float) -> void:
 		var total := _text.get_total_character_count()
 		var n := mini(int(_typed), total)
 		if n > _visible_chars:
-			var txt := _text.text
-			for ci in range(_visible_chars, n):
-				var ch := txt[ci] if ci < txt.length() else " "
-				if ch != " " and ch != "\n":
-					_blip_counter += 1
-					if _blip_counter >= _next_blip:
-						_blip_counter = 0
-						_next_blip = 2 + (randi() % 2)
-						UIStyle.play_voice_blip(_voice)
 			_visible_chars = n
 			_text.visible_characters = n
+		# Sound is per PHRASE, never per letter (this used to fire a pitched blip every 2-3 letters -
+		# the Animal Crossing tell). The comms scheduler is told how much is visible EVERY frame, because
+		# a phrase that came due while the voice was busy plays on a later frame with no new letter.
+		UIStyle.comms_reveal(n)
 		if n >= total:
 			_typing = false
 			_text.visible_characters = -1
+			UIStyle.comms_close_line(false)
 			_on_line_complete()
 	if _state == State.IDLE:
 		if _close_timer >= 0.0:
@@ -453,6 +477,8 @@ func _process(delta: float) -> void:
 		State.CHOICE:
 			# On a choice, cancel always answers -1 — even while the prompt is still typing.
 			if UIFocus.cancel_pressed():
+				if _typing:
+					UIStyle.comms_close_line(true)
 				_typing = false
 				_choose(-1)
 				return

@@ -45,6 +45,13 @@ const TOAST_FLUSH_STAGGER := 0.14
 ## Fast exit for a live toast when a panel modal takes over the frame (beats the panel's pop-in).
 const TOAST_HIDE_FAST := 0.1
 const EDGE := 24.0
+## Scrap pill (BUILD_PLAN Phase 1 "D: scrap and economy"): a FIXED offset to the right of the
+## stardust pill rather than a width measured off it at runtime - a label's text (and so its pill's
+## size) can still be mid-resize when the next line of code reads it, and a structural HUD position
+## must never race that. Sized for stardust up to 4 digits at the "Header" font (icon 30 + text +
+## HudPill padding) with headroom; checked against captures at desktop 1280x720 and
+## `--ui=mobile` 1560x720 (both pills share the same MOBILE_PILL_SCALE, so one constant covers both).
+const SCRAP_PILL_OFFSET_X := 132.0
 ## The interact prompt floats this far above the bottom edge (clear of the control hints).
 const PROMPT_BOTTOM := 92.0
 ## Fade used when the HUD chrome tucks away under a modal.
@@ -115,6 +122,10 @@ var _chrome_tween: Tween
 var _stardust_pill: PanelContainer
 var _stardust_label: Label
 var _stardust_star: StarIcon
+## Scrap counter beside the stardust one (BUILD_PLAN Phase 1 "D"), same HudPill style.
+var _scrap_pill: PanelContainer
+var _scrap_label: Label
+var _scrap_icon: ScrapIcon
 var _float_layer: Control
 var _clock_pill: PanelContainer
 var _clock_label: Label
@@ -162,6 +173,7 @@ func _ready() -> void:
 	_world_chrome.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chrome.add_child(_world_chrome)
 	_build_stardust()
+	_build_scrap()
 	_build_clock()
 	_build_banner()
 	_build_prompt()
@@ -191,6 +203,7 @@ func _ready() -> void:
 	root.resized.connect(_apply_platform_layout)
 
 	EventBus.stardust_changed.connect(_on_stardust_changed)
+	EventBus.scrap_changed.connect(_on_scrap_changed)
 	EventBus.time_of_day_changed.connect(_on_time_changed)
 	EventBus.planet_loaded.connect(_on_planet_loaded)
 	EventBus.interact_prompt_changed.connect(_on_prompt_changed)
@@ -199,6 +212,7 @@ func _ready() -> void:
 	EventBus.ui_modal_closed.connect(_on_modal_closed)
 	EventBus.placement_mode_changed.connect(func(active: bool) -> void: _placement_active = active)
 	_stardust_label.text = str(GameState.stardust)
+	_scrap_label.text = str(GameState.scrap)
 	_on_time_changed(GameState.time_of_day)
 
 	# *** TEMPORARY INSTRUMENTATION — REMOVE WITH src/ui/mobile/touch_diag.gd. ***
@@ -228,6 +242,25 @@ func _build_stardust() -> void:
 	row.add_child(_stardust_star)
 	_stardust_label = UIStyle.make_label("0", "Header")
 	row.add_child(_stardust_label)
+
+## Scrap counter (BUILD_PLAN Phase 1 "D"). Same HudPill panel and "Header" label as the stardust
+## pill beside it; positioned in `_apply_platform_layout` (SCRAP_PILL_OFFSET_X), not here, since it
+## has to track the stardust pill's own position/scale as those change with the platform.
+func _build_scrap() -> void:
+	_scrap_pill = PanelContainer.new()
+	_scrap_pill.name = "Scrap"
+	_scrap_pill.theme_type_variation = "HudPill"
+	_scrap_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world_chrome.add_child(_scrap_pill)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scrap_pill.add_child(row)
+	_scrap_icon = ScrapIcon.new()
+	_scrap_icon.icon_size = 28.0
+	row.add_child(_scrap_icon)
+	_scrap_label = UIStyle.make_label("0", "Header")
+	row.add_child(_scrap_label)
 
 func _build_clock() -> void:
 	_clock_pill = PanelContainer.new()
@@ -552,6 +585,12 @@ func _apply_platform_layout() -> void:
 	_stardust_pill.pivot_offset = Vector2.ZERO
 	_stardust_pill.position = Vector2(sa.x + edge, sa.y + (edge if mobile else EDGE - 4.0))
 
+	# Same row as the stardust pill, SCRAP_PILL_OFFSET_X to its right - see that constant for why
+	# this is a fixed offset and not a width read off `_stardust_pill` at runtime.
+	_scrap_pill.scale = Vector2(scale, scale)
+	_scrap_pill.pivot_offset = Vector2.ZERO
+	_scrap_pill.position = Vector2(sa.x + edge + SCRAP_PILL_OFFSET_X, sa.y + (edge if mobile else EDGE - 4.0))
+
 	_clock_pill.scale = Vector2(scale, scale)
 	_clock_pill.pivot_offset = Vector2(_clock_pill.size.x, 0.0)
 	_clock_pill.offset_right = -(sa.z + edge)
@@ -719,6 +758,27 @@ func _on_stardust_changed(amount: int, delta: int) -> void:
 	t.tween_property(f, "modulate:a", 0.0, 0.5).set_delay(0.5)
 	t.chain().tween_callback(f.queue_free)
 
+## Mirrors `_on_stardust_changed` for the scrap pill (BUILD_PLAN Phase 1 "D") - same bump + floater
+## feedback, so the two currencies read as one family of counters.
+func _on_scrap_changed(amount: int, delta: int) -> void:
+	_scrap_label.text = str(amount)
+	UIStyle.bump(_scrap_pill, 1.18)
+	if delta == 0:
+		return
+	var f := UIStyle.make_label(("+%d" if delta > 0 else "%d") % delta, "Header")
+	f.add_theme_color_override("font_color", UIStyle.GREEN_EDGE if delta > 0 else UIStyle.ORANGE)
+	f.add_theme_color_override("font_outline_color", UIStyle.WHITE)
+	f.add_theme_constant_override("outline_size", 6)
+	f.position = _scrap_pill.position + Vector2(_scrap_pill.size.x + 10.0, FLOAT_START_Y)
+	_float_layer.add_child(f)
+	f.pivot_offset = Vector2(0.0, 16.0)
+	f.scale = Vector2(0.6, 0.6)
+	var t := create_tween().set_parallel(true)
+	t.tween_property(f, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_property(f, "position:y", f.position.y - FLOAT_RISE, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	t.tween_property(f, "modulate:a", 0.0, 0.5).set_delay(0.5)
+	t.chain().tween_callback(f.queue_free)
+
 func _on_time_changed(hour: float) -> void:
 	_clock_label.text = "%s · Day %d" % [UIStyle.format_clock(hour), GameState.day_count]
 
@@ -876,3 +936,43 @@ func _has_blocking_modal() -> bool:
 		if not OVERLAY_MODALS.has(str(modal_name)):
 			return true
 	return false
+
+# ----------------------------------------------------------------------------- scrap icon
+## Small procedural scrap icon for the HUD pill (BUILD_PLAN Phase 1 "D"): a bent hull plate with a
+## bolt, drawn with the exact metal/rust colors of the scrap pickup's own mesh (collectible.gd) and
+## of the space-trash piece it comes from (trash_piece.gd `_build_scrap`) - the counter, the pickup
+## and the litter it replaces all read as one material. Deliberately grey, not a new saturated hue:
+## STYLE_GUIDE "UI — Moonstone" keeps amber as "the ONE accent" (reserved for stardust).
+## Nested here (as Toast.SymbolIcon is nested in toast.gd) since only this file needs it.
+class ScrapIcon extends Control:
+	const METAL := Color("#8a8496")
+	const METAL_EDGE := Color("#65607a")
+	const RUST := Color("#c2703f")
+	@export var icon_size: float = 28.0:
+		set(v):
+			icon_size = v
+			custom_minimum_size = Vector2(v, v)
+			queue_redraw()
+
+	func _ready() -> void:
+		custom_minimum_size = Vector2(icon_size, icon_size)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var s := minf(size.x, size.y) * 0.5
+		# An irregular quad tilted like the plate in trash_piece.gd's `_build_scrap`, not a clean
+		# rectangle - a scrap of hull plating, not a UI swatch.
+		var plate := PackedVector2Array([
+			c + Vector2(-s * 0.85, -s * 0.12),
+			c + Vector2(s * 0.32, -s * 0.65),
+			c + Vector2(s * 0.85, s * 0.32),
+			c + Vector2(-s * 0.48, s * 0.70),
+		])
+		draw_colored_polygon(plate, METAL)
+		var closed := plate.duplicate()
+		closed.append(plate[0])
+		draw_polyline(closed, METAL_EDGE, maxf(1.2, s * 0.08), true)
+		# The bolt sticking through it, same as the ground pickup.
+		UIDraw.circle(self, c + Vector2(s * 0.30, -s * 0.22), s * 0.26, RUST)
+		UIDraw.circle(self, c + Vector2(s * 0.30, -s * 0.22), s * 0.11, METAL_EDGE)

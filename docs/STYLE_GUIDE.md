@@ -26,7 +26,7 @@ The user's own fix for "flat pressed into the glass mask": *"Maybe the astronaut
 
 ## R2.3 — Less "cocomelon". Less bright. Less round. [ALL VISUAL BUILDERS]
 The user says the characters read like a preschool cartoon and everything is still too bright and too round.
-* **Faces (NPCs)**: keep them simple and readable, but drop the baby-doll register — smaller and less glossy eyes relative to the head, no giant white sclera domes, restrained blush (or none on the robots), and no wide permanent grin. Aim for the *quieter* end of the Animal Crossing range (Tom Nook, Blathers, Mabel) rather than the sugary end.
+* **Faces (NPCs)**: keep them simple and readable, but drop the baby-doll register — smaller and less glossy eyes relative to the head, no giant white sclera domes, restrained blush (or none on the robots), and no wide permanent grin. Aim for a *quiet* register — calm, knowing, a little dry, like a neighbour who has lived on their rock a long time — rather than the sugary baby-doll end.
 * **Palette**: pull saturation and value down another notch across the board. Target **saturation mean 0.36–0.48** (was 0.40–0.52) and **value mean 0.66–0.76** (was 0.70–0.80) on a gameplay frame. Blown highlights **under 5%** (was 8%). Fewer pure-white and pure-pastel surfaces; more mid-tones and more genuinely dark values.
 * **Shape**: keep the chunky charm but add structure — flat planes, chamfers, panel lines, tapers and hard edges alongside the curves. If a form can be described as "a ball" or "a bunch of balls", rebuild it. This applies to props, buildings, rocks, foliage and characters alike.
 
@@ -38,9 +38,9 @@ The user says the characters read like a preschool cartoon and everything is sti
 
 
 ### Eye spacing: 28-35% stands. Decision, with the reasoning. [orchestrator ruling]
-A builder measured the references and reported that **Tom Nook's** eye centres are 55.3% of head width apart and **Isabelle's** 50.4%, versus the 28-35% in this guide, and asked whether the doc is wrong. The doc stands, for two reasons:
-1. **Those are animal villagers.** Tom Nook is a tanuki whose eyes sit inside a wide face mask; Isabelle is a dog. Their spacing follows animal skull anatomy. The *human* villagers in `reference/AC Characters.png` measure 28-35%, and that is the grammar our aliens, robots and astronaut are built on.
-2. **Wide-set eyes low on a big round head is the strongest "baby" cue there is** — and the user's standing complaint is that the characters read like "a cute kids tv show like cocomelon". Widening to 50%+ would push directly into the register they rejected.
+A builder measured two animal characters on the (now retired) reference screenshots at **55.3%** and **50.4%** of head width between eye centres, versus the 28-35% in this guide, and asked whether the doc is wrong. The doc stands, for two reasons:
+1. **Wide-set eyes low on a big round head is the strongest "baby" cue there is** — and the user's standing complaint is that the characters read like "a cute kids tv show like cocomelon". Widening to 50%+ would push directly into the register they rejected.
+2. **Those two were animals, and our cast is not.** Their spacing follows animal skull anatomy — eyes set inside a wide face mask, or either side of a muzzle — and no alien, robot or astronaut in this cast has that skull (ARCHITECTURE §1.1: aliens and robots, not animals). So there is no anatomical reason to follow them, and reason 1 is a strong reason not to. The band is bounded from the other side too: at 40% the eyes read wall-eyed ("Character rules").
 Keep 28-35% measured as rendered. If a specific character has a genuine animal-mask design reason to go wider, raise it in your report rather than changing the number.
 
 
@@ -170,9 +170,9 @@ A metal panel can be matte and still have a soft directional sheen that shifts a
 
 > *"The colors are popping too much but maybe we move to more pastel or matte colors to tone it down? The space scenes look good but on the planets in teh daytime its very strikingly bright especially greens whites and blues"*
 
-Measured on a real home-planet daytime frame against `reference/AC Reference 2 copy.jpg`, and the user's read is exactly right. **The problem is not the average — it is the loud tail.** Our mean saturation (0.488) already matches AC (0.477); what is wrong is that our most saturated colours are far more intense than anything in the reference:
+Measured once, when this note was written, on a real home-planet daytime frame and on a reference frame (one of the retired screenshots — see the reference table below), and the user's read is exactly right. **The problem is not the average — it is the loud tail.** Our mean saturation (0.488) already sat on the reference frame's (0.477); what was wrong is that our most saturated colours were far more intense than anything in it. The reference column is that one-off historical measurement, kept so the targets make sense — do not re-measure against it. The TARGETS underneath are the rule.
 
-| | OURS | ACNH ref | action |
+| | OURS | reference frame (one-off, historical) | action |
 |---|---|---|---|
 | **saturation p90** (the loud tail) | **0.811** | 0.673 | **this is the headline number — get it to <= 0.68** |
 | grass green | `#2d9c67` **S 0.71** | `#5eb972` S 0.49 | pull green saturation to ~0.45-0.52 |
@@ -201,7 +201,16 @@ Measured on a real home-planet daytime frame against `reference/AC Reference 2 c
 
 # Astro Neighbor — Visual & Feel Style Guide
 
-Reference images live in `reference/` (Animal Crossing: New Horizons screenshots). Look at them before you build anything. The target is "ACNH, but in space": **soft, chunky, saturated, warm, and alive**.
+The target is **Astro Neighbor's own look: soft, chunky, warm and alive, on tiny airless worlds under a space sky** — saturated but pastel (R2.6 caps the loud tail), structured rather than bubbly, cute rather than sugary. ARCHITECTURE §1 defines the quality bar in measured terms, and §1.1 lists what this game is *not*.
+
+**Reference images (`reference/`) are not all targets.** Before you build, look at the ones this table marks for your kind of work, and know which kind each one is:
+
+| file | what it is | use it for |
+|---|---|---|
+| `astronaut 1-3.jpeg` | astronaut suit references | **a target**: the suit, bubble helmet, neck ring, ear-pods and limb bands (R2.7) |
+| `Alien References.webp` | a sheet of 18 cartoon aliens | the *range* of creature shapes — eye counts, stalks, horns, limbs — for the cast (CAST_VARIETY.md). Shape vocabulary, not a style to trace |
+| `Menu and text reference 1-2.jpg` | menu concept screens from LittleBigPlanet Karting (per their captions) | UI layout ideas only |
+| `AC Characters.png` (+ `.avif`), `AC Reference 2-6` | Animal Crossing: New Horizons screenshots | **Retired** (ARCHITECTURE §1.1). Not a target and not a ruler. The numbers in this guide are the rule |
 
 ## Shape language
 * **Round everything.** No sharp boxes. Beveled/rounded edges, capsules, squashed spheres. If you use BoxMesh, wrap it in a rounded look (use CSG or SurfaceTool with bevels, or scale a SphereMesh/CapsuleMesh).
@@ -210,11 +219,11 @@ Reference images live in `reference/` (Animal Crossing: New Horizons screenshots
 * **Readable silhouettes** at 1280×720 from the gameplay camera (6.5 m away, 28° elevation).
 
 
-## Character rules — Animal Crossing cute (MANDATORY, user-mandated)
-The user reviewed the first astronaut and said it must be *cuter, like Animal Crossing characters and neighbors*. Every character (player, Zorp, Bolt, shopkeepers) follows these rules. Critics grade cuteness first.
+## Character rules — chibi cute (MANDATORY, user-mandated)
+The user reviewed the first astronaut and asked for it to be much *cuter*. That still stands: chibi proportions and simple faces are this game's character look, and the user wants to keep them. What changed on 2026-09-10 is the yardstick — the original request compared the characters to Animal Crossing's, and ARCHITECTURE §1.1 retires that comparison. The numbers below are the yardstick now. Every character (player, every neighbour, shopkeepers) follows these rules. Critics grade cuteness first.
 * **Chibi proportions** (height H ≈ 1.4 m): head/helmet ≈ 0.50 H tall and slightly wider than tall; **no neck**; torso = a short rounded bean ≈ 0.26 H; legs stubby ≈ 0.12 H; big round feet ≈ 0.10 H; arms short (hands reach the waist) ending in round mitten spheres ≈ 0.09 H. Silhouette reads like a plush toy; from the gameplay camera the head must look bigger than the body.
-* **Simple flat face.** MEASURED off reference/AC Characters.png and AC Reference 2 (these numbers supersede earlier estimates): eyes = two small vertical ovals (≈ 12% of head height tall, 8% wide), very dark (#2a2320 / navy), with **centres 28–35% of head width apart** (NOT 40% — that reads wall-eyed), placed at the vertical middle of the face (not high). One small white highlight dot upper-right per eye; blink = squash to a line; happy = closed "^ ^" arcs; surprised = round "O O". Tiny nose (dot/triangle). Mouth = a small curved line **16–25% of head width** (NOT 5% — that reads as a pinprick); talk = small round "o". Blush = two soft pink ovals (#ffb3c1, ~50% alpha) low on the cheeks, wider than tall. Optional thin eyebrow arcs for expression. NO giant glossy anime eyes, NO multiple big reflections in the eyes.
-* **Colour-block the clothing like AC.** AC characters read at distance because the outfit has 2–3 clear colour zones (e.g. the AC player: blue-and-white blocked shirt, solid blue trousers, white shoes). A near-white suit with only thin trim reads as a blank blob at gameplay distance — give every suit a real secondary colour zone (chest/sleeve panel or trousers), not just piping.
+* **Simple flat face.** Measured rule (supersedes earlier estimates): eyes = two small vertical ovals (≈ 12% of head height tall, 8% wide), very dark (#2a2320 / navy), with **centres 28–35% of head width apart** (NOT 40% — that reads wall-eyed), placed at the vertical middle of the face (not high). One small white highlight dot upper-right per eye; blink = squash to a line; happy = closed "^ ^" arcs; surprised = round "O O". Tiny nose (dot/triangle). Mouth = a small curved line **16–25% of head width** (NOT 5% — that reads as a pinprick); talk = small round "o". Blush = two soft pink ovals (#ffb3c1, ~50% alpha) low on the cheeks, wider than tall. Optional thin eyebrow arcs for expression. NO giant glossy anime eyes, NO multiple big reflections in the eyes.
+* **Colour-block the clothing.** A chibi character reads at distance because the outfit has 2–3 clear colour zones (e.g. a blue-and-white blocked shirt, solid blue trousers, white shoes). A near-white suit with only thin trim reads as a blank blob at gameplay distance — give every suit a real secondary colour zone (chest/sleeve panel or trousers), not just piping.
 * **Inside an opaque helmet, disable shadow receive on the face/hair** so the face stays readable, and tint the visor by *multiplying* (absorption) rather than alpha-blending — alpha blending washes near-black eyes to steel blue.
 * **Hair** = big chunky shapes with clear silhouette (bowl cut + bangs, side sweep, twin puffs, tuft), saturated colours. Not strands.
 * **Astronaut helmet** = an opaque, rounded white shell (suit colour) slightly wider than tall, with one big round **front visor window** (≈ 65% of the front) of *lightly* tinted glass (alpha ≈ 0.22) so the whole face is clearly visible, a thin accent-colour rim ring around the window, and one large crisp diagonal white highlight streak on the glass. From behind it is a clean white dome (small accent panel OK). Never a fully transparent dark bubble.
@@ -224,11 +233,11 @@ The user reviewed the first astronaut and said it must be *cuter, like Animal Cr
 
 ## MEASURED art-direction targets (user-mandated — these are numbers, not opinions)
 
-The user reviewed the first playable build and said: *"the planet feels lumpy... Everything looks way too bright and oversaturated. The shapes are all too bubbly. The agent should be comparing animal crossing characters, background shapes, color palettes, textures individually to refine it."*
+**The method: compare characters, background shapes, colour palettes and textures *individually*, with numbers, against the TARGETS below and R2.6.** It comes from the user's review of the first playable build, which found the planet lumpy, everything way too bright and oversaturated, and the shapes too bubbly. That same note also named another game as the thing to compare against; that part is **superseded** (2026-09-10, ARCHITECTURE §1.1). The original words, kept for the record only — *superseded as a target*: *"the planet feels lumpy... Everything looks way too bright and oversaturated. The shapes are all too bubbly."*
 
-`tools/palette.py` measures any image or crop. These are the real numbers from the reference screenshots vs. our first build:
+`tools/palette.py` measures any image or crop. The table records numbers measured once, when this section was written: the reference column on the retired screenshots, our column on our first build. The reference column is a one-off historical measurement that explains where the targets came from, not something to re-measure against. The TARGETS underneath are the rule:
 
-| metric | ACNH reference | OUR first build | verdict |
+| metric | reference frames (one-off, historical) | OUR first build | verdict |
 |---|---|---|---|
 | luma p05 (darkest 5%) | 0.32 – 0.45 | 0.56 | we have **no dark tones at all** |
 | luma range (p95 − p05) | 0.52 – 0.60 | 0.36 – 0.39 | our range is ~40% too small |
@@ -255,15 +264,15 @@ The first attempt hit every number by **muddying the albedo** — the hub plaza 
 
 ## Shape language corrections — "not bubbly"
 
-ACNH shapes are **rounded but structured**: they have flat planes, clear edges and tiered silhouettes. They are NOT clusters of soap bubbles. Study the trees and clouds in `reference/AC Reference 2 copy.jpg` and `AC Reference 3 copy.jpg`.
+Our shapes are **rounded but structured**: they have flat planes, clear edges and tiered silhouettes. They are NOT clusters of soap bubbles. "Structured", in words: a **flat base** that sits on the ground, a **tiered** or stepped silhouette instead of one blob, **crisp edges** where one surface meets the next, **chamfers** and panel lines alongside the curves, and a darker flat underside (R2.3 "Shape"). Our own shipped props show it; study them. In `src/planet/props/planet_prop_meshes.gd`: `puff_tree` (2-3 slightly flattened canopy tiers with scalloped rims, a crisp rim edge and a dark flat underside), `mushroom_tree` (a wide flattened cap with a dark gilled underside), `topiary` (clipped tiers with dark undersides), `pebble_rock` (flat-shaded faceted domes with clear ground contact, deliberately not spheres) and `chalk_core` (a squat faceted plug with a chamfered top and bottom and a recessed band). `showcase/planet_canopy.tscn` orbits a home-planet tree and `showcase/planet_rock.tscn` a home-planet rock, both under gameplay lighting.
 * **Trees**: a distinct canopy silhouette — a broad, slightly flattened dome or a stack of 2–3 tiers with a visible flat-ish underside and a crisp outline, a darker underside colour, and a straight tapering trunk. NOT 4–5 overlapping equal spheres. Pine/conifer types have clear stacked cones.
 * **Clouds**: soft **flat** puffs with a defined silhouette and a flat base, drifting as a layer. NOT grape-clusters of intersecting spheres (our first build's clouds read as bunches of balls, which is the single most "bubbly" element on screen).
 * **Bushes/rocks**: flattened domes with a clear ground contact and a slightly faceted top, not perfect spheres.
-* **Terrain**: ACNH ground is **mostly flat, walkable and calm**, with occasional *distinct* raised areas and crisp edges — not continuous rolling lumps. On our tiny planets, keep large calm flat regions (the horizon should read as a clean arc), reduce hill amplitude sharply, and make any elevation change a deliberate readable landform (a plateau, a crater rim, a shoreline) instead of noise. **The horizon silhouette must be a smooth arc, not a wobbly lumpy line.**
+* **Terrain**: the ground is **mostly flat, walkable and calm**, with occasional *distinct* raised areas and crisp edges — not continuous rolling lumps. On our tiny planets, keep large calm flat regions (the horizon should read as a clean arc), reduce hill amplitude sharply, and make any elevation change a deliberate readable landform (a plateau, a crater rim, a shoreline) instead of noise. **The horizon silhouette must be a smooth arc, not a wobbly lumpy line.**
 * Keep the chunky/rounded charm, but every object needs a **readable silhouette with structure**, not a blob.
 
 ## Texture / surface corrections
-ACNH surfaces carry a subtle *painted* texture: the grass has small scattered triangle tufts (already good in our build) plus gentle large-scale colour variation and a slightly darker, cooler tone in the distance. Add gentle large-scale value variation (not more noise) and keep the distant ground slightly darker/cooler so the planet reads as a form.
+Surfaces carry a subtle *painted* texture: the grass has small scattered triangle tufts (already good in our build) plus gentle large-scale colour variation and a slightly darker, cooler tone in the distance. Add gentle large-scale value variation (not more noise) and keep the distant ground slightly darker/cooler so the planet reads as a form.
 
 ## Color
 Saturated pastels with warm light. Never grey defaults. Palette anchors:
@@ -280,25 +289,44 @@ Saturated pastels with warm light. Never grey defaults. Palette anchors:
 | Astronaut suit / accent | `#f4f4f8` / `#ff7a59`, visor `#6fc3ff` |
 | Zorp (alien) skin | `#b28dff`, eyes `#1a1233`, antenna bulb `#7fffd4` glow |
 | Bolt (robot) shell | `#7fd8d0`, accents `#ff9f43`, screen `#1a2333` with `#7cf` pixels |
-| UI cream box | `#fff8e1`, text brown `#6b5232`, name tag blue `#4c6fff`, highlight yellow `#ffcc33` |
+| UI — **Moonstone** (shipped; `src/ui/theme/ui_style.gd` is the source of truth) | panel `#e9eaf1`, panel edge `#9295ac`, item card `#eef0f6`, body text dark slate `#2c2f42`, soft text `#6d7288`, name tag `#4c5b8c`, the ONE accent amber `#f0a64a`; stardust stays gold `#ffe27a`. Font **Baloo 2** (bundled; the committed theme does not load it yet — see ARCHITECTURE §6). It replaced the old cream box (`#fff8e1`, brown text `#6b5232`, name tag `#4c6fff`, yellow `#ffcc33`), which read as a lift of another game; cool grey is the one hue that cannot clash with any planet, so one palette covers every world |
 | Stardust | `#ffe27a` with `#fff6c8` sparkle |
 
 Lighting: warm sun (`#fff4d6`), cool tinted shadows (toon shader shade_tint lavender). Soft shadows on. Subtle bloom (glow strength ~0.6, threshold ~1.0) so emissives glow, ACES tonemap, slight vignette, SSAO light. Depth of field: mild, far only.
 
 ## Materials
-Use `MaterialLib.toon(color)` for nearly everything. Emissive via `MaterialLib.glow`. Visors/windows: `MaterialLib.glass`. Metal: `MaterialLib.metal`. Ground uses dedicated shaders (grass triangle pattern like ACNH — small triangles in two greens, triplanar on the sphere, with subtle noise variation and a lighter ring near paths/water). Water: animated, two-tone with foam ring at the shoreline and sparkle highlights.
+Use `MaterialLib.toon(color)` for nearly everything. Emissive via `MaterialLib.glow`. Visors/windows: `MaterialLib.glass`. Metal: `MaterialLib.metal`. Ground uses dedicated shaders (grass triangle pattern — small triangles in two greens, triplanar on the sphere, with subtle noise variation and a lighter ring near paths/water). Water: animated, two-tone with foam ring at the shoreline and sparkle highlights.
 
 ## Motion & feel (this is where "AAA" lives)
 * Every interaction has **anticipation + follow-through**: jump squashes before takeoff and stretches in the air; landing squashes + dust puff; picking up an item does a little hop + sparkle + "pop" sound + toast.
 * Idle life: breathing bob (2 s cycle, 2% scale), blink every 3–5 s, occasional head tilt; NPCs look at the player when within 5 m.
 * Walk: 4-frame-feel waddle — body bob, arm swing, slight lean into turns; run: bigger lean, faster bob, small dust trail.
 * Camera: smooth-damped follow (position lerp ~8/s, rotation ~6/s), gentle push-in during dialogue, never snaps.
-* UI: panels pop in with a 0.25 s back-ease scale from 0.9→1, buttons scale 1.05 on focus with a soft "tick" sound, dialogue text typewriter 40 chars/s with voice blips, name tag bounces in.
+* UI: panels pop in with a 0.25 s back-ease scale from 0.9→1, buttons scale 1.05 on focus with a soft "tick" sound, dialogue text typewriter 40 chars/s, name tag bounces in. The voice is NOT tied to the typewriter — see "Sound identity".
 * Transitions: fade to deep navy; rocket liftoff shakes camera; landing has a bounce.
 * Particles: stardust sparkle (small yellow quads, additive), tree shake leaves, dust puffs, rocket smoke (soft grey puffs) + flame (additive orange/blue), fireflies at night, shooting stars.
 
 ## Sound (AUDIO BUILDER)
-Warm, soft, marimba/pluck/pad music; short bright SFX. Dialogue voice blips = pitched short tones per profile (alien = warbly high, robot = square-wave bleeps, astro = soft "mm", elder = low slow, kid = high fast). Music per planet: `meadow_day`, `meadow_night`, `violet`, `chrome`, `hub`, `space`, `title`. Loop seamlessly.
+Warm, soft, spacious pluck/pad music; short bright SFX. Music per world, looping seamlessly: `meadow_day` / `meadow_night` (home), `violet` (Zorp), `chrome` (Bolt), `hub`, `dust` (Fen), `chalk` (Grig), `frost` (Vela), `space` (rocket), `event` (event space), `title`. Dialogue voice and the start of the game follow "Sound identity" below. Two parts of the old spec here are retired: the per-profile voice blips (alien = warbly high, robot = square-wave bleeps, astro = soft "mm", elder = low slow, kid = high fast), and marimba as a named lead ("Sound identity" rule 6). Pads and plucks stay; rule 6 rules out a plucked *ukulele*, not a pluck.
+
+### Sound identity (decided 2026-09-10, revised same day after the user listened on her phone — binding on all new audio work)
+The user named the voices and the start jingle as two of the things that make the game read as an Animal Crossing rip-off (ARCHITECTURE §1.1). Both were replaced 2026-09-10 with a first pass (a per-neighbour comms voice cast, a new title track "sonar"). The user then listened to both on her phone and gave two further decisions the same day, recorded below: keep Zorp's comms voice but drop the other nine for one shared, neutral "doot"; and go back to the ORIGINAL title track. These rules keep later audio work from drifting back to what she rejected — per-letter/animalese babble, and a bouncy mallet/whistle jingle that ISN'T the original.
+
+**Voice: a comms channel for Zorp; a shared neutral doot for everyone else.**
+1. **No speech-like pitched syllable babble ("animalese").** No voice sound is built from vowel-formant filters or a pitched syllable contour meant to read as talking, for anyone but Zorp. This is the rule the old per-letter blip (13-16 a second, animalese) broke, and it is also why the doot below is a plain non-vocal tone, not a quieter animalese.
+2. **Zorp: line framing, unchanged.** His line of speech is still framed like a transmission: a key-up as it opens, one or two voiced gestures per phrase as it types (never per letter, measured ~2 gestures/s), a key-down squelch as it closes, a two-beep "over" on the last line of a turn. `tools/gen/audio/voices.py` `v_zorp` + the shared key-up/key-down/over/bed files; `AudioManager.comms_open_line`/`comms_reveal`/`comms_close_line`/`comms_hold` (ARCHITECTURE §5, §6).
+3. **Everyone else: one shared, neutral "doot", no framing.** The user, after listening: *"I only like Zorp's new voice better than the animalese / original robot sounds. The only thing I can think of is making generic doot doot doot noises as the letters are being written out and then we dont have unique voices for each."* So every other speaker — the other nine neighbours, Mayor Orbit's radio intro, hub/shop greetings — plays ONE shared tone as its letters type, at most once every 2 revealed letters (spaces and punctuation never trigger one), with NO key-up/key-down/static framing (`AudioManager.DOOT_FRAMING_ENABLED` — one const, default off, switchable if a later round wants framing back). The doot is deliberately non-vocal: a plain sine with a small downward pitch-drop envelope, no formants, no vowel colour, no per-neighbour timbre — `tools/gen/audio/voices.py` `render_doot("a", ...)` / `doot_variants()`, 4 pre-baked pitch variants (±3%) shipped as `doot_a_0..3.wav` so playback can rotate and avoid repeating the same sample. Measured: ships at -20 dBFS RMS, 13.1 dB under the old `voice_robot_*.wav` files' -6.88 dBFS average, lowpassed under ~2.6 kHz — gentle enough for a ten-line conversation.
+4. **The nine now-unused comms voices are kept as code, not shipped.** `tools/gen/audio/voices.py` still has a full, distinct-timbre generator per neighbour (`v_bolt` … `v_vela`, each labelled `# not shipped - the user kept only Zorp's comms voice, 2026-09-10`) and the "no two neighbours share a timbre" design behind them, so the cast can come back if a later round wants unique voices again. Their WAV files are deleted from `assets/audio/sfx/`; the 25 legacy `voice_{alien,astro,elder,kid,robot}_{0..4}.wav` files stay on disk because `showcase/audio_board.gd` still hardcodes and preflight-checks them.
+
+**The start of the game: the original track, kept on purpose.**
+5. **Take A "sonar" was tried and rejected.** A first pass replaced the title with a short signal-style sonic logo (three pings, Eb major, 64 bpm, no percussion) handing off to a spacious looping bed — a genuinely different idiom from the old bouncy mallet start. The user listened and said: *"For the music - I still like the Old music so lets go with that."* So `assets/audio/music/title.wav` is the ORIGINAL track again — `track_title_legacy` in `tools/gen/audio/music.py`, selected via `TITLE_VARIANT = "legacy"` in the `TITLE_VARIANTS` dict, byte-identical to the last committed `title.wav`, looping from sample 0 (no separate loop-in intro). Takes A "sonar" (`track_title_sonar`), B "radio" (`track_title_radio`) and C "orbit" (`track_title_orbit`) all still exist as generator functions, each labelled `# rejected by the user 2026-09-10 after listening; not shipped`.
+6. **The original title's mallet/whistle sound is NOT something to remove.** It is part of the track the user chose to keep. Do not lead OTHER new audio with bouncy mallets, plucked ukulele or a whistled tune — that rule still applies everywhere else. Honest status, read from the code on 2026-09-10:
+   * **Music** (`tools/gen/audio/music.py`): marimba in `meadow_day`, `hub` and `dust`; vibraphone in `meadow_day`, `hub` and `chalk`; glockenspiel in `meadow_night`, `hub` and `space`; the title's own mallet/whistle idiom (kept, see above).
+   * **SFX jingles** (`tools/gen/audio/sfx.py`): `quest_accept` (a three-note marimba arpeggio plus a bell) and `quest_complete` (a five-note marimba arpeggio plus a bell, a vibraphone chord and a glockenspiel run), fired from `favor_system.gd:241` and `:310`, `town_hall.gd:376` and `player_home.gd:264` (ARCHITECTURE §1.1). Shorter mallet SFX too: `ui_confirm` and `ui_cancel` (two marimba notes each), `collect_stardust` and `shooting_star` (glockenspiel).
+
+   Whether the planet tracks are re-scored, or the SFX jingles replaced, is **not decided**. Do not add more.
+
+**Verifying it.** No agent can hear. Verify what you can measure: render spectrograms with `tools/gen/audio/viz.py` and look at them; measure duration, peak, RMS, spectral centroid and bandwidth with numpy; read the code path that triggers each sound; and count in-engine how many sound events fire per line of dialogue, reported next to that line's character count, so a per-letter pattern cannot hide. Whether it *sounds good* is the user's call, which is why audio work ships with listening demos for them to judge.
 
 ## Writing
 Warm and playful, short lines (≤ 60 chars per line, max 3 lines per box). NPCs have distinct voices: Zorp = enthusiastic and curious about Earth things ("Do you also photosynthesize?"), Bolt = literal, kind, counts things, loves gears, Mayor Orbit = grandfatherly robot, Pip & Pop = finishing each other's sentences, Stella = fashion-forward, DJ Nova = hype.

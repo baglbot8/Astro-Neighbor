@@ -224,7 +224,9 @@ func narrate(lines: Array) -> void:
 	var box := _ensure_box()
 	if box == null:
 		return
-	await box.show_lines("", lines, "astro", Color("#5b7cff"))
+	# "" = no voice: narration is the game talking, not a neighbour on the radio, so it types in
+	# silence. (It used to pass "astro", which is now nobody's voice.)
+	await box.show_lines("", lines, "", Color("#5b7cff"))
 
 
 # ============================================================================= lookups
@@ -281,12 +283,16 @@ static func _display_name(npc: Node) -> String:
 	return String(npc.name)
 
 
+## The comms voice id (NpcData "voice_profile", e.g. "zorp") of whoever is speaking - an NPC, or a
+## RadioSpeaker, which resolves its own. "" when the node has none: DialogueBox then resolves the voice
+## from the speaker's display name, and a nameless speaker types in silence. (The fallback used to be
+## "astro", which put narration and unknown speakers on Stella's old blips.)
 static func _voice(npc: Node) -> String:
 	if npc == null:
-		return "astro"
+		return ""
 	if "voice_profile" in npc and str(npc.get("voice_profile")) != "":
 		return str(npc.get("voice_profile"))
-	return "astro"
+	return ""
 
 
 static func _accent(npc: Node) -> Color:

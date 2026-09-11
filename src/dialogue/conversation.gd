@@ -19,6 +19,9 @@ const DECO_LINE_CHANCE := 0.20
 const ACCEPT_OPTION := "Sure!"
 const DECLINE_OPTION := "Maybe later"
 const ASK_PROMPT := "Lend a hand?"
+## Phase 2 (docs/BUILD_PLAN.md): builder E's project system. Loaded by path, not by class_name, so
+## this file still parses before E's file exists - the hook below is inert until then.
+const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
 
 
 ## Runs one full conversation. Awaits until the dialogue box closes.
@@ -54,7 +57,19 @@ static func run(npc: NPC, player: Node3D) -> void:
 		await runner.say(npc, [NpcData.greeting(npc_id, int(state.get("friendship", 0)), rng)])
 
 	# ---- exactly one content branch --------------------------------------------------------
-	if favors != null:
+	# A neighbour's PROJECT comes first (Phase 2, docs/BUILD_PLAN.md). Wired by the lead ahead of
+	# builder E, against the contract: ProjectSystem.get_or_create() (static) and
+	# handle_conversation(runner, npc, player) -> bool. It returns true whenever this neighbour has an
+	# active project - including "come back tomorrow" - so a random favor never competes with the
+	# project for the same conversation (favor_system.can_offer has no campaign gate of its own).
+	var project_handled := false
+	if ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+		var projects = load(PROJECT_SYSTEM_PATH).get_or_create()
+		if projects != null and projects.has_method("handle_conversation"):
+			project_handled = await projects.handle_conversation(runner, npc, player)
+	if project_handled:
+		pass
+	elif favors != null:
 		var delivery := favors.delivery_for(npc_id)
 		var active := favors.active_favor_for(npc_id)
 		if not delivery.is_empty() and GameState.has_item(str(delivery.get("target_item", ""))):

@@ -274,12 +274,17 @@ func _on_mail(player: Node3D) -> void:
 	if _has_mail():
 		GameState.set_flag("mail_day1_read")
 		AudioManager.play_sfx("pickup", -5.0)
-		await say("A letter from Mayor Orbit", [
+		# From Professor Comet, the sky-watching scientist - not a mayor (docs/CORE_LOOP.md, "Changed
+		# after the build plan"), so no Town Hall and no plot deeds. A new game is the Stranded campaign,
+		# which opens with your ship crash-landing here, so the letter is his note that he saw it come
+		# down. Changed by the lead after Phase 1 builder C listed this string but did not own the file.
+		# Lines kept to 48 characters or fewer, the longest line the old letter used.
+		await say("A letter from Professor Comet", [
 			"Dear neighbour,",
-			"Welcome to the neighbourhood! Your plot is yours",
-			"to decorate however you like.",
-			"Drop by the Town Hall when you have settled in.",
-			"  - Mayor Orbit",
+			"I saw your ship come down on my telescope.",
+			"Nobody hurt - that is what matters!",
+			"Your rocket can still hop to nearby worlds.",
+			"  - Professor Comet",
 		], "elder", Color("#6fc3ff"))
 		_refresh_flag()
 	else:

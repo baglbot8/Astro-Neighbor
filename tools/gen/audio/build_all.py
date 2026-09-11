@@ -31,16 +31,29 @@ import music as M  # noqa: E402
 
 MUSIC_MAX_BYTES = 6 * 1024 * 1024
 
+# The 60 MB gate this replaced checked raw WAV bytes on disk, which is not what a phone downloads:
+# Godot's WAV importer compresses every asset to QOA on import (compress/mode=2, already set on every
+# .wav.import here), and only the compressed bytes ship inside index.pck over the network. Measured
+# 2026-09-10 with a real `--export-release Web` in a scratch copy of this project (see round notes):
+# 60.29 MB of raw WAV -> 12.23 MB of QOA inside index.pck (14.25 MB total pck; the other ~39.5 MB of
+# the page weight is index.wasm, the engine binary, fixed regardless of how much audio the game has).
+# That is a 4.93x compression ratio. Gate on an ESTIMATE of the compressed bytes (raw / ratio) so
+# build_all doesn't need a real export every run, with real headroom over the current 12.23 MB actual
+# for future audio to grow into.
+QOA_RATIO = 4.93                  # raw WAV bytes / compressed bytes in the exported .pck (measured)
+WEB_AUDIO_BUDGET_MB = 20.0        # ceiling on ESTIMATED compressed audio bytes in the web download
 
-def validate(name, x, loop, is_music):
+
+def validate(name, x, loop, is_music, loop_begin=0, check_peak_target=True):
     problems = []
     pk = S.peak(x)
     if pk > S.db(-0.5):
         problems.append("peak %.2f dBFS too hot" % S.to_db(pk))
-    if is_music and abs(S.to_db(pk) - (-1.0)) > 0.6:
-        problems.append("music peak %.2f dBFS (want -1)" % S.to_db(pk))
-    if (not is_music) and abs(S.to_db(pk) - (-3.0)) > 0.6:
-        problems.append("sfx peak %.2f dBFS (want -3)" % S.to_db(pk))
+    if check_peak_target:
+        if is_music and abs(S.to_db(pk) - (-1.0)) > 0.6:
+            problems.append("music peak %.2f dBFS (want -1)" % S.to_db(pk))
+        if (not is_music) and abs(S.to_db(pk) - (-3.0)) > 0.6:
+            problems.append("sfx peak %.2f dBFS (want -3)" % S.to_db(pk))
     m = S.to_mono(x)
     dc = float(np.mean(m))
     if abs(dc) > 2e-3:
@@ -50,7 +63,7 @@ def validate(name, x, loop, is_music):
     if full.any():
         problems.append("%d full-scale samples" % int(full.sum()))
     if loop:
-        e = S.loop_seam_error(x)
+        e = S.loop_seam_error(x, loop_begin=loop_begin)
         if e["ratio"] > 1.0:
             problems.append("loop seam jump %.4f > p99.9 step %.4f" % (e["seam_jump"], e["p999_step"]))
     else:
@@ -103,24 +116,37 @@ def main():
             if args.viz and name in ("footstep_grass_0", "jump", "ui_buy", "quest_complete", "rocket_loop", "collect_stardust"):
                 viz.render_png(path, os.path.join(args.viz, name + ".png"), title=name)
 
-    print("== VOICES ==")
+    print("== VOICES (comms: Zorp only + doot) ==")
     if do_all or args.voices:
-        for profile in V.PROFILES:
-            for i in range(5):
-                name = "voice_%s_%d" % (profile, i)
-                if only and name not in only:
-                    continue
-                x = V.render(profile, i)
-                path = os.path.join(SFX_DIR, name + ".wav")
-                size = S.write_wav(path, x)
-                total_bytes += size
-                probs = validate(name, x, False, False)
-                dur = S.length(x) / S.SR
-                if not (0.055 <= dur <= 0.125):
-                    probs.append("duration %.3f outside 60-120 ms" % dur)
-                print(row(name, x, size, "centroid %5d Hz" % S.spectral_centroid(x) + ("  !! " + "; ".join(probs) if probs else "")))
-                if probs:
-                    failures.append((name, probs))
+        # SHIPPED as of 2026-09-10 (user, after listening on her phone): Zorp keeps his comms voice
+        # (5 gestures) plus the shared key-up/key-down/over/bed channel furniture; every OTHER
+        # neighbour's comms set is NOT shipped any more (voices.py keeps their generators, labelled
+        # "not shipped", so the cast can come back later), replaced by the shared "doot" (4 pitch
+        # variants of flavour A). V.SHIPPED_VOICE_NAMES lists exactly this set; comms names render via
+        # V.comms_render (22.05 kHz, band-limited to 3.4 kHz) and doot names via V.doot_render
+        # (COMMS_RATE too -- see voices.py _finish_doot).
+        for name in V.SHIPPED_VOICE_NAMES:
+            if only and name not in only:
+                continue
+            if name.startswith("doot_"):
+                x, loop = V.doot_render(name)
+            else:
+                x, loop = V.comms_render(name)
+            path = os.path.join(SFX_DIR, name + ".wav")
+            size = S.write_wav(path, x, loop=loop, rate=V.RATE)
+            total_bytes += size
+            # comms/doot files are LUFS- or RMS-normalised with a peak CEILING (voices.py
+            # PEAK_CEIL_DB / DOOT_PEAK_DB), not peak-normalised to -3 dBFS like plain sfx -- a quiet
+            # gesture or a gentle doot legitimately peaks well under that. check_peak_target=False
+            # keeps the universal checks (no clip, no DC, no click, loop seam) without flagging every
+            # file for a target it was never mixed to.
+            probs = validate(name, x, loop, False, check_peak_target=False)
+            dur = S.length(x) / V.RATE
+            extra = ("LOOP " if loop else "") + "centroid %5d Hz" % S.spectral_centroid(x) + \
+                ("  !! " + "; ".join(probs) if probs else "")
+            print("%-22s %7.3fs  %6.2f dBFS  %8.1f KB  %s" % (name, dur, S.to_db(S.peak(x)), size / 1024.0, extra))
+            if probs:
+                failures.append((name, probs))
 
     print("== MUSIC ==")
     if do_all or args.music:
@@ -130,13 +156,15 @@ def main():
             t0 = time.time()
             x, L, bpm = fn()
             assert S.length(x) == L
+            # title (take A) has a one-shot logo before its loop -- see M.TITLE_LOOP_BEGIN.
+            loop_begin = M.TITLE_LOOP_BEGIN if name == "title" else 0
             path = os.path.join(MUSIC_DIR, name + ".wav")
-            size = S.write_wav(path, x, loop=True)
+            size = S.write_wav(path, x, loop=True, loop_begin=loop_begin)
             total_bytes += size
-            probs = validate(name, x, True, True)
+            probs = validate(name, x, True, True, loop_begin=loop_begin)
             if size > MUSIC_MAX_BYTES:
                 probs.append("size %.2f MB > 6 MB" % (size / 1e6))
-            seam = S.loop_seam_error(x)
+            seam = S.loop_seam_error(x, loop_begin=loop_begin)
             print(row(name, x, size, "LOOP %6.2f bpm  rms %5.1f dB  seam %.4f/%.4f  (%.1fs render)%s" % (
                 bpm, S.to_db(S.rms(x)), seam["seam_jump"], seam["p999_step"], time.time() - t0,
                 ("  !! " + "; ".join(probs)) if probs else "")))
@@ -152,11 +180,14 @@ def main():
     def dir_size(d):
         return sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d) if f.endswith(".wav"))
     tot = dir_size(SFX_DIR) + dir_size(MUSIC_DIR)
-    print("== total assets/audio: %.1f MB in %d files (%.1fs) ==" % (
-        tot / 1e6, len([f for f in os.listdir(SFX_DIR) if f.endswith(".wav")]) + len([f for f in os.listdir(MUSIC_DIR) if f.endswith(".wav")]),
+    est_compressed = tot / QOA_RATIO
+    print("== total assets/audio: %.1f MB raw, ~%.1f MB compressed (QOA, est.) in %d files (%.1fs) ==" % (
+        tot / 1e6, est_compressed / 1e6,
+        len([f for f in os.listdir(SFX_DIR) if f.endswith(".wav")]) + len([f for f in os.listdir(MUSIC_DIR) if f.endswith(".wav")]),
         time.time() - t_start))
-    if tot > 60e6:
-        failures.append(("assets/audio", ["total %.1f MB > 60 MB" % (tot / 1e6)]))
+    if est_compressed > WEB_AUDIO_BUDGET_MB * 1e6:
+        failures.append(("assets/audio", ["est. compressed %.1f MB > %.0f MB web budget (raw %.1f MB)" % (
+            est_compressed / 1e6, WEB_AUDIO_BUDGET_MB, tot / 1e6)]))
     if failures:
         print("VALIDATION FAILED:")
         for n, p in failures:

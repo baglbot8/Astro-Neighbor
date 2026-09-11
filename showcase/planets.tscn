@@ -4,6 +4,6 @@
 
 [node name="PlanetShowcase" type="Node3D"]
 script = ExtResource("1")
-planet_ids = PackedStringArray("home", "zorp", "bolt", "hub")
+planet_ids = PackedStringArray("home", "zorp", "bolt", "hub", "fen", "grig", "vela")
 cycle_seconds = 3.0
 orbit_mode = false

@@ -326,13 +326,41 @@ static func play_open() -> void:
 static func play_close() -> void:
 	play_sfx("ui_close")
 
-## Dialogue voice blip for a voice profile (alien / robot / astro / elder / kid).
+## COMPATIBILITY: one short comms gesture for a neighbour id ("zorp") or a legacy profile ("alien").
+## Dialogue no longer calls this per letter - it uses the comms_* entry points below. The old guard
+## (voice_<profile>_0 must exist) is gone because the ten comms voices have no _0 file;
+## AudioManager.play_voice_blip checks for its own files.
 static func play_voice_blip(profile: String) -> void:
-	if not sfx_exists("voice_%s_0" % profile):
-		return
 	var audio := _audio()
 	if audio != null:
 		audio.call("play_voice_blip", profile)
+
+## COMMS VOICE entry points for the dialogue box - see AudioManager "comms voices" for the scheme
+## (key-up, one gesture per phrase, squelch / "over"). Guarded like every sound here: without the
+## AudioManager autoload they do nothing and comms_voice_for() answers "" (silent).
+static func comms_voice_for(profile: String, speaker: String = "", line_index: int = 0) -> String:
+	var audio := _audio()
+	return str(audio.call("comms_voice_for", profile, speaker, line_index)) if audio != null else ""
+
+static func comms_open_line(voice: String, line: String, closes_turn: bool) -> void:
+	var audio := _audio()
+	if audio != null:
+		audio.call("comms_open_line", voice, line, closes_turn)
+
+static func comms_reveal(visible_chars: int) -> void:
+	var audio := _audio()
+	if audio != null:
+		audio.call("comms_reveal", visible_chars)
+
+static func comms_close_line(cut: bool) -> void:
+	var audio := _audio()
+	if audio != null:
+		audio.call("comms_close_line", cut)
+
+static func comms_hold(paused: bool) -> void:
+	var audio := _audio()
+	if audio != null:
+		audio.call("comms_hold", paused)
 
 ## Starts a music track if it exists.
 static func play_music(track: String) -> void:

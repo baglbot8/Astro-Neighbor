@@ -16,7 +16,6 @@ collision_layer = 4
 collision_mask = 73
 script = ExtResource("1")
 npc_id = "mayor_orbit"
-display_name = "Mayor Orbit"
 voice_profile = "elder"
 accent_color = Color(0.7882, 0.6314, 0.3608, 1)
 wander_radius_m = 4.0

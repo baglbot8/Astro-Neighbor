@@ -22,6 +22,12 @@ const DECO_MANAGER_SCENE := "res://src/decorations/decoration_manager.tscn"
 const TRASH_SYSTEM_SCENE := "res://src/planet/trash_system.tscn"
 const ROCKET_PAD_SCENE := "res://src/rocket/rocket_pad.tscn"
 const HUD_SCENE := "res://src/ui/hud/hud.tscn"
+## Phase 2 (docs/BUILD_PLAN.md, builder F): the build bench at the crash site on home. Added by the
+## lead ahead of Phase 2 so F owns only its own files; _spawn_optional skips it until the scene exists.
+const BUILD_BENCH_SCENE := "res://src/projects/build_bench.tscn"
+## Phase 2 builder N: the short cutscene when a rocket part is fitted (it listens for
+## EventBus.rocket_part_fitted). Home only - the bench and the rocket are both at the crash site.
+const PART_CELEBRATION_SCENE := "res://src/campaign/part_celebration.tscn"
 const NPC_DIR := "res://src/characters/npcs/"
 const BUILDING_DIR := "res://src/hub/buildings/"
 
@@ -50,6 +56,9 @@ func _ready() -> void:
 	_spawn_optional(ROCKET_PAD_SCENE, "Rocket")
 	_spawn_optional(DECO_MANAGER_SCENE, "Decorations")
 	_spawn_optional(TRASH_SYSTEM_SCENE, "TrashField")
+	if pid == "home":
+		_spawn_optional(BUILD_BENCH_SCENE, "BuildBench")
+		_spawn_optional(PART_CELEBRATION_SCENE, "PartCelebration")
 	_spawn_optional(HUD_SCENE, "HUD")
 	_spawn_optional("res://src/onboarding/onboarding.tscn", "Onboarding")  # ADDED BY THE ONBOARDING BUILDER
 

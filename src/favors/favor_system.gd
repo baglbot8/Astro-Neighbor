@@ -19,7 +19,11 @@ extends Node
 ## State lives in GameState.favors (plain dictionaries, so it saves and loads), and is restored on
 ## every planet load. Progress is driven by EventBus.item_added / collectible_picked.
 
-const MATERIALS: PackedStringArray = ["stardust_shard", "moon_flower", "crystal_chunk", "gear_bit"]
+## "stardust_shard" was removed from this list on 2026-09-11 (lead, end of Phase 1). Phase 1 builder D
+## took the shards off home, hub and grig - the only worlds that grew them - and they have no shop
+## price, so a "bring N stardust shards" favor could never be finished: a soft-lock found by the
+## Phase 1 integration check. Stardust now comes from helping neighbours (docs/CORE_LOOP.md).
+const MATERIALS: PackedStringArray = ["moon_flower", "crystal_chunk", "gear_bit"]
 const FETCH_MIN := 2
 const FETCH_MAX := 4
 const BRING_MIN := 2
@@ -401,10 +405,18 @@ func _local_collectible(npc_id: String) -> String:
 	var data := _planet_data(pid)
 	if data == null:
 		return ""
-	var kinds := data.collectible_kind.split(",", false)
+	# Scrap is a counter (GameState.scrap), not a bag item - collectible.gd skips add_item() for it -
+	# so item_count("scrap") stays 0 and a fetch for scrap could never finish. Since Phase 1 home and
+	# the hub grow ONLY scrap, so without this filter every hub neighbour's fetch was a soft-lock, and
+	# 1 in 5 fetches on the other worlds too. A planet with nothing else offers no fetch at all.
+	var kinds: Array = []
+	for k: String in data.collectible_kind.split(",", false):
+		var kind := k.strip_edges()
+		if kind != "" and kind != "scrap":
+			kinds.append(kind)
 	if kinds.is_empty():
 		return ""
-	return String(kinds[_rng.randi_range(0, kinds.size() - 1)]).strip_edges()
+	return str(kinds[_rng.randi_range(0, kinds.size() - 1)])
 
 
 ## A material that does *not* grow where this NPC lives, so `bring` means a trip.
@@ -415,7 +427,8 @@ func _foreign_material(npc_id: String) -> String:
 		if m != local:
 			pool.append(m)
 	if pool.is_empty():
-		return "stardust_shard"
+		# Unreachable with three MATERIALS. Never fall back to stardust_shard: no world grows it now.
+		return MATERIALS[0]
 	return str(pool[_rng.randi_range(0, pool.size() - 1)])
 
 

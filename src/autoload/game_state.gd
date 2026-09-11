@@ -4,12 +4,23 @@ extends Node
 ## Never store Nodes or Resources here.
 
 const PLANET_IDS := ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
-const STARTING_STARDUST := 120
+## CORE_LOOP.md "Scrap and stardust": measured 2026-09-10, today's 120 is "too common" - a single
+## favor alone pays 60-140. FIRST GUESS for the campaign's rare stardust, about a third of that;
+## BUILD_PLAN Phase 6 tunes it from a timed play-through. An old save (no campaign fields) never
+## reads this - it keeps whatever amount it already saved (see `from_dict`).
+const STARTING_STARDUST := 40
+## CORE_LOOP.md "Scrap and stardust": scrap, not stardust, is the new game's early currency, and it
+## is meant to come from picking it up (every world, including home) rather than a starting stash.
+## FIRST GUESS, small on purpose; BUILD_PLAN Phase 6 tunes it from a timed play-through.
+const STARTING_SCRAP := 5
 
 var current_planet_id: String = "home"
 var previous_planet_id: String = ""
 
 var stardust: int = STARTING_STARDUST
+## Asteroid rubble and bits of the broken ship (CORE_LOOP.md "Scrap and stardust"). The campaign's
+## building currency: fitting a rocket part and building world-problem fixes both cost scrap.
+var scrap: int = STARTING_SCRAP
 
 ## item_id -> count. Items are decorations, clothing, collectibles, favor items.
 var inventory: Dictionary = {}
@@ -41,6 +52,26 @@ var player_style: Dictionary = {
 
 ## npc_id -> {"friendship": int, "talked_today": bool, "favors_done": int}
 var npcs: Dictionary = {}
+
+## Part id Strings (CampaignData.PARTS), in the order fitted. Parts are internal to the rocket
+## (BUILD_PLAN.md "Revised the same day") - this array drives both `CampaignData.finish_stage()`
+## (the rocket's rusty-to-gold look) and `CampaignData.planet_in_range()` (the range gate).
+var rocket_parts: Array = []
+## True only for a new game played as the "Stranded" campaign. False for every old save (see
+## `from_dict`), which is how an old save gets today's open world with no gates.
+var campaign_active: bool = false
+## True once the campaign's ending has played, AND true by default for any save that predates the
+## campaign fields (see `from_dict`) - both mean "no gates, every planet open, today's rocket".
+var story_done: bool = false
+## npc_id -> in-game day index (GameState.day_count) of that neighbour's last project step.
+## CORE_LOOP.md "Pacing": one project step per neighbour per in-game day. Phase 2 reads this to
+## tell whether a neighbour's next step is available yet or "come back tomorrow".
+var project_step_day: Dictionary = {}
+## Phase 2 project state (docs/BUILD_PLAN.md builder E): npc_id -> whatever src/projects/project_system.gd
+## needs to resume a neighbour's multi-step project (current step, found markers, ...). The shape is
+## owned by project_system.gd; GameState only stores and saves it. Added by the lead before Phase 2 so
+## builder E owns only its own files. A save without it (every save before Phase 2) loads as {}.
+var projects: Dictionary = {}
 
 ## favor_id -> {"npc": String, "type": String, "target_item": String, "count": int, "progress": int, "state": "offered|active|done", "reward_item": String, "reward_stardust": int, "deliver_to": String}
 var favors: Dictionary = {}
@@ -97,6 +128,35 @@ func spend_stardust(amount: int) -> bool:
 		return false
 	add_stardust(-amount)
 	return true
+
+# ----------------------------------------------------------------------------- scrap (campaign)
+## Mirrors `add_stardust` - same clamp-at-zero, same "signal carries the delta" shape.
+func add_scrap(amount: int) -> void:
+	scrap = max(0, scrap + amount)
+	EventBus.scrap_changed.emit(scrap, amount)
+
+func can_afford_scrap(amount: int) -> bool:
+	return scrap >= amount
+
+func spend_scrap(amount: int) -> bool:
+	if not can_afford_scrap(amount):
+		return false
+	add_scrap(-amount)
+	return true
+
+# ----------------------------------------------------------------------------- rocket parts (campaign)
+## Appends `part_id` if it is not already fitted. Returns false, with no signal, for a part already
+## fitted - fitting is a one-way, idempotent action, not something to re-trigger the celebration or
+## the finish-stage change for.
+func fit_rocket_part(part_id: String) -> bool:
+	if rocket_parts.has(part_id):
+		return false
+	rocket_parts.append(part_id)
+	EventBus.rocket_parts_changed.emit(rocket_parts.size())
+	return true
+
+func rocket_part_count() -> int:
+	return rocket_parts.size()
 
 # ----------------------------------------------------------------------------- inventory
 func add_item(item_id: String, count: int = 1) -> void:
@@ -189,11 +249,17 @@ func to_dict() -> Dictionary:
 		"current_planet_id": current_planet_id,
 		"previous_planet_id": previous_planet_id,
 		"stardust": stardust,
+		"scrap": scrap,
 		"inventory": inventory,
 		"placed_decorations": placed_decorations,
 		"player_style": player_style,
 		"npcs": npcs,
 		"favors": favors,
+		"rocket_parts": rocket_parts,
+		"campaign_active": campaign_active,
+		"story_done": story_done,
+		"project_step_day": project_step_day,
+		"projects": projects,
 		"time_of_day": time_of_day,
 		"day_count": day_count,
 		"home_planet_name": home_planet_name,
@@ -210,6 +276,7 @@ func from_dict(d: Dictionary) -> void:
 	current_planet_id = str(d.get("current_planet_id", "home"))
 	previous_planet_id = str(d.get("previous_planet_id", ""))
 	stardust = int(d.get("stardust", STARTING_STARDUST))
+	scrap = int(d.get("scrap", 0))
 	inventory = _ints(d.get("inventory", {}))
 	placed_decorations = d.get("placed_decorations",
 		{"home": [], "zorp": [], "bolt": [], "hub": [], "fen": [], "grig": [], "vela": []})
@@ -219,6 +286,15 @@ func from_dict(d: Dictionary) -> void:
 	player_style = d.get("player_style", player_style)
 	npcs = _deep_ints(d.get("npcs", {}))
 	favors = _deep_ints(d.get("favors", {}))
+	rocket_parts = d.get("rocket_parts", [])
+	# Missing key means one of two things, both correctly "story finished": a save written
+	# before the campaign fields existed, or `reset_new_game()`'s own `from_dict({})` call
+	# before it overrides these for a real new game (see `reset_new_game`).
+	campaign_active = bool(d.get("campaign_active", false))
+	story_done = bool(d.get("story_done", true))
+	project_step_day = _ints(d.get("project_step_day", {}))
+	var _pj = d.get("projects", {})
+	projects = _pj if _pj is Dictionary else {}
 	time_of_day = float(d.get("time_of_day", 9.5))
 	day_count = int(d.get("day_count", 1))
 	home_planet_name = str(d.get("home_planet_name", "Little Orbit"))
@@ -232,6 +308,13 @@ func from_dict(d: Dictionary) -> void:
 	# Old saves have no key here. Defaulting to "now" (not 0) means an existing save does not
 	# instantly dump a maxed-out trash pile the first time it loads under the new system.
 	trash_last_check_unix = float(d.get("trash_last_check_unix", Time.get_unix_time_from_system()))
+	# So the range picker and the rocket's finish re-read after ANY load, not just a fresh new
+	# game: SaveManager.load_game() calls this directly and owns no signal of its own. This also
+	# fires once, with the "story finished" defaults above, from `reset_new_game()`'s own
+	# `from_dict({})` call - harmless, since that function emits both again once it has overridden
+	# campaign_active/story_done/rocket_parts to the real new-game values (see `reset_new_game`).
+	EventBus.campaign_changed.emit()
+	EventBus.rocket_parts_changed.emit(rocket_parts.size())
 
 ## JSON has no integer type - every whole number round-trips through the save file as a float,
 ## so a reloaded inventory reads {"deco_moon_lamp": 2.0}. Every consumer currently casts with
@@ -268,7 +351,25 @@ static func _deep_ints(v: Variant) -> Variant:
 
 
 func reset_new_game() -> void:
+	# THE TRAP: `from_dict({})` reads every campaign field as missing, which by design (see the
+	# comment in `from_dict`) loads as "story finished" - campaign_active false, story_done true,
+	# gates off. That is correct for an old save; it is backwards for a brand new one. Every
+	# campaign field this function cares about MUST be set again below, AFTER this call, or a new
+	# game would boot with the gates already off.
 	from_dict({})
 	stardust = STARTING_STARDUST
 	# Starter kit so the first minute of play already has something to place.
 	inventory = {"deco_moon_lamp": 1, "deco_star_flag": 1, "deco_crater_bench": 1}
+	# Turn the trap's defaults back around: a new game plays the campaign from a clean slate.
+	campaign_active = true
+	story_done = false
+	scrap = STARTING_SCRAP
+	rocket_parts = []
+	project_step_day = {}
+	projects = {}
+	# `from_dict({})` already emitted both signals once, above, with the (wrong, pre-override)
+	# "story finished" state - re-emit now that campaign_active/story_done/scrap/rocket_parts hold
+	# the real new-game values, so anything listening (the range picker, the rocket's finish) ends
+	# up showing gates ON, not the momentary off state from the `from_dict({})` call.
+	EventBus.campaign_changed.emit()
+	EventBus.rocket_parts_changed.emit(rocket_parts.size())

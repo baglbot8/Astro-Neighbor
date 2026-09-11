@@ -821,14 +821,33 @@ def fold_loop(buf: np.ndarray, loop_len: int) -> np.ndarray:
     return out
 
 
-def loop_seam_error(x: np.ndarray, window: int = 2048) -> dict:
-    """Numeric loop check: compares the jump across the seam (last sample -> first sample) with the
-    typical sample-to-sample step of the signal, and the RMS of the first/last windows."""
+def fold_loop_at(buf: np.ndarray, loop_begin: int, loop_end: int) -> np.ndarray:
+    """Like fold_loop, but for a track with a one-shot intro before the repeating region: samples
+    [0:loop_begin] (the intro, e.g. a logo) are kept exactly as rendered, and everything from
+    loop_end onward (reverb/delay tails spilling past the loop, at period loop_end - loop_begin) is
+    summed back into [loop_begin:loop_end] so THAT region loops seamlessly on its own. Returns a
+    buffer of length loop_end (same convention as fold_loop returning length loop_len)."""
+    period = loop_end - loop_begin
+    out = np.array(buf[..., :loop_end], copy=True)
+    pos = loop_end
+    while pos < length(buf):
+        chunk = buf[..., pos:pos + period]
+        n = length(chunk)
+        out[..., loop_begin:loop_begin + n] += chunk
+        pos += period
+    return out
+
+
+def loop_seam_error(x: np.ndarray, window: int = 2048, loop_begin: int = 0) -> dict:
+    """Numeric loop check: compares the jump across the seam (last sample -> first sample of the
+    REPEATING region, i.e. x[loop_begin]) with the typical sample-to-sample step of the signal, and
+    the RMS of the head/tail windows either side of the seam. `loop_begin` > 0 for a track with a
+    one-shot intro before the loop (see fold_loop_at) -- 0 checks the seam fold_loop is meant to fix."""
     m = to_mono(x)
-    seam = abs(float(m[0] - m[-1]))
+    seam = abs(float(m[loop_begin] - m[-1]))
     steps = np.abs(np.diff(m))
     typical = float(np.percentile(steps, 99.9)) if len(steps) else 0.0
-    head = rms(m[:window])
+    head = rms(m[loop_begin:loop_begin + window])
     tail = rms(m[-window:])
     return {"seam_jump": seam, "p999_step": typical, "ratio": seam / (typical + 1e-12),
             "head_rms": head, "tail_rms": tail}
@@ -852,16 +871,20 @@ LOOP_TAIL = 2 * QOA_FRAME  # extra samples written after a loop's end (a copy of
 
 
 def write_wav(path: str, x: np.ndarray, loop: bool = False, dither: bool = True, seed: int = 7,
-              loop_tail: int = LOOP_TAIL) -> int:
-    """Write 16-bit PCM WAV (mono or stereo). loop=True adds an 'smpl' chunk (forward loop 0..len(x))
-    which Godot's WAV importer detects automatically, and appends `loop_tail` samples copied from the
-    start of the loop after the loop end: Godot's QOA playback substitutes the sample AT loop_end for the
-    first sample after a wrap, so that sample must equal x[0] for the loop to be click-free.
-    Returns bytes written."""
+              loop_tail: int = LOOP_TAIL, rate: int = SR, loop_begin: int = 0) -> int:
+    """Write 16-bit PCM WAV (mono or stereo). loop=True adds an 'smpl' chunk (loop `loop_begin`..len(x))
+    which Godot's WAV importer detects automatically, and appends `loop_tail` samples copied from
+    `loop_begin` after the loop end: Godot's QOA playback substitutes the sample AT loop_end for the
+    first sample after a wrap, so that sample must equal x[loop_begin] for the loop to be click-free.
+    `loop_begin` defaults to 0 (loop the whole buffer, the old behaviour); pass > 0 for an intro that
+    plays once before the loop starts (e.g. a logo before a bed) -- Godot plays 0..loop_end once, then
+    repeats loop_begin..loop_end. `rate` only changes the header (default SR = the old behaviour, byte
+    for byte); the comms voices pass COMMS_RATE because they are band-limited to 3.4 kHz and 44.1 kHz
+    would double their size. Returns bytes written."""
     x = np.asarray(x, dtype=np.float64)
     loop_len = length(x)
     if loop and loop_tail > 0:
-        x = np.concatenate([x, x[..., :loop_tail]], axis=-1)
+        x = np.concatenate([x, x[..., loop_begin:loop_begin + loop_tail]], axis=-1)
     if is_stereo(x):
         channels = 2
         inter = np.empty(x.shape[1] * 2)
@@ -877,14 +900,14 @@ def write_wav(path: str, x: np.ndarray, loop: bool = False, dither: bool = True,
         inter = inter + (rng.uniform(-0.5, 0.5, len(inter)) + rng.uniform(-0.5, 0.5, len(inter))) / 32768.0
     pcm = np.clip(np.round(inter * 32767.0), -32768, 32767).astype("<i2")
     data = pcm.tobytes()
-    fmt = struct.pack("<HHIIHH", 1, channels, SR, SR * channels * 2, channels * 2, 16)
+    fmt = struct.pack("<HHIIHH", 1, channels, rate, rate * channels * 2, channels * 2, 16)
     chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt
     chunks += b"data" + struct.pack("<I", len(data)) + data
     if loop:
         # smpl chunk: manufacturer, product, sample period (ns), midi unity note, pitch fraction,
         # smpte format, smpte offset, num loops, sampler data, then one loop record.
-        smpl = struct.pack("<IIIIIIIII", 0, 0, int(1e9 / SR), 60, 0, 0, 0, 1, 0)
-        smpl += struct.pack("<IIIIII", 0, 0, 0, loop_len, 0, 0)
+        smpl = struct.pack("<IIIIIIIII", 0, 0, int(1e9 / rate), 60, 0, 0, 0, 1, 0)
+        smpl += struct.pack("<IIIIII", 0, 0, loop_begin, loop_len, 0, 0)
         chunks += b"smpl" + struct.pack("<I", len(smpl)) + smpl
     riff = b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks
     with open(path, "wb") as f:
@@ -917,3 +940,127 @@ def read_wav(path: str):
     if channels == 2:
         return np.vstack([pcm[0::2], pcm[1::2]]), rate, has_loop
     return pcm, rate, has_loop
+
+# --------------------------------------------------------------------------- comms (the shared voice channel)
+# Added for the COMMS voices (tools/gen/audio/voices.py). Every neighbour is a radio transmission, and
+# ONE channel defined here is what makes ten very different timbres sound like one universe. Nothing
+# above this line calls into this section, so no other generator's output changes.
+
+COMMS_RATE = 22050        # half of SR: the channel stops at 3.4 kHz, so 22.05 kHz loses nothing and halves the bytes
+COMMS_LO = 300.0          # the classic voice channel is 300-3400 Hz (telephone / two-way radio)
+COMMS_HI = 3400.0
+
+
+def svf_tv(x: np.ndarray, fc, q: float = 4.0, mode: str = "bp") -> np.ndarray:
+    """Time-varying TPT (Zavalishin) state-variable filter, mono. `fc` is a scalar or per-sample array.
+    mode 'bp' is unity-gain at fc, 'lp' / 'hp' are the usual 12 dB/oct outputs. The TPT form stays stable
+    while fc moves every sample, which the FIR-approximated biquads above cannot do - it is what lets a
+    formant GLIDE (Mayor Orbit, Stella) instead of stepping between static filters."""
+    n = len(x)
+    fcs = np.full(n, float(fc)) if np.isscalar(fc) else np.asarray(fc, dtype=np.float64)[:n]
+    g = np.tan(math.pi * np.clip(fcs, 5.0, SR * 0.45) / SR)
+    k = 1.0 / max(q, 0.05)
+    a1 = 1.0 / (1.0 + g * (g + k))
+    a2 = g * a1
+    a3 = g * a2
+    out = np.zeros(n)
+    ic1 = ic2 = 0.0
+    xs = np.asarray(x, dtype=np.float64)
+    for i in range(n):
+        v3 = xs[i] - ic2
+        v1 = a1[i] * ic1 + a2[i] * v3
+        v2 = ic2 + a2[i] * ic1 + a3[i] * v3
+        ic1 = 2.0 * v1 - ic1
+        ic2 = 2.0 * v2 - ic2
+        if mode == "bp":
+            out[i] = k * v1
+        elif mode == "lp":
+            out[i] = v2
+        else:
+            out[i] = xs[i] - k * v1 - v2
+    return out
+
+
+def comms_chain(x: np.ndarray, drive: float = 1.7, presence_db: float = 1.5, presence_fc: float = 1300.0,
+                lo: float = COMMS_LO, hi: float = COMMS_HI) -> np.ndarray:
+    """THE shared radio channel every comms sound goes through (voices, key-up, squelch, static bed).
+      1. 24 dB/oct high-pass at 300 Hz and 24 dB/oct low-pass at 3.4 kHz - the voice channel.
+      2. +1.5 dB presence bump at 1.3 kHz (Q 0.8): the mid-range 'radio' colour. Kept small because a
+         big 1-3 kHz peak is exactly what makes a long conversation tiring.
+      3. Light tanh saturation on a peak-normalised signal, so every voice gets the SAME amount of grit
+         whatever its level (drive 1.7 = about 6 % THD on a full-scale sine).
+      4. Band-limit again (low-pass 3.9 kHz, high-pass 240 Hz) to remove the harmonics step 3 made, so the
+         saturation adds warmth inside the channel and never adds hiss above it.
+    Mono in, mono out, at SR. Output peak is 1.0 before any later normalisation."""
+    y = highpass(highpass(x, lo), lo)
+    y = lowpass4(y, hi)
+    if presence_db != 0.0:
+        y = peak_eq(y, presence_fc, presence_db, 0.8)
+    p = peak(y)
+    if p > 1e-9:
+        y = y / p
+    if drive > 0.0:
+        y = np.tanh(drive * y) / math.tanh(drive)
+    y = lowpass(y, hi * 1.15)
+    y = highpass(y, lo * 0.8)
+    return y
+
+
+def _fft_taper(n_bins: int, rate: float, f_pass: float, f_stop: float, n_fft: int) -> np.ndarray:
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)[:n_bins]
+    w = np.ones(n_bins)
+    band = (f > f_pass) & (f < f_stop)
+    w[band] = 0.5 * (1.0 + np.cos(math.pi * (f[band] - f_pass) / (f_stop - f_pass)))
+    w[f >= f_stop] = 0.0
+    return w
+
+
+def resample_half(x: np.ndarray) -> np.ndarray:
+    """SR (44.1 kHz) -> COMMS_RATE (22.05 kHz), mono. FFT low-pass (raised-cosine 9.5-10.5 kHz) then drop
+    every other sample. Zero-padded so the circular FFT cannot wrap a tail onto the head."""
+    n = len(x)
+    size = 1 << (n + 4096 - 1).bit_length()
+    X = np.fft.rfft(x, size)
+    X *= _fft_taper(len(X), SR, 9500.0, 10500.0, size)
+    y = np.fft.irfft(X, size)[:n]
+    return y[::2].copy()
+
+
+def upsample_double(x: np.ndarray) -> np.ndarray:
+    """COMMS_RATE -> SR, mono, by FFT zero-stuffing (exact for band-limited content). Analysis only:
+    it lets the SR-only biquads above (K-weighting, band splits) measure a 22.05 kHz file."""
+    n = len(x)
+    X = np.fft.rfft(x)
+    Y = np.zeros(n + 1, dtype=complex)   # rfft length of a 2n-sample signal
+    Y[:len(X)] = X
+    return np.fft.irfft(Y, 2 * n) * 2.0
+
+
+def loudness_k(x: np.ndarray) -> float:
+    """Ungated ITU-R BS.1770 style loudness (K-weighted mean square, 'LUFS'), mono or stereo at SR.
+    The K pre-filter is rebuilt from its analogue prototype with the RBJ shelf/high-pass above
+    (+4 dB shelf at 1682 Hz, Q 0.707; high-pass 38 Hz, Q 0.5). No gating: this is for comparing short
+    sounds with each other, not for broadcast compliance."""
+    m = to_mono(x)
+    if len(m) < 16:
+        return -120.0
+    y = highshelf(m, 1681.97, 4.0, 0.7072)
+    y = highpass(y, 38.13, 0.5003)
+    ms = float(np.mean(y * y))
+    return -0.691 + 10.0 * math.log10(max(ms, 1e-12))
+
+
+def loudness_short_max(x: np.ndarray, window: float = 0.4, hop: float = 0.1) -> float:
+    """Max 400 ms 'momentary' K-loudness - the number that tracks how loud a burst FEELS, where the
+    whole-file mean is diluted by silence."""
+    m = to_mono(x)
+    w = n_samples(window)
+    h = n_samples(hop)
+    if len(m) <= w:
+        return loudness_k(m)
+    y = highpass(highshelf(m, 1681.97, 4.0, 0.7072), 38.13, 0.5003)
+    best = -120.0
+    for s in range(0, len(y) - w + 1, h):
+        seg = y[s:s + w]
+        best = max(best, -0.691 + 10.0 * math.log10(max(float(np.mean(seg * seg)), 1e-12)))
+    return best

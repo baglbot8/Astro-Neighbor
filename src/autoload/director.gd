@@ -14,7 +14,7 @@ extends Node
 ##   {"t": 6.0, "set": {"node": "/root/World", "property": "some_prop", "value": 1}}
 ##   {"t": 7.0, "log": "checkpoint reached"}
 ##   {"t": 8.0, "quit": true}
-## Extra CLI flags: --quit-at=SECONDS  --capture-dir=/abs/path  --planet=zorp  --new-game  --time=20.5
+## Extra CLI flags: --quit-at=SECONDS  --capture-dir=/abs/path  --planet=zorp  --new-game  --time=20.5  --campaign
 ##
 ## Director also writes user://director_log.txt with every step and any script errors it observed.
 
@@ -24,6 +24,7 @@ var _index := 0
 var _active := false
 var _quit_at := -1.0
 var _capture_dir := "user://captures"
+var _campaign := false
 var _log: FileAccess
 
 func _ready() -> void:
@@ -42,6 +43,8 @@ func _ready() -> void:
 			GameState.reset_new_game()
 		elif a.begins_with("--time="):
 			GameState.time_of_day = float(a.substr(7))
+		elif a == "--campaign":
+			_campaign = true
 	if _active or _quit_at > 0.0:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_capture_dir))
 		_log = FileAccess.open("user://director_log.txt", FileAccess.WRITE)
@@ -62,6 +65,13 @@ func _load_timeline(path: String) -> void:
 
 func is_active() -> bool:
 	return _active
+
+## True when a timeline opts into the Stranded campaign's gates with the "--campaign" user arg - the
+## same opt-in shape as "--intro" (intro_director.gd, _intro_allowed). Campaign gates are OFF whenever
+## a Director timeline runs unless this is true, so every existing timeline keeps today's open world
+## (docs/BUILD_PLAN.md, "Rules for every phase"). Read it through CampaignData.gates_on(), not directly.
+func campaign_opt_in() -> bool:
+	return _campaign
 
 func _process(delta: float) -> void:
 	if not (_active or _quit_at > 0.0):

@@ -26,6 +26,19 @@ extends CanvasLayer
 ## Input is read directly rather than through Interactable because the pad raises the "cutscene"
 ## modal while this is open (so bag / decorate / pause cannot fire and strand the player mid-launch).
 ## `cancel` always closes it, so the modal can never outlive the card.
+##
+## THE CAMPAIGN CONTRACT (docs/BUILD_PLAN.md Phase 1, Builder B). Every world stays a tile here even
+## when it is out of the rocket's current range — CampaignData is the one source of truth for both
+## questions, so this card never re-derives a tier table of its own:
+##   * `CampaignData.planet_in_range(id)` — false locks the tile: it can be highlighted (browsed with
+##     the chevrons/keys) but `_confirm()` refuses it, wobbling the tile instead of launching.
+##   * `CampaignData.parts_needed_for(id)` — the "Needs N parts" text a locked tile shows in place of
+##     the launch verb, at all times, not only when it is the highlight — the player should not have
+##     to select every world just to see which ones are still closed.
+## `CampaignData.gates_on()` is false for an old save, a finished story, or a Director timeline that
+## did not pass "--campaign" (THE DIRECTOR RULE) — `planet_in_range` then returns true for
+## everything, `_locked` comes out all-false, and the card is pixel-for-pixel what it was before this
+## contract existed.
 
 signal chosen(planet_id: String)
 signal cancelled()
@@ -76,7 +89,13 @@ var _tiles: Array[PanelContainer] = []
 var _discs: Array[Control] = []
 var _names: Array[Label] = []
 var _launch_pills: Array[PanelContainer] = []
+var _pill_labels: Array[Label] = []
+## Parallel to `_options`. Recomputed by `_recompute_locks()` at open and whenever
+## EventBus.rocket_parts_changed fires while the card is open.
+var _locked: Array[bool] = []
+var _needed: Array[int] = []
 var _card: PanelContainer
+var _parts_label: Label
 var _scrim: ColorRect
 var _desc_label: Label
 var _hint: PanelContainer
@@ -109,6 +128,7 @@ func _ready() -> void:
 		cancelled.emit.call_deferred()
 		queue_free.call_deferred()
 		return
+	_recompute_locks()
 	_tile_size = Vector2(_tile_width(_options.size()), TILE.y)
 	var root := Control.new()
 	root.name = "Root"
@@ -160,6 +180,19 @@ func _ready() -> void:
 	var title := UIStyle.make_label("Where to?", "Header", HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(title)
 
+	# Only during the campaign (CampaignData.gates_on()) - an old save or a non-"--campaign"
+	# Director timeline never builds this pill, so the card is exactly today's when gates are off.
+	if CampaignData.gates_on():
+		var parts_pill := PanelContainer.new()
+		parts_pill.name = "PartsPill"
+		parts_pill.theme_type_variation = "HudPillSoft"
+		parts_pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		parts_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_parts_label = UIStyle.make_label("", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
+		parts_pill.add_child(_parts_label)
+		box.add_child(parts_pill)
+		_update_parts_label()
+
 	var row := HBoxContainer.new()
 	row.name = "Tiles"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -198,6 +231,11 @@ func _ready() -> void:
 	_stay_btn.pressed.connect(_cancel)
 	column.add_child(_stay_btn)
 	_apply_mobile_exit()
+
+	# A part can be fitted (part-celebration cutscene, a Director `call`) while this card is sitting
+	# open on the pad; re-read rather than trust the range computed at open. Freed automatically
+	# with this node - no manual disconnect needed.
+	EventBus.rocket_parts_changed.connect(_on_rocket_parts_changed)
 
 	_refresh()
 	UIStyle.pop_in(_card, 0.32)
@@ -263,23 +301,49 @@ func _make_tile(id: String, index: int) -> PanelContainer:
 	_names.append(label)
 
 	# The verb lives ON the choice, not only in the hint strip underneath: a player looking at the
-	# highlighted tile can see what pressing E will do to THAT tile.
+	# highlighted tile can see what pressing E will do to THAT tile — or, locked, why it can't yet.
 	var pill := PanelContainer.new()
 	pill.name = "Launch"
 	pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pill.add_theme_stylebox_override("panel",
-		UIStyle.make_pill_style(UIStyle.YELLOW, UIStyle.YELLOW_EDGE, 3, 4, 16.0, 5.0))
-	# No "E" on a phone — there is no keyboard. The tile itself is the tap target there.
-	var pill_label := UIStyle.make_label(
-		"Launch" if MobileUI.is_mobile() else "E  Launch", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
-	pill_label.add_theme_color_override("font_color", UIStyle.FOCUS_ON_WARM)
+	var pill_label := UIStyle.make_label("", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
+	# Capped and wrapping, same technique as the name label above (`_tile_size.x - 26.0`): "Needs 2
+	# parts" is wider than "E Launch", and an uncapped Label reports ITS OWN text width as its
+	# minimum size, which would widen the whole tile past `_tile_width()`'s arithmetic and reopen
+	# the row-overflow bug that function's header comment already fixed once for the name label.
+	# A fixed height keeps a one-line and a two-line pill sitting at the same spot in every tile.
+	pill_label.custom_minimum_size = Vector2(_tile_size.x - 40.0, 34.0)
+	pill_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pill.add_child(pill_label)
 	inner.add_child(pill)
 	_launch_pills.append(pill)
+	_pill_labels.append(pill_label)
+	_apply_pill_state(index)
 
 	_tiles.append(tile)
 	return tile
+
+
+## Locked (`_locked[i]` true, from CampaignData.planet_in_range): a muted, always-legible "Needs N
+## parts" badge — informational, not a call to action, so it never wears the warm launch yellow.
+## In range: today's "E Launch" / "Launch" verb pill, unchanged.
+func _apply_pill_state(i: int) -> void:
+	var locked: bool = i < _locked.size() and _locked[i]
+	var pill := _launch_pills[i]
+	var label := _pill_labels[i]
+	if locked:
+		pill.add_theme_stylebox_override("panel",
+			UIStyle.make_pill_style(UIStyle.CREAM_INSET, UIStyle.CREAM_EDGE, 2, 4, 16.0, 5.0))
+		var n: int = _needed[i] if i < _needed.size() else 0
+		label.text = "Needs %d part%s" % [n, "" if n == 1 else "s"]
+		label.add_theme_color_override("font_color", UIStyle.TEXT_SOFT)
+	else:
+		pill.add_theme_stylebox_override("panel",
+			UIStyle.make_pill_style(UIStyle.YELLOW, UIStyle.YELLOW_EDGE, 3, 4, 16.0, 5.0))
+		# No "E" on a phone — there is no keyboard. The tile itself is the tap target there.
+		label.text = "Launch" if MobileUI.is_mobile() else "E  Launch"
+		label.add_theme_color_override("font_color", UIStyle.FOCUS_ON_WARM)
 
 
 func _make_chevron(glyph: String) -> Label:
@@ -319,10 +383,23 @@ func _confirm() -> void:
 	# was wrong" when in fact it was just early, and the pill lighting up says the same thing better.
 	if _closing or not _armed or _options.is_empty():
 		return
+	if _index < _locked.size() and _locked[_index]:
+		_deny()
+		return
 	var id := _options[_index]
 	_close()
 	UIStyle.play_confirm()
 	chosen.emit(id)
+
+
+## The chosen tile is out of range. Not silent, unlike the early-input case above: the player DID
+## do the right thing (highlighted a world, pressed launch) and needs to know why nothing happened.
+## Same feedback shop_panel.gd uses for "can't afford" (`_cant_afford`): wobble + the cancel sound,
+## no toast - the tile's own "Needs N parts" pill already says why.
+func _deny() -> void:
+	if _index < _tiles.size():
+		UIStyle.wobble(_tiles[_index])
+	UIStyle.play_cancel()
 
 
 func _select(index: int, click: bool) -> void:
@@ -345,15 +422,23 @@ func _refresh() -> void:
 	_desc_label.text = str(BLURB.get(_options[_index], ""))
 	for i in _tiles.size():
 		var on := i == _index
+		var locked := i < _locked.size() and _locked[i]
+		# A locked world can still be the highlight (browsing is allowed, launching isn't), but it
+		# never wears the "armed to launch" white-and-yellow look - that look is a promise this tile
+		# would keep if you pressed E, and a locked one wouldn't.
+		var chosen_look := on and not locked
 		var tile := _tiles[i]
 		tile.add_theme_stylebox_override("panel", UIStyle.make_panel_style(
-			UIStyle.WHITE if on else UIStyle.CREAM_INSET, UIStyle.RADIUS_CARD,
-			UIStyle.YELLOW_EDGE if on else UIStyle.CREAM_EDGE, 4 if on else 2,
-			10 if on else 0, 12.0))
+			UIStyle.WHITE if chosen_look else UIStyle.CREAM_INSET, UIStyle.RADIUS_CARD,
+			UIStyle.YELLOW_EDGE if chosen_look else UIStyle.CREAM_EDGE, 4 if chosen_look else 2,
+			10 if chosen_look else 0, 12.0))
 		_names[i].add_theme_color_override("font_color",
-			UIStyle.TEXT_BROWN if on else UIStyle.TEXT_SOFT)
+			UIStyle.TEXT_SOFT if locked else (UIStyle.TEXT_BROWN if on else UIStyle.TEXT_SOFT))
 		# The unselected worlds stay legible but clearly stand back, so the eye lands on the choice.
 		tile.modulate.a = 1.0 if on else 0.72
+		# The globe itself desaturates when locked, independent of selection: scanning the row shows
+		# which worlds are still closed without having to land the cursor on each one in turn.
+		_discs[i].modulate = Color(0.62, 0.62, 0.68, 1.0) if locked else Color.WHITE
 		var want := Vector2.ONE * (1.05 if on else 1.0)
 		if tile.scale != want:
 			tile.pivot_offset = tile.size * 0.5
@@ -365,9 +450,48 @@ func _refresh() -> void:
 func _refresh_pills() -> void:
 	for i in _launch_pills.size():
 		var on := i == _index
-		# Faded, never hidden: `visible = false` takes the pill out of the VBox and the tiles then
-		# centre their contents differently, which slides the unselected globes down half a row.
-		_launch_pills[i].modulate.a = (1.0 if _armed else 0.3) if on else 0.0
+		var locked := i < _locked.size() and _locked[i]
+		if locked:
+			# "Needs N parts" is information, not a call to action tied to the current highlight -
+			# it stays legible on every locked tile, not only the selected one (see the file header).
+			_launch_pills[i].modulate.a = 1.0 if on else 0.85
+		else:
+			# Faded, never hidden: `visible = false` takes the pill out of the VBox and the tiles
+			# then centre their contents differently, which slides the unselected globes down half
+			# a row.
+			_launch_pills[i].modulate.a = (1.0 if _armed else 0.3) if on else 0.0
+
+
+## Re-derives which options are out of range and how many parts each still needs, from
+## CampaignData - never from a tier table of this card's own. All-false when
+## CampaignData.gates_on() is false (old save, finished story, non-"--campaign" Director timeline):
+## `planet_in_range` returns true for everything in that case, so this never diverges from it.
+func _recompute_locks() -> void:
+	_locked.clear()
+	_needed.clear()
+	for id in _options:
+		_locked.append(not CampaignData.planet_in_range(id))
+		_needed.append(CampaignData.parts_needed_for(id))
+
+
+func _update_parts_label() -> void:
+	if _parts_label == null:
+		return
+	_parts_label.text = "Rocket parts %d/%d" % [GameState.rocket_part_count(), CampaignData.PARTS.size()]
+
+
+## EventBus.rocket_parts_changed while this card is open (a part fitted via the celebration
+## cutscene, or a Director `call` in a test timeline). Re-reads the range rather than trusting the
+## snapshot taken at `_ready()` - the brief's explicit requirement, and the reason `_locked` /
+## `_needed` are read fresh here instead of only once.
+func _on_rocket_parts_changed(_count: int) -> void:
+	if _closing or _options.is_empty():
+		return
+	_recompute_locks()
+	_update_parts_label()
+	for i in _pill_labels.size():
+		_apply_pill_state(i)
+	_refresh()
 
 
 ## The single way out, shared by the `cancel` action and the mobile "Stay here" button.

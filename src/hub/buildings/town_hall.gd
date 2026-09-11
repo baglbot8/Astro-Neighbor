@@ -342,10 +342,19 @@ func _ready() -> void:
 			"Read", 2.5, _on_board)
 
 
+## The name on the dialogue pill. CORE_LOOP "Changed after the build plan": Orbit is shown as
+## Professor Comet and the id mayor_orbit stays. Read from NpcData so the pill always matches his
+## name tag - this door (reach 3.0 m) sits 0.9 m from him and usually wins over his own TalkArea
+## (2.6 m), so a hardcoded "Mayor Orbit" here was the name most players saw at the Commons.
+## The mayor ROLE (rename, stats) is BUILD_PLAN Phase 4 builder I's.
+func _prof_name() -> String:
+	return str(NpcData.get_data("mayor_orbit").get("display_name", "Professor Comet"))
+
+
 func _on_door(player: Node3D) -> void:
 	if not begin_flow(player):
 		return
-	await say("Mayor Orbit", [
+	await say(_prof_name(),[
 		"Ah! Our newest neighbour. Come in, come in.",
 		"The Starport is yours to shape, you know.",
 	], "elder", MAYOR_ACCENT)
@@ -357,7 +366,7 @@ func _on_door(player: Node3D) -> void:
 			await _stats_flow()
 		else:
 			break
-	await say("Mayor Orbit", ["Mind the step on your way out!"], "elder", MAYOR_ACCENT)
+	await say(_prof_name(),["Mind the step on your way out!"], "elder", MAYOR_ACCENT)
 	AudioManager.play_sfx("door_close", -8.0)
 	end_flow()
 
@@ -365,16 +374,16 @@ func _on_door(player: Node3D) -> void:
 func _rename_flow() -> void:
 	var popup := _get_rename_popup()
 	if popup == null:
-		await say("Mayor Orbit", ["The paperwork seems to have wandered off. Try again later!"], "elder", MAYOR_ACCENT)
+		await say(_prof_name(),["The paperwork seems to have wandered off. Try again later!"], "elder", MAYOR_ACCENT)
 		return
 	var new_name: String = await popup.ask(GameState.home_planet_name)
 	if new_name == "" or new_name == GameState.home_planet_name:
-		await say("Mayor Orbit", ["Keeping the old name? A classic choice."], "elder", MAYOR_ACCENT)
+		await say(_prof_name(),["Keeping the old name? A classic choice."], "elder", MAYOR_ACCENT)
 		return
 	GameState.home_planet_name = new_name
 	toast("Your planet is now %s!" % new_name, "stardust")
 	AudioManager.play_sfx("quest_complete", -4.0)
-	await say("Mayor Orbit", [
+	await say(_prof_name(),[
 		"Stamped, sealed and filed.",
 		"Welcome home to %s." % new_name,
 	], "elder", MAYOR_ACCENT)
@@ -395,7 +404,7 @@ func _stats_flow() -> void:
 	if trash_count > 0:
 		lines.append("There's %d piece%s of space junk lying around. Might want to clean that up!" %
 			[trash_count, "" if trash_count == 1 else "s"])
-	await say("Mayor Orbit", lines, "elder", MAYOR_ACCENT)
+	await say(_prof_name(),lines, "elder", MAYOR_ACCENT)
 
 
 ## The Mayor reads out the same neighbours PlanetScore actually averages, so the readout can never

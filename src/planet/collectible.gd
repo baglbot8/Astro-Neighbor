@@ -1,8 +1,9 @@
 class_name Collectible
 extends Interactable
-## A pick-up on the planet surface: stardust shard, moon flower, crystal chunk or gear bit.
-## Bobs + spins with a sparkle trail; on interact: adds to inventory (+ stardust for shards), emits
-## EventBus.collectible_picked, plays "pickup", toasts, pops-and-shrinks, then frees itself.
+## A pick-up on the planet surface: stardust shard, moon flower, crystal chunk, gear bit or scrap.
+## Bobs + spins with a sparkle trail; on interact: adds to inventory (+ stardust for shards, + scrap
+## for scrap - BUILD_PLAN Phase 1 "D"), emits EventBus.collectible_picked, plays "pickup", toasts,
+## pops-and-shrinks, then frees itself.
 ## Picked ids are recorded per day in GameState.picked_collectibles[planet_id] as "day:id".
 
 ## The shard's own gold. The sparkle used to be #fff6c8 — a near-white that, blown up by additive
@@ -91,6 +92,21 @@ func _build_visual() -> void:
 			mi.rotation.x = 0.35
 			_base_y = 0.3
 			sparkle_col = Color("#ffd9a0")
+		"scrap":
+			# CORE_LOOP "Scrap and stardust": its own look, not the stardust-shard fallback - a bent
+			# hull plate with a bolt still through it, built with the same kit + colors as the space
+			# trash it comes from (trash_piece.gd `_build_scrap`), so a floating pickup and a piece of
+			# junk on the ground read as the same material. Cool grey + a rust fleck, not a gem glow.
+			var kit := DecoKit.new()
+			var metal := Color("#8a8496")
+			var rust := Color("#c2703f")
+			kit.rbox(Vector3(0.0, 0.0, 0.0), Vector3(0.42, 0.05, 0.30), 0.03, metal, Basis(Vector3.RIGHT, deg_to_rad(11.0)))
+			kit.tube(Vector3(-0.1, -0.03, 0.05), Vector3(-0.1, 0.16, 0.02), 0.022, metal, 6)
+			kit.sphere(Vector3(-0.1, 0.17, 0.015), 0.038, rust, Vector3(1.0, 0.7, 1.0), 6)
+			mi.mesh = kit.commit()
+			mi.material_override = DecoItem.metal_material()
+			_base_y = 0.16
+			sparkle_col = Color("#c9c4d6")
 		_:
 			mi.mesh = PlanetPropMeshes.shard()
 			mi.material_override = PlanetPropMeshes.crystal_material(Color("#d99512"), Color("#ffcf55"), 1.3, true, 0.3)
@@ -168,9 +184,22 @@ func interact(player: Node3D) -> void:
 	var list: Array = GameState.picked_collectibles.get(planet_id, [])
 	list.append(day_key(spawn_id))
 	GameState.picked_collectibles[planet_id] = list
-	GameState.add_item(kind)
+	# add_item() also stocks the bag: legitimate for stardust_shard/moon_flower/crystal_chunk/
+	# gear_bit/chalk_core/salt_bloom, which favor_system.gd's MATERIALS bring-favors can ask the
+	# player to hand back from the bag. scrap is NOT in that list - it is a pure currency
+	# (GameState.scrap / EventBus.scrap_changed), exactly mirroring stardust's own counter, not a
+	# craftable material - so it must skip add_item() or the bag grows a second, unsynced "Scrap"
+	# entry (a flat +1/pickup) alongside the real +3..+6 GameState.scrap total. Critic round 1 caught
+	# this live: HUD read 10, the bag's Materials tab simultaneously showed a disconnected "Scrap x1".
+	if kind != "scrap":
+		GameState.add_item(kind)
 	if kind == "stardust_shard":
 		GameState.add_stardust(randi_range(8, 15))
+	elif kind == "scrap":
+		# CORE_LOOP "Scrap and stardust" / GameState.STARTING_SCRAP is 5 - a small, tight range so a
+		# handful of pickups reads as real progress without dwarfing that starting stash. FIRST GUESS,
+		# BUILD_PLAN Phase 6 tunes it from a timed play-through.
+		GameState.add_scrap(randi_range(3, 6))
 	var def := Catalog.get_item(kind)
 	var display: String = str(def.get("name", kind.capitalize()))
 	EventBus.collectible_picked.emit(kind, global_position)

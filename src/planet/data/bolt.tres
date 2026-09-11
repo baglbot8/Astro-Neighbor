@@ -53,5 +53,5 @@ music_track = "chrome"
 tree_count = 16
 rock_count = 21
 flower_patch_count = 11
-collectible_count = 8
-collectible_kind = "gear_bit"
+collectible_count = 10
+collectible_kind = "gear_bit,gear_bit,gear_bit,gear_bit,scrap"

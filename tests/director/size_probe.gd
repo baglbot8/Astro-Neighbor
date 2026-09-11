@@ -140,7 +140,7 @@ func build_one(id: String) -> void:
 
 
 func build_time() -> void:
-	for id in ["home", "zorp", "bolt", "hub"]:
+	for id in ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]:
 		var d: PlanetData = load("res://src/planet/data/%s.tres" % id)
 		Planet._geo_cache.erase(Planet._geo_key(d))
 		var t := Time.get_ticks_usec()

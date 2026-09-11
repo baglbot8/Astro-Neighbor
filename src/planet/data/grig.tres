@@ -54,5 +54,5 @@ music_track = "chalk"
 tree_count = 20
 rock_count = 26
 flower_patch_count = 14
-collectible_count = 8
-collectible_kind = "chalk_core,stardust_shard"
+collectible_count = 10
+collectible_kind = "chalk_core,chalk_core,chalk_core,chalk_core,scrap"

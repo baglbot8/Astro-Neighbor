@@ -34,6 +34,11 @@ func _register_builtin() -> void:
 	# an empty catalog entry: the pickup has no name, no icon colour and no journal line.
 	register({"id": "salt_bloom", "name": "Salt Bloom", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A crust flower grown at a pool's edge.", "icon_color": "#e6dcc4"})
 	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of step. Grig numbers them.", "icon_color": "#d8cba4"})
+	# BUILD_PLAN Phase 1 "D: scrap and economy" (CORE_LOOP.md "Scrap and stardust"). Grows on every
+	# world, including home; picking one up calls GameState.add_scrap (collectible.gd). icon_color
+	# matches the metal/rust of its own pickup mesh and the HUD scrap pill (hud.gd ScrapIcon) - grey,
+	# not a new saturated accent, since STYLE_GUIDE's Moonstone UI keeps amber as the one accent.
+	register({"id": "scrap", "name": "Scrap", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "Rubble from your broken ship and the asteroid that hit it.", "icon_color": "#8a8496"})
 
 func register(def: Dictionary) -> void:
 	assert(def.has("id") and def.has("name") and def.has("kind"), "Catalog item missing id/name/kind")

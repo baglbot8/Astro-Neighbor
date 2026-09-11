@@ -3,10 +3,14 @@ extends Interactable
 ## One piece of space junk sitting on the home planet (docs/ARCHITECTURE.md §11). Spawned and tracked
 ## by TrashSystem, never through the decoration catalog/inventory — it is not an item you own.
 ## Static (junk does not float like a Collectible), small idle wobble on the wrapper only.
-## `interact()` cleans it up: removes it from GameState.trash_home, pays a small stardust finder's
-## fee, plays sfx, and frees itself.
+## `interact()` cleans it up: removes it from GameState.trash_home, pays a small scrap finder's
+## fee (BUILD_PLAN Phase 1 "D": space trash pays scrap, not stardust - it IS asteroid/ship debris),
+## plays sfx, and frees itself.
 
 const KINDS: PackedStringArray = ["can", "scrap", "wrapper"]
+# FIRST GUESS, BUILD_PLAN Phase 6 tunes it from a timed play-through (matches the randi_range(3, 6)
+# comment on collectible.gd's own scrap pickup) - a bit richer than a plain pickup since cleaning up
+# takes noticing the trash and walking to it, but still small next to GameState.STARTING_SCRAP (5).
 const CLEANUP_REWARD_MIN := 4
 const CLEANUP_REWARD_MAX := 10
 
@@ -119,9 +123,9 @@ func interact(player: Node3D) -> void:
 	set_focused(false)
 	GameState.remove_trash(trash_id)
 	var reward := randi_range(CLEANUP_REWARD_MIN, CLEANUP_REWARD_MAX)
-	GameState.add_stardust(reward)
+	GameState.add_scrap(reward)
 	AudioManager.play_sfx("pickup_item")
-	EventBus.toast_requested.emit("Cleaned up! +%d Stardust" % reward, "stardust_shard")
+	EventBus.toast_requested.emit("Cleaned up! +%d Scrap" % reward, "scrap")
 	interacted.emit(player)
 	var tw := create_tween()
 	tw.tween_property(_visual, "scale", Vector3(1.25, 1.25, 1.25), 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
