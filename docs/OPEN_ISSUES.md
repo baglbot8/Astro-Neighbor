@@ -1006,3 +1006,127 @@ within about 6-10 m of the pad. Not done, because the step is stopped.
 usually opens the Town Hall door flow, not his own talk. That flow is still the mayor's job (rename your
 planet, planet stats) and its lines still sound like a mayor ("Stamped, sealed and filed."). CORE_LOOP says
 no mayor role. Only the name is fixed here.
+
+## 42. [2026-09-11] Phase 2 (Bolt's project): what passed, what the lead wired, what is still open
+
+**Passed, round 1 each:** E project system (Opus critic), N part celebration (Opus critic), F build bench
+(Sonnet critic), G Bolt's project (Sonnet critic). Integration: check.sh, seven worlds and three existing
+timelines clean; old saves and Director runs without `--campaign` unchanged.
+
+**Wired by the lead after the builders (their needs_from_others):**
+* `world.gd` creates ProjectSystem on every world load, before the bench. Without it E's critic measured 0 find
+  markers after a reload until the first talk, and project items showed nameless in the bag.
+* `npc.gd` `_refresh_marker` asks `ProjectSystem.wants_marker` first. Bolt showed "!" through every locked day
+  of his project (critic captures c06-c09b).
+* `catalog.gd` `random_reward_decoration` skips items that carry "project". The critic measured a project fix in
+  the favor reward pool, with the campaign off too.
+* `inventory.gd`: no Drop for project items and parts (Drop destroyed them); a part shows a disabled "Fit it at
+  the bench".
+* `conversation.gd`: a favour ready to hand in goes before the project, or a Phase 1 campaign save loaded by this
+  build would have it held for three game days. E's one exception is accepted: `handle_conversation` returns
+  false when a delivery gift for that neighbour is in the bag, so the delivery branch must stay first.
+* The `part_fitted` sound: take A "power-up" (`tools/gen/audio/sfx.py`): a latch, a rising hum, one warm chord,
+  the comms two-beep, a sparkle. 3.2 s, -3 dBFS peak, -18 dBFS RMS (friendship_up is -18.8). No mallets. Takes B
+  and C stay as code for the user to pick by ear (`PART_FITTED_TAKE`).
+
+**The lead's wiring failed its critic twice, so that step stopped (the user's rule for this phase).**
+* Round 1 (Opus critic) FAILED the `npc.gd` "!": `wants_marker() == 0` hid it while a talk would still hand in
+  a ready favour or open a gift (cases E3, E7, E9). The round-2 fix `_favor_ready_here()` makes the same two
+  checks conversation.gd makes before the project. It PASSED in every state, and three traps correctly stay
+  hidden (a gift not in the bag, Bolt's own favour half done, a gift Bolt gave for Zorp).
+* Round 2 FAILED a new change: `shop_panel.gd` `_try_fit` closing the bench after a fit (added because the
+  unbroken play-through found the celebration waits until the bench is closed). A finger tap worked. With E,
+  Enter or pad A the bench re-opened one physics frame later, invisible, with input blocked until a blind Esc
+  (4 of 4 keyboard runs). The chain: `confirm_dialog.gd:123` answers Yes on `is_action_just_pressed("interact")`;
+  `close_panel()` drops the modal count in that frame; `player.gd:369-381` held `interact_pressed` false while
+  the modal was open, so on the next physics frame the still-held key reads as a new press and
+  `player.gd:487-488` interacts with the bench again; the re-open lands inside the 0.18 s `UIStyle.pop_out`,
+  whose end callback (`ui_style.gd:254-257`) hides the panel regardless.
+* **Reverted.** The bench stays open after Fit, as builder F's critic passed it; the celebration starts when
+  the player closes the bench. The critic measured two fixes (all four input paths, check.sh 46/46), NOT
+  applied: (a) in `_try_fit`, wait while `Input.is_action_pressed("interact")` before `close_panel()`;
+  (b) the root cause, in `player.gd` `_on_modal_changed`, set `_interact_was_pressed =
+  Input.is_action_pressed("interact")`. (b) also covers any other menu closed with E next to an
+  interactable - for example a talk closed with a held E beside the NPC may re-open it (not tested).
+* Latent: `UIStyle.pop_out` hides its control in an unconditional end callback, so any `open_panel()` within
+  0.18 s of `close_panel()` gives an open, invisible, input-blocking panel (`item_grid_panel.gd:537-568`). A
+  defensive fix kills the running close tween in `open_panel`.
+
+**Lead decision:** on the Compatibility renderer the space-sky navy (#131334, S 0.61-0.62, about 27% of the
+frame) fails "no dominant swatch above S 0.60" by 0.01-0.02 in the celebration's two shots. Gameplay frames and
+Forward+ pass. It is the same miss as Phase 1 R's 0.60-0.63. Accepted for now: the sky is the shipped look and
+the miss depends on how much sky a shot frames. A later art pass may lower the Compatibility sky saturation.
+
+**Still open:**
+* One part opens no new world. Tier 2 needs 2 parts and Phase 2 builds only Bolt's, so BUILD_PLAN's "the picker
+  shows a longer range" is not true yet: it shows "Rocket parts 1/5" and Fen and Grig still need 2. Zorp's part
+  comes in Phase 3.
+* The whole Bolt loop now runs unbroken in ONE Director run (scratchpad `phase2/loop/bolt_loop_run4.log`, 299 s,
+  0 errors): 4 real flights through the pad picker, 3 game days, the find markers, the build at the bench (11 ->
+  5 scrap), the placement in the ring, the part, the fit (11 -> 3 scrap), the celebration, finish stage 0 -> 1,
+  "Rocket parts 1/5". The trick was a probe that taps only when the dialogue has finished typing; fixed-interval
+  taps skip lines mid-type (40 chars/s). Still synthetic: Director taps, teleports instead of walking, and
+  day_count and scrap set by the Director. No human has timed it.
+* `deco_store.gd:204-208` builds the Cosmo Depot window display from `items_of_kind("decoration")` with no
+  "project" filter. Bolt's regulator stays out only because its footprint (0.9) is over the 0.85 cutoff; a
+  Phase 3 project decoration with a smaller footprint would show in the window (display only, not buyable).
+* The disabled "Fit it at the bench" hint in the bag is pale grey on a pale pill; its contrast was not measured.
+* Time is an estimate, not a timed run: the day gate alone is 2 x 600 s = 20 min; the Bolt critical path is about
+  27 min. "About an hour" is plausible only with in-between play.
+* After the part, Bolt offers random favours again (Phase 4, builder J).
+* Celebration: the camera rig's near-geometry fade ghosts props during the shot (a see-through dome in the
+  integration's close-up), and camera_rig.gd has no public way to suspend it. No fist-pump pose exists
+  (astronaut_model.gd). In the Fly-gateway layout the FLY plate covers the helmet; the bench's spot, 6.47 m from
+  the pad, avoids that layout.
+* The place ring is hard to see from 6.5-8 m on Bolt's 10.5 m planet. The placement ghost sits 3.35 m ahead of
+  the player (`PlacementController.FORWARD_DIST`), leaving 0.65 m of slack inside Bolt's 4 m ring.
+* The bench's palette and triangle budget were not measured.
+* `item_grid_panel.gd` reads the empty-state text before `ShopPanel.open()` sets its mode; F worked around it in
+  shop_panel.gd. The real fix is in the shared base class.
+
+**The desktop save was not protected.** Builders and critics were told never to write it, and to copy it aside
+and restore it if they had to. On 2026-09-11 it was still deleted and rewritten several times: a Director run
+that goes through the title with `--new-game` deletes it (`title_screen.gd:89`), and several agents restored
+from backups that were already test data. No copy of the user's pre-Phase-1 desktop save survives; every backup
+in scratch is a day-1 campaign test save. Lesson: an agent run must not share the real user folder at all. Point
+`HOME` at a scratch folder or rename `config/name` in a scratch copy, as the ship check did, and never go
+through the title in a shared folder.
+
+## 43. [2026-09-11] One voice for everyone (doot C), and a clean rocket until the asteroid hits
+
+**The user, after listening to the three doots:** "I like the third doot voice and let's have all neighbors have
+that voice too." And: "in the intro cutscene the rocket should be normal / clean looking before it hits the
+asteroid, then it becomes rusted and dirty." Both built by one builder each, both PASSED round 1.
+
+* **V (voice).** Flavour C ships as `doot_c_0..3` (4 pre-baked +-3% pitch variants, `voices.py`
+  `render_doot("c")`). Zorp takes the doot path too, behind one const `ZORP_COMMS_ENABLED := false` in
+  `audio_manager.gd`; his comms scheduler, his five `voice_zorp_*` files and the key-up/down/over/bed framing
+  all stay on disk, so one line brings his radio voice back - the critic flipped it live and got exactly his
+  old gesture back, with every other speaker still dooting. Loudness: A -20.681 LUFS, C -20.717 LUFS, a
+  0.035 dB difference, so `DOOT_DB` stays at -9.0 with the measurement in the comment instead of a guessed
+  number. The critic re-rendered all four files from `voices.py` and got byte-identical SHA-256.
+* **I (intro).** The borrowed rocket is painted clean (stage 4) from the start of the shot through the whole
+  cruise, then steps down one finish stage at a time to `CampaignData.finish_stage()` across the contact
+  flash's own 0.28 s life, starting at the hit (7.02 s). Rust is first readable 0.16 s after the hit and the
+  hull is fully rusty by 0.36 s. Every exit path ends at finish 0: natural end, a skip before the hit, a skip
+  after it, a skip *during* the step, and leaving mid-shot. The Opus critic diffed the camera trace against a
+  rebuilt pre-change binary: max difference 0.00000000 over 260 frames on both renderers, so nothing else in
+  the shot moved.
+
+**Lessons:**
+* **A discrete visual swap timed with a VFX cue is not automatically hidden by it.** The contact flash is a
+  small quad at the contact point, not a wash over the hull, so the first attempt - one instant swap on the
+  flash frame - was a measured, visible pop. Stepping the change across the VFX's own lifetime reads as the
+  hit doing the damage.
+* `--resolution` is silently ignored when `--write-movie` is used (now in CLAUDE.md's tooling traps).
+
+**Open / watch:**
+* `RocketModel.refresh_finish()` is connected to `campaign_changed` and `rocket_parts_changed` and repaints to
+  `CampaignData.finish_stage()`. Neither fires during the shot today (both come from `reset_new_game()` and
+  `from_dict()`, which run before the world is built), but the intro's clean paint is a one-shot with no
+  re-assert: one such signal during the shot would snap the hull rusty mid-cruise.
+* `showcase/audio_board.gd` `play_voice_blip("alien")` now plays a doot instead of Zorp's comms gesture
+  (`LEGACY_VOICES` maps alien -> zorp). Expected, not a bug.
+* `voices.py` `SHIPPED_VOICE_NAMES` still lists `voice_zorp_*` and the comms framing files, so a full
+  `build_all --voices` keeps regenerating them. Deliberate while one const can bring Zorp's voice back.
+* Neither change has been proven with a real finger, a real key press, or on the phone.

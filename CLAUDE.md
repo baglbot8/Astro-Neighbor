@@ -103,6 +103,16 @@ returns the conclusion, not the dump.
 - `--freeze` only stops the turntable, and captures differ by ~55,000 px run to run. Do not
   pixel-diff small changes.
 - macOS stops drawing a covered window: pass `--always-on-top --position 100,100` before the `--`.
+- A Director run shows the crash intro only with `--intro` (`intro_director.gd` `_intro_allowed()`);
+  `--new-game --campaign` alone silently skips it. Film the crash with `--fixed-fps 30`: saving PNGs
+  stalls frames and the crash falls ~1.2 s behind the timeline's clock (2026-09-11 ship check).
+- `--resolution` is **silently ignored when `--write-movie` is used**: the project's 1280x720 viewport
+  wins, so a "1560x720 phone" movie is really 1280x720. For a real phone-size frame, use a Director
+  `--capture-dir` run without `--write-movie` (2026-09-11 intro critic).
+- **Agent runs never use the user's real save folder.** Test in a scratch copy with `config/name`
+  renamed (user:// follows the name) and hash the real save before and after. A run through the title
+  with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this
+  way on 2026-09-11 (`docs/OPEN_ISSUES.md` 42).
 - Never run `tools/gen/audio/build_all.py` while other builders are working — it regenerates every
   asset.
 

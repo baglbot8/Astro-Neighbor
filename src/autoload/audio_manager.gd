@@ -5,11 +5,14 @@ extends Node
 ##   play_footstep(surface)                        alternates footstep_<surface>_0/_1 ("grass" | "stone" | "metal")
 ##   play_music(track, fade)                       crossfade; "" fades out. Resolves _day/_night variants by phase.
 ##   play_music_for_phase(planet_track, phase)     explicit phase switch ("dawn" "day" "dusk" "night")
-##   comms_open_line / comms_reveal / comms_close_line   Zorp: voiced as a radio TRANSMISSION, one
-##                                                 gesture per phrase, never per letter. Every other
-##                                                 speaker: a shared neutral "doot" every ~2 revealed
-##                                                 letters, no framing (see DOOT_* below, 2026-09-10)
-##   play_voice_blip(profile)                      compatibility wrapper: Zorp's gesture, or a doot
+##   comms_open_line / comms_reveal / comms_close_line   Every neighbour, Zorp included: a shared
+##                                                 neutral "doot" every ~2 revealed letters, no framing
+##                                                 (see DOOT_* below). Zorp's own radio-TRANSMISSION
+##                                                 scheduler (one voiced gesture per phrase, plus
+##                                                 key-up/key-down/over/bed framing) still lives here,
+##                                                 gated off by ZORP_COMMS_ENABLED (2026-09-11)
+##   play_voice_blip(profile)                      compatibility wrapper: a doot (or Zorp's gesture,
+##                                                 only if ZORP_COMMS_ENABLED)
 ##   start_loop(name, volume_db) / stop_loop(name) looping sfx (rocket_loop, dance_beat)
 ##   apply_settings() / set_bus_volume(bus, linear) / get_bus_volume(bus)   buses: Master, Music, SFX
 ## SFX live in res://assets/audio/sfx/<name>.wav ; music in res://assets/audio/music/<name>.wav|ogg
@@ -292,6 +295,12 @@ func play_footstep(surface: String, world_pos: Vector3 = Vector3.INF, volume_db:
 ## TRANSMISSION. This replaced a random pitched blip every 2-3 letters (13-20 a second) - a per-letter
 ## babble that read as an Animal Crossing copy, which the user asked us to lose. Now, per line:
 ##
+## DORMANT as of 2026-09-11 (ZORP_COMMS_ENABLED := false, below the DOOT section further down this
+## file): the whole scheduler this comment describes - key-up/gestures/key-down/over, one voice per
+## neighbour - is built and correct but not called from anywhere while that const is false. Every
+## neighbour, Zorp included, currently plays a plain "doot" instead (see the DOOT section). Flip
+## ZORP_COMMS_ENABLED back to true to bring this scheduler back for Zorp.
+##
 ##   comms_open_line(voice, line, closes_turn)  key-up (relay click + ~90 ms static burst) and a faint
 ##                                              static bed under the open line
 ##   comms_reveal(visible_chars)                call every frame while the line types. ONE voiced
@@ -363,20 +372,40 @@ const COMMS_CUT_FADE := 0.035
 const COMMS_SILENT_DB := -60.0
 const COMMS_PUNCT := ".!?,;:—…"
 
-## DOOT (shipped 2026-09-10). The user, after listening to the comms voices on her phone: "I only like
-## Zorp's new voice better than the animalese / original robot sounds. The only thing I can think of is
-## making generic doot doot doot noises as the letters are being written out and then we dont have
-## unique voices for each." Zorp keeps his comms voice above, UNCHANGED (comms_voice_for still resolves
-## everyone else to their old id - bolt/pip/pop/stella/mayor_orbit/dj_nova/fen/grig/vela - it just no
-## longer means a unique voice). Everyone else gets ONE shared, neutral, non-vocal tone instead, as its
-## letters type: no per-neighbour timbre, no radio click/static framing. Built by
-## tools/gen/audio/voices.py's DOOT section (doot_names() / render_doot(), flavour "a" - 4 pitch
-## variants, +-3 %, so it never machine-guns one sample).
-const DOOT_FILES: PackedStringArray = ["doot_a_0", "doot_a_1", "doot_a_2", "doot_a_3"]
+## DOOT (shipped 2026-09-10; flavour C + Zorp added 2026-09-11). The user, after listening to the comms
+## voices on her phone: "I only like Zorp's new voice better than the animalese / original robot
+## sounds. The only thing I can think of is making generic doot doot doot noises as the letters are
+## being written out and then we dont have unique voices for each." So every neighbour but Zorp got
+## ONE shared, neutral, non-vocal tone instead of a unique voice (comms_voice_for still resolves
+## everyone to their old id - bolt/pip/pop/stella/mayor_orbit/dj_nova/fen/grig/vela - it just no longer
+## means a unique voice). Then, after listening to the three doot flavours (A/B/C, all
+## tools/gen/audio/voices.py render_doot()) on the Radio Check page, the user: "I like the third doot
+## voice and let's have all neighbors have that voice too." So now:
+##   - Flavour C ("a very short muted tik-doo with a soft click") ships instead of flavour A: DOOT_FILES
+##     below points at doot_c_0..3. doot_a_0..3 stay on disk, unused (nothing is deleted).
+##   - Zorp takes the doot path too, gated by ZORP_COMMS_ENABLED just below: his own comms scheduler
+##     (the radio TRANSMISSION voice further down this file - one gesture per phrase, plus
+##     key-up/key-down/over/bed framing) is UNCHANGED and still lives here, just switched off. Flip
+##     that one const back to true to give him his own voice again.
+## No radio click/static framing for anyone either way (DOOT_FRAMING_ENABLED stays false).
+## ONE const: true plays Zorp's own comms transmission (voice_zorp_*, still built and on disk); false
+## (the user's 2026-09-11 choice - "all neighbors" means Zorp too) routes him through the doot path
+## below like everyone else. Flipping this one line is the entire revert.
+const ZORP_COMMS_ENABLED := false
+const DOOT_FILES: PackedStringArray = ["doot_c_0", "doot_c_1", "doot_c_2", "doot_c_3"]
 ## One doot at most every this many REVEALED LETTERS (spaces and punctuation never count) - the user
 ## described only "doot doot doot", nothing per letter and nothing per space/punctuation mark.
 const DOOT_LETTERS_PER_TICK := 2
-const DOOT_DB := -9.0    # doot_a_*.wav is already RMS-levelled well under the old voice_robot files
+## Measured 2026-09-11 (tools/gen/audio/synth.py analyse via voices.analyse(), K-weighted loudness_k
+## upsampled to 44.1 kHz first, same method as every other level in this file): doot_c_*.wav averages
+## RMS -20.00 dBFS / -20.72 LUFS across its 4 variants; doot_a_*.wav (the file DOOT_DB was last tuned
+## against) averages RMS -20.00 dBFS / -20.68 LUFS. Both hit tools/gen/audio/voices.py's _finish_doot
+## RMS-normalise target exactly (neither flavour's peak reaches its -3 dBFS ceiling, so the peak cap
+## never overrides the RMS target) - the only difference is the LAST 0.001 dB of RMS and 0.04 dB of
+## LUFS, both under this measurement's own noise floor and two orders of magnitude below what an ear
+## can hear (~1 dB). No inversion needed and no knob to add for a gap that small: DOOT_DB keeps its
+## 2026-09-10 value unchanged. (CLAUDE.md: no fitted constants for a non-difference.)
+const DOOT_DB := -9.0
 ## Non-Zorp lines get NO radio key-up/key-down framing by default - the user's phone review asked only
 ## for plain doots, nothing else, for everyone but Zorp. Kept as ONE const, default OFF, in case a
 ## later round decides doot lines should open/close like a transmission after all.
@@ -467,12 +496,13 @@ func comms_voice_exists(voice: String) -> bool:
 	return voice != "" and sfx_exists("voice_%s_short" % voice)
 
 
-## Opens a line. voice == "zorp" -> the full comms scheduler (key-up, gestures, key-down/over -
-## unchanged). Any other non-empty voice -> the doot path (no framing, see DOOT_FRAMING_ENABLED): a
-## plain tone plays roughly every DOOT_LETTERS_PER_TICK letters as comms_reveal() is called. voice ==
-## "" (or a blank line) types in silence either way.
+## Opens a line. voice == "zorp" AND ZORP_COMMS_ENABLED -> the full comms scheduler (key-up, gestures,
+## key-down/over - unchanged, currently OFF per the user's 2026-09-11 "one voice for everyone"
+## decision). Any other non-empty voice (Zorp included, while ZORP_COMMS_ENABLED is false) -> the doot
+## path (no framing, see DOOT_FRAMING_ENABLED): a plain tone plays roughly every DOOT_LETTERS_PER_TICK
+## letters as comms_reveal() is called. voice == "" (or a blank line) types in silence either way.
 func comms_open_line(voice: String, line: String, closes_turn: bool = false) -> void:
-	if voice == "zorp":
+	if voice == "zorp" and ZORP_COMMS_ENABLED:
 		_zorp_open_line(voice, line, closes_turn)
 		return
 	if _voice_mode == "zorp":
@@ -676,13 +706,13 @@ func comms_hold(paused: bool) -> void:
 ## COMPATIBILITY WRAPPER for the old per-letter blip API. Dialogue no longer calls it: it plays ONE
 ## short sound (no key-up, no squelch) for a neighbour id or a legacy profile, which keeps
 ## showcase/audio_board.gd and any old caller working without bringing the babble back. "astro" -
-## silent in dialogue - maps to Stella here, the one neighbour who used it. Zorp -> his comms gesture,
-## unchanged; every other neighbour -> a doot (their comms gesture files no longer ship).
+## silent in dialogue - maps to Stella here, the one neighbour who used it. Zorp -> his comms gesture
+## only if ZORP_COMMS_ENABLED; every other neighbour (Zorp included, by default) -> a doot.
 func play_voice_blip(profile: String) -> void:
 	var v := comms_voice_for(profile)
 	if v == "" and profile == "astro":
 		v = "stella"
-	if v == "zorp":
+	if v == "zorp" and ZORP_COMMS_ENABLED:
 		_comms_voice_play("voice_zorp_short", 1.0 + randf_range(-COMMS_JITTER, COMMS_JITTER))
 	elif v != "":
 		_play_doot()

@@ -23,6 +23,27 @@ extends Node3D
 ## walk up to afterwards - rusty, per CampaignData.finish_stage() - is the one you watched fall.
 ## Nothing under src/rocket/ is edited; only RocketModel's public API is called.
 ##
+## THE FINISH: CLEAN UNTIL THE HIT. `_begin` repaints the borrowed rocket to RocketModel.FINISH_CLEAN
+## (stage 4, the ordinary white finish every rocket on the pad wears before the story's wear gates
+## kick in) so the opening card and the whole cruise show a normal ship - rocket_pad.gd would
+## otherwise have already painted it to CampaignData.finish_stage() (0, rusty, on a new game) before
+## this node ever runs.
+##
+## AT THE HIT, `_update_fx` steps the finish down one stage at a time - FINISH_CLEAN, then each stage
+## below it in turn, to CampaignData.finish_stage() - over FLASH_LIFE, the same window the contact
+## flash burns in (`_finish_step`). NOT one swap: measured (round 1, f00000267 of a 30 fps default-
+## renderer capture) a single repaint made the SAME call as the flash and spark burst read as a pop
+## anyway, because the flash is a small disc AT the contact point (round 2's geometry, `_contact`),
+## not a wash over the hull, and was one frame from even starting to grow when the whole hull had
+## already gone patchily rusty. Stepping it - clean for the flash's first fifth of a second, then a
+## stage every ~0.056 s - reads as the impact rusting the ship through the same burst of flash, sparks,
+## chips and shake, rather than a colour swap arriving with nothing to hide it.
+##
+## `_apply_end_state` (every _complete: natural end, a skip before the hit, a skip after it) and
+## `_exit_tree` (leaving mid-shot) both set CampaignData.finish_stage() directly (not stepped - there
+## is no flash to hide behind once the shot has ended), so the rocket you end up at is always at that
+## stage regardless of exit path - a skip before the hit is the one path nothing else would repaint.
+##
 ## WHY THE NAVY CARD. environment.gd freezes where the neighbouring worlds hang from whatever camera
 ## it sees during the first BODY_AZ_LOCK_SEC (1.5 s) of the scene. Were that this shot's camera,
 ## 200 m out, the worlds would lock to elevations measured off a planet 3 deg across - below the
@@ -182,6 +203,12 @@ const SMOKE_WINDOW := Vector2(0.05, 1.0)
 const SHAKE_HIT := Vector2(0.075, 0.55)
 const SHAKE_TD := Vector2(0.05, 0.45)
 const CHIPS := 5
+## How long the contact flash burns (its own scale curve dies at this age - see `_update_fx`). The
+## finish's clean-to-rusty repaint (see "THE FINISH" above) is spread over the same window, one stage
+## at a time, rather than one swap: measured (round 1) a single swap at the hit put full rust patches
+## over most of the hull one frame before the flash - a small disc AT the contact point, not over the
+## hull - had grown big enough to cover any of it (f00000267 of a 30 fps capture, default renderer).
+const FLASH_LIFE := 0.28
 
 # ------------------------------------------------------------------------------------ the fall
 ## Hermite slopes of the fall's progress curve: leave at half the mean rate (the bump carries it),
@@ -298,6 +325,9 @@ var _skipping := false
 var _modal := false
 var _fired: Dictionary = {}
 var _caption_on := -1
+## Read once, at the hit, and held: what the finish is stepping down to (see "THE FINISH" above). -1
+## before the hit, so `_update_fx` knows not to touch the finish yet.
+var _end_finish_stage := -1
 var _after := 0.0
 var _skip_held: Dictionary = {}
 var _skip_primed := false
@@ -386,6 +416,10 @@ func _begin() -> void:
 	_rocket.set_ladder_deployed(false)
 	_rocket.set_engine(true, 0.7)
 	_rocket.set_flame_scale(0.55)
+	# Clean for the card and the cruise (the user: "normal / clean looking before it hits the
+	# asteroid"); rocket_pad.gd has already painted CampaignData.finish_stage() (0, rusty, on a new
+	# game) by the time this node runs, so this overrides it. The hit swaps it back (_update_fx).
+	_rocket.set_finish_stage(RocketModel.FINISH_CLEAN)
 	_open_trace()
 	_log("begin card=%.2fs hit=%.2f td=%.2f end=%.2f" % [CARD_SECONDS, HIT_T, TD_T, END_T])
 	_running = true
@@ -1126,6 +1160,7 @@ func _update_fx(t: float, dt: float, xf: Transform3D) -> void:
 		_sparks.emitting = true
 		_flash.global_position = _contact
 		_flash.visible = true
+		_end_finish_stage = CampaignData.finish_stage()
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 2026
 		for i in _chips.size():
@@ -1139,11 +1174,15 @@ func _update_fx(t: float, dt: float, xf: Transform3D) -> void:
 			_chip_spin[i] = Vector3(rng.randf_range(-9.0, 9.0), rng.randf_range(-9.0, 9.0), rng.randf_range(-9.0, 9.0))
 		AudioManager.play_sfx_at("rocket_land", _contact, -2.0, 0.02)
 	var ft := t - HIT_T
+	if _end_finish_stage >= 0:
+		var stage := _finish_step(ft, _end_finish_stage)
+		if stage != _rocket.finish_stage():
+			_rocket.set_finish_stage(stage)
 	if _flash.visible:
-		if ft > 0.28:
+		if ft > FLASH_LIFE:
 			_flash.visible = false
 		else:
-			_flash.scale = Vector3.ONE * maxf(sin(PI * ft / 0.28) * 1.2, 0.01)
+			_flash.scale = Vector3.ONE * maxf(sin(PI * ft / FLASH_LIFE) * 1.2, 0.01)
 	for i in _chips.size():
 		var c := _chips[i]
 		if not c.visible:
@@ -1187,6 +1226,18 @@ func _update_fx(t: float, dt: float, xf: Transform3D) -> void:
 	if t >= POP_END_T + 0.4 and _once("hatch_shut"):
 		_rocket.close_hatch()
 		AudioManager.play_sfx_at("door_close", _rest.origin, -4.0)
+
+
+## The finish stage to show at age `ft` (seconds since the hit), stepping from FINISH_CLEAN down to
+## `target` in equal slices of FLASH_LIFE - one stage per slice, floor-rounded, so the last slice holds
+## `target` itself rather than overshooting it. `steps` (5 for the new-game target of 0) comes from the
+## actual distance between the two stages, not a chosen count, so nothing here is a tuned number.
+func _finish_step(ft: float, target: int) -> int:
+	var steps := RocketModel.FINISH_CLEAN - target + 1
+	if steps <= 1 or ft >= FLASH_LIFE:
+		return target
+	var k := clampi(int(ft / FLASH_LIFE * float(steps)), 0, steps - 1)
+	return RocketModel.FINISH_CLEAN - k
 
 
 func _start_wisp() -> void:
@@ -1323,6 +1374,9 @@ func _apply_end_state() -> void:
 	_rocket.set_engine(false)
 	_rocket.set_flame_scale(0.0)
 	_rocket_look(0.0)
+	# Idempotent for the natural end and a skip after the hit (the hit swap already did this); the
+	# one path that needs it is a skip BEFORE the hit, which would otherwise leave the pad rocket clean.
+	_rocket.set_finish_stage(CampaignData.finish_stage())
 	_rocket.set_ladder_deployed(true)
 	_rocket.close_hatch()
 	AudioManager.stop_loop("rocket_loop", 0.2)
@@ -1362,7 +1416,7 @@ func _complete(skipped: bool) -> void:
 	_end_modal()
 	_done = true
 	_running = false
-	_log("complete skipped=%s" % str(skipped))
+	_log("complete skipped=%s finish=%d" % [str(skipped), _rocket.finish_stage()])
 	finished.emit(skipped)
 
 
@@ -1389,6 +1443,10 @@ func _exit_tree() -> void:
 		if _rocket != null and is_instance_valid(_rocket):
 			_rocket.global_transform = _rest
 			_rocket.set_engine(false)
+			# Same reasoning as _apply_end_state: a mid-shot exit before the hit must not leave the
+			# pad rocket clean.
+			_rocket.set_finish_stage(CampaignData.finish_stage())
+			_log("exit_tree mid-shot: rocket repainted finish=%d" % _rocket.finish_stage())
 		if _env != null and is_instance_valid(_env):
 			_env.call("set_space_blend", 0.0)
 		AudioManager.stop_loop("rocket_loop", 0.1)

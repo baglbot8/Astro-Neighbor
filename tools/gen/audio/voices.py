@@ -56,6 +56,22 @@ out and then we dont have unique voices for each." So:
     build_all.py should (and should not) render going forward; build_all.py itself is owned elsewhere
     and was not changed here, so it currently still calls comms_names() for all ten voices. Whoever
     next edits build_all.py's voice section can switch it to SHIPPED_VOICE_NAMES + doot_names().
+
+UPDATE 2026-09-11 - ONE VOICE FOR EVERYONE, ZORP INCLUDED. The user listened to the three doot
+flavours (A/B/C, all built by render_doot() below) on the Radio Check page and said: "I like the third
+doot voice and let's have all neighbors have that voice too." So:
+  - Flavour C ("a very short muted tik-doo with a soft click", render_doot("c")) ships INSTEAD of
+    flavour A: doot_names() / doot_variants() / doot_render() / SHIPPED_VOICE_NAMES below now point at
+    doot_c_0..3, built the same way A was (4 pre-baked +-3 % pitch variants). doot_a_0..3 and flavour
+    A's generator are UNCHANGED and left on disk - nothing is deleted, they just stop being referenced.
+  - Zorp takes the doot path too. v_zorp / his comms gesture files / the key-up / key-down / over / bed
+    radio framing (built above, still SHIPPED_VOICE_NAMES) are UNCHANGED here and stay on disk, but
+    src/autoload/audio_manager.gd now gates the branch that plays them behind ONE const,
+    ZORP_COMMS_ENABLED := false - flip that one line to bring his own transmission voice back.
+  - build_all.py needed NO change for this: its voice loop already dispatches any name starting with
+    "doot_" to V.doot_render(name) (it was switched to iterate SHIPPED_VOICE_NAMES in an earlier round,
+    ahead of the note above about "whoever next edits build_all.py's voice section" - see its own
+    "== VOICES ==" section), so doot_c_* renders through the existing plumbing unmodified.
 """
 import math
 import os
@@ -523,10 +539,13 @@ VOICE_GEN = {"zorp": v_zorp, "bolt": v_bolt, "dj_nova": v_dj_nova, "mayor_orbit"
 # vowel-formant filters (see _formants() / VOWELS above, used by mayor_orbit/stella); a doot has no
 # formant filter anywhere in its signal path and no vowel colour - it is one plain oscillator (plus, for
 # flavour C, one short click) shaped by an amplitude envelope. Three flavours were built for the user to
-# choose from; only flavour A ships (see doot_names() / SHIPPED_VOICE_NAMES below).
+# choose from on the Radio Check page; she picked flavour C ("a very short muted tik-doo with a soft
+# click") on 2026-09-11, and it now ships for EVERY neighbour, Zorp included - see doot_names() /
+# SHIPPED_VOICE_NAMES below and ZORP_COMMS_ENABLED in src/autoload/audio_manager.gd.
 DOOT_BASE_HZ = 560.0                    # a plain, neutral pitch - not tuned to register like any CAST voice
-# +-3 % pre-baked pitch variants of the SHIPPED flavour (A), so AudioManager can rotate between them and
-# a ten-line conversation never plays the identical sample back to back ("machine-gun" repetition).
+# +-3 % pre-baked pitch variants of the shipped flavour (C since 2026-09-11, was A), so AudioManager can
+# rotate between them and a ten-line conversation never plays the identical sample back to back
+# ("machine-gun" repetition). Shared across every flavour so switching ships the same variant count.
 DOOT_PITCH_MULTS = [0.97, 1.0, 1.03, 1.015]
 DOOT_RMS_DB = -20.0                     # target file RMS - well under old voice_robot_*.wav (~-6.9 dBFS
                                         # measured), so ten lines of doots never tire the ear (see report)
@@ -536,12 +555,14 @@ DOOT_PEAK_DB = PEAK_CEIL_DB
 def render_doot(flavour, pitch_mult=1.0, rng=None):
     """One ~50-80 ms doot buffer at S.SR (not yet resampled/leveled - see _finish_doot).
 
-    flavour "a" (SHIPPED): a soft rounded sine with a tiny downward pitch-drop envelope (glides down
-      ~0.7 semitone, ~4 %, over the note) - one pure tone plus a faint (8 %) second harmonic for
-      roundness, no formants, no vowel colour.
-    flavour "b" (scratch demo only): a warmer triangle / soft-square "boop", a fourth lower than A.
-    flavour "c" (scratch demo only): a very short muted "tik-doo" - a soft filtered click attack
-      followed by a brief, quiet, heavily lowpassed tone.
+    flavour "a" (shipped through 2026-09-10, kept on disk unused since): a soft rounded sine with a
+      tiny downward pitch-drop envelope (glides down ~0.7 semitone, ~4 %, over the note) - one pure
+      tone plus a faint (8 %) second harmonic for roundness, no formants, no vowel colour.
+    flavour "b" (scratch demo only, never shipped): a warmer triangle / soft-square "boop", a fourth
+      lower than A.
+    flavour "c" (SHIPPED since 2026-09-11 - the user's pick after the Radio Check listening page): a
+      very short muted "tik-doo" - a soft filtered click attack followed by a brief, quiet, heavily
+      lowpassed tone.
     """
     if flavour == "a":
         dur = 0.065
@@ -593,36 +614,55 @@ def _finish_doot(y, rms_db=DOOT_RMS_DB, peak_db=DOOT_PEAK_DB):
     return S.resample_half(y)
 
 
+DOOT_SHIPPED_FLAVOUR = "c"    # was "a" through 2026-09-10; see the module docstring UPDATE note
+
+
 def doot_names():
-    """Shipped doot file names: the 3-4 pre-baked +-3 % pitch variants of flavour A."""
-    return ["doot_a_%d" % i for i in range(len(DOOT_PITCH_MULTS))]
+    """Shipped doot file names: the 4 pre-baked +-3 % pitch variants of the shipped flavour (C since
+    2026-09-11)."""
+    return ["doot_%s_%d" % (DOOT_SHIPPED_FLAVOUR, i) for i in range(len(DOOT_PITCH_MULTS))]
 
 
 def doot_variants():
-    """-> [(name, mono float at RATE), ...] for every shipped doot_a_* variant."""
-    return [(name, _finish_doot(render_doot("a", DOOT_PITCH_MULTS[i]))) for i, name in enumerate(doot_names())]
+    """-> [(name, mono float at RATE), ...] for every shipped doot_<flavour>_* variant. Flavour C's
+    click seed is varied per variant (4200 + i) so the four pre-baked files are not identical beyond
+    their pitch - same "never machine-guns one sample" intent as flavour A's pitch-only variants."""
+    return [(name, _finish_doot(render_doot(DOOT_SHIPPED_FLAVOUR, DOOT_PITCH_MULTS[i],
+                                             rng=np.random.default_rng(4200 + i))))
+            for i, name in enumerate(doot_names())]
 
 
 def doot_render(name):
-    """One doot by name: 'doot_a_<i>' (shipped) or the scratch-only 'doot_b' / 'doot_c'.
+    """One doot by name: 'doot_<flavour>_<i>' for a shipped or previously-shipped pre-baked variant
+    ('doot_c_0'..'doot_c_3' ship today; 'doot_a_0'..'doot_a_3' still render on request even though
+    nothing calls for them any more - see the module docstring UPDATE note) or the bare scratch-only
+    'doot_b' / 'doot_c' used by the listening demos.
     -> (mono float at RATE, loop=False), matching the comms_render() calling convention."""
-    if name.startswith("doot_a_"):
-        y = render_doot("a", DOOT_PITCH_MULTS[int(name.rsplit("_", 1)[1])])
-    elif name in ("doot_b", "doot_c"):
-        y = render_doot(name[-1])
-    else:
-        raise ValueError(name)
-    return _finish_doot(y), False
+    for flavour in ("a", "b", "c"):
+        prefix = "doot_%s_" % flavour
+        if name.startswith(prefix):
+            i = int(name[len(prefix):])
+            rng = np.random.default_rng(4200 + i) if flavour == "c" else None
+            return _finish_doot(render_doot(flavour, DOOT_PITCH_MULTS[i], rng=rng)), False
+    if name in ("doot_b", "doot_c"):
+        return _finish_doot(render_doot(name[-1])), False
+    raise ValueError(name)
 
 
-# What actually ships, for build_all.py's owner to switch to (build_all.py itself is not edited here -
-# it currently still calls comms_names() for all ten CAST voices; see the docstring UPDATE note).
+# What actually gets rendered by build_all.py's VOICES section (it already dispatches on this exact
+# list - see build_all.py, which needed no change for the 2026-09-11 flavour switch). voice_zorp_* /
+# comms_key_up/down/over/bed are Zorp's full comms line: still built here and still on disk even though
+# AudioManager no longer calls them by default (ZORP_COMMS_ENABLED := false in
+# src/autoload/audio_manager.gd, 2026-09-11) - flip that one const back on to use them again. Nothing is
+# deleted from this list, so a future full build_all --voices run keeps regenerating Zorp's set even
+# while it sits unused in-game.
 SHIPPED_VOICE_NAMES = (["voice_zorp_%s" % k for k in KINDS] +
                        ["comms_key_up_0", "comms_key_up_1", "comms_key_down_0", "comms_key_down_1",
                         "comms_over", "comms_bed"] + doot_names())
 # The nine per-neighbour comms sets that used to ship and no longer do (their WAVs are deleted from
-# assets/audio/sfx/ - see the builder report). doot_b / doot_c are the two listening-demo-only flavours
-# and were never file targets to begin with.
+# assets/audio/sfx/ - see the builder report). doot_a_0..3 stopped shipping on 2026-09-11 (flavour C
+# took over) but, unlike this list, are NOT deleted - see the module docstring UPDATE note. doot_b is
+# still the one listening-demo-only flavour and was never a file target.
 NOT_SHIPPED_VOICE_NAMES = ["voice_%s_%s" % (v, k) for v in CAST if v != "zorp" for k in KINDS]
 
 
