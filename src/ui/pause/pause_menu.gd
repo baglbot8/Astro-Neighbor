@@ -4,6 +4,10 @@ extends Control
 ## Settings: music + sfx sliders (GameState.settings + AudioManager.apply_settings), a mouse-look
 ## sensitivity slider, and the camera invert X / invert Y toggles.
 ## `cancel` closes (or backs out of settings). Emits EventBus.ui_modal_opened("pause") / closed.
+##
+## HIDDEN DEVELOPER MENU (added 2026-09-12, user request). Five taps on the SETTINGS title within
+## DEV_GESTURE_WINDOW seconds open `src/ui/pause/dev_menu.gd`'s DevMenu — see `_on_title_gui_input`.
+## No button, no line in the main list, no hint anywhere: this is the only trigger.
 
 signal closed
 
@@ -19,6 +23,9 @@ const UI_MODE_LABELS: Array[String] = ["Auto", "Computer", "Phone"]
 ## ways.
 const SENS_MIN := 0.20
 const SENS_MAX := 2.20
+## HIDDEN DEVELOPER MENU gesture: this many presses on the Settings title within this many seconds.
+const DEV_GESTURE_TAPS := 5
+const DEV_GESTURE_WINDOW := 2.0
 
 var is_open := false
 
@@ -43,6 +50,9 @@ var _ui_mode: SegmentedControl
 ## The keyboard hint strip at the foot of the menu - desktop only (R2.10), and it has to follow a
 ## RUNTIME switch, not just the mode the menu was built in.
 var _hints_row: HBoxContainer
+## HIDDEN DEVELOPER MENU gesture state (see `_on_title_gui_input`).
+var _dev_tap_count := 0
+var _dev_tap_last := 0.0
 
 func _ready() -> void:
 	MobileUI.apply_theme(self)
@@ -67,6 +77,11 @@ func _build() -> void:
 	box.add_theme_constant_override("separation", 14)
 	_panel.add_child(box)
 	_title = UIStyle.make_label("Paused", "Title", HORIZONTAL_ALIGNMENT_CENTER)
+	# HIDDEN DEVELOPER MENU: this Label is not normally clickable (STOP so gui_input actually
+	# reaches it); `_on_title_gui_input` below only ever does anything while `_in_settings` is true,
+	# so the "Paused" screen's title is inert.
+	_title.mouse_filter = Control.MOUSE_FILTER_STOP
+	_title.gui_input.connect(_on_title_gui_input)
 	box.add_child(_title)
 	_subtitle = UIStyle.make_label("Take a breather.", "Soft", HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(_subtitle)
@@ -155,6 +170,54 @@ func _build() -> void:
 		pair.add_child(g)
 		pair.add_child(UIStyle.make_label(str(h[1]), "Hint"))
 		hints.add_child(pair)
+
+## HIDDEN DEVELOPER MENU. Five presses on the SETTINGS title within DEV_GESTURE_WINDOW seconds open
+## DevMenu (src/ui/pause/dev_menu.gd). Gated on `_in_settings` so it can only ever fire on the
+## Settings page, never on "Paused"; a real pointer/touch press is required (a Label has no focus,
+## so `UIFocus.accept_pressed()` — the keyboard/gamepad "activate" path — never reaches it, and
+## `Input.action_press()` sends no InputEvent at all, so no scripted action-press can trip this
+## either). Nothing on screen hints this exists.
+func _on_title_gui_input(event: InputEvent) -> void:
+	if not _in_settings:
+		return
+	var pressed := (event is InputEventMouseButton and (event as InputEventMouseButton).pressed
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT) \
+		or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+	if not pressed:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _dev_tap_last > DEV_GESTURE_WINDOW:
+		_dev_tap_count = 0
+	_dev_tap_last = now
+	_dev_tap_count += 1
+	if _dev_tap_count >= DEV_GESTURE_TAPS:
+		_dev_tap_count = 0
+		DevMenu.open_over(self)
+
+
+## Test hook, same shape as `debug_tap_ui_mode`: DEV_GESTURE_TAPS real taps (`MobileUI.synth_tap` —
+## an actual InputEventMouseButton through `Input.parse_input_event`, NOT `Input.action_press`,
+## which sends no InputEvent at all) on the Settings title's own rect, so a Director probe can
+## reproduce the hidden gesture the way a finger would. No-op outside Settings, same as a player's
+## stray tap there would be.
+func debug_tap_dev_gesture() -> void:
+	if not _in_settings:
+		return
+	var pos := _title.get_global_rect().get_center()
+	for i in DEV_GESTURE_TAPS:
+		MobileUI.synth_tap(pos)
+
+
+## Test-only NEGATIVE CONTROL: the same DEV_GESTURE_TAPS real taps on the title's own rect as
+## `debug_tap_dev_gesture`, but WITHOUT that function's `_in_settings` guard at the call site — so a
+## probe can prove the identical `_on_title_gui_input` handler runs (and correctly does nothing)
+## when the title reads "Paused" rather than skip the whole test because the gesture is gated out
+## one level up.
+func debug_tap_title_raw() -> void:
+	var pos := _title.get_global_rect().get_center()
+	for i in DEV_GESTURE_TAPS:
+		MobileUI.synth_tap(pos)
+
 
 func _set_ui_mode(mode: String) -> void:
 	if Platform.ui_mode_setting() == mode:
@@ -311,6 +374,7 @@ func _open_journal() -> void:
 
 func _open_settings() -> void:
 	_in_settings = true
+	_dev_tap_count = 0
 	_main_box.visible = false
 	_settings_box.visible = true
 	_index = 0
@@ -321,6 +385,7 @@ func _open_settings() -> void:
 
 func _close_settings() -> void:
 	_in_settings = false
+	_dev_tap_count = 0
 	_settings_box.visible = false
 	_main_box.visible = true
 	# 3, not 2, since the onboarding builder's "Favours" entry sits above "Settings".
