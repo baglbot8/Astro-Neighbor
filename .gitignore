@@ -1,7 +1,12 @@
 # Godot's import cache and generated data — rebuilt on first open, never committed.
 .godot/
 *.import
-export_presets.cfg
+
+# export_presets.cfg IS tracked, on purpose (2026-09-12). It carries the web build's head script:
+# the AudioContext unlock shim and navigator.audioSession.type = 'playback'. Both ARE the audio fix
+# (docs/OPEN_ISSUES.md 34 and 44). While this file was ignored they lived on one Mac only, so a
+# fresh clone would have exported a silent game with nothing in the repository to explain why.
+# It holds no keys, passwords or personal paths — checked before tracking it.
 
 # Build output
 build/
