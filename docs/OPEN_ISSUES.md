@@ -1251,3 +1251,160 @@ buildings that reserve up to 7.0 m.
   804 us/call for the Professor against 264 us before; `_own_building_checked` latches on its first lookup and
   is safe only because `world.gd` spawns NPCs before buildings; and the Town Hall's own front-yard decor (two
   lanterns, a noticeboard, a flagpole) shares the exact band its steps occupy.
+
+---
+
+## 45. [2026-09-12] Planet loads did duplicated work: the prop scatter ran twice, and only rockets warmed the cache
+
+Item 44 section 2 measured two wastes in every planet load. Both are now fixed, each with an independent
+critic (round 1 FAILED on a real bug; round 2 PASSED 9/9/9/9). All timings are headless on this Mac; the
+pictures were scored on both renderers. Nothing was measured on a phone.
+
+### The measuring instrument came first, and it is kept
+
+`showcase/planet_perf.tscn` -> `src/planet/showcase/planet_perf_probe.gd`, inert without `--planetperf`.
+It builds the REAL `src/world/world.tscn` at `/root/World` and reports, per visit, `prebuild_ms`,
+`world_ms`, `PlanetProps.populate_calls` (a new static counter) and the geometry-cache size, across four
+phases: COLD_NOPRE (a plain world load), COLD_PRE (a rocket arrival), WARM_NOPRE, WARM_PRE. `--pp-dump`
+writes every prop transform, every MultiMesh instance transform and the registered prop dirs/radii at full
+float precision.
+Two properties that make it evidence rather than decoration, both verified: the dump is BYTE-IDENTICAL
+between two runs of the same tree, and auto-generated node names (`@MultiMeshInstance3D@964`) are replaced
+by the child's index, because that counter is process-wide and would otherwise differ on ~1800 lines while
+the geometry was identical.
+THE TIMING TRAP THAT BIT THREE AGENTS: cross-run absolute timings drift 3-25 ms with machine load, the same
+size as the effect being measured. Use the paired in-process control `world_ms(COLD_PRE) - world_ms(WARM_PRE)`
+(immune to load, both halves in one process), or take the noise floor from the phases whose code did not change.
+
+### Waste 1: props were scattered twice per cold-cache prebuilt visit — fixed by handing them over
+
+`prebuild()` scattered props on a throwaway planet (the ground bake needs their contact-shade pools) and threw
+them away; `_build()` then ran the identical seeded scatter again. It now detaches the finished `Props` and
+`Collectibles` nodes into a static `_props_cache` — at most ONE pending hand-off — and `_build()` adopts them.
+Bit-identical by construction: the live planet gets literally the same nodes.
+Measured, critic's own numbers, medians of 5: `world_ms` on COLD_PRE hub 195.4 -> 153.2, zorp 116.8 -> 103.3,
+bolt 113.8 -> 105.4. Noise floor from code-identical phases: 0.3-1.8 ms, so the effect is 8-42x the floor.
+The scatter dumps are `cmp`-identical for hub, zorp and bolt. `populate_calls` is 1 per visit, was 2.
+**Correction to the original brief:** only COLD_PRE was doubled. WARM_PRE was already 1, because `prebuild()`
+early-returns on a cache hit.
+**Honest framing:** this removes the prebuild PENALTY. Before, a rocket arrival did MORE total work than a
+plain load (hub 432 vs 385 ms); now COLD_PRE total ~= COLD_NOPRE total. It does not make a cold load cheaper.
+
+### The hand-off carried player state, and that FAILED round 1
+
+`planet_props.gd:2408-2412` builds a Collectible node only `if not Collectible.was_picked_today(...)`, which
+reads `GameState.picked_collectibles` and `GameState.day_count`. A prebuild taken under different player state
+parks a WRONG `Collectibles` node, and `_build()` adopted it. Measured end to end through the real title, a
+real save and the real `_continue_game()` (zorp, `zorp_0/1/2` picked on day 1): 10 live collectibles instead
+of 7, every picked one back. Quit to title, press Continue, farm them again.
+THE FIX IS A STATE STAMP, NOT A RE-FILTER. The hand-off stores `day_count` and a duplicated copy of that
+planet's picked list; `_build()` refuses a mismatched hand-off, frees it, and scatters fresh. A re-filter could
+only REMOVE collectibles, and the second direction runs the other way: with the day rolling over between
+prebuild and build, collectibles that should respawn were MISSING (measured 7 where 10 was correct). Both
+directions were reproduced with paired negative controls — the fix turned off brings both bugs back.
+`_geo_cache` is deliberately still reused on a mismatch: the mesh does not depend on player state. Cost of
+landing on the mismatch path: +30-60 ms over a warm load, because a planet's worth of prop nodes is `free()`d
+synchronously, still far below the ~200 ms of a cold mesh build.
+Out-of-tree orphans do not free themselves: without the `tree_exiting` hook an unclaimed hand-off leaked 569
+ObjectDB instances. The parked nodes are held OUT of the tree on purpose — in the tree, a whole planet's worth
+of solid props would sit in the shared physics space during the cruise (measured 65 bodies, 0 in a space while
+pending, 73 after adoption).
+
+### A real key collision found on the way, and closed
+
+`title_screen.gd:178-182` builds the title globe from `home.tres.duplicate()` with `radius = 16.0` and
+`collectible_count = 0`. The duplicate's empty `resource_path` makes `PlanetData.effective_radius` return 16.0
+verbatim, and `HOME_RADII[2]` is also 16.0 — so a player with a level-2 home shared a geometry-cache key with
+the title globe, while collectibles DO change the bake (`_collectibles()` calls `register_prop` for every one,
+picked or not). Measured before: both keys `home|11|6|16.000`. `collectible_count` is now part of `_geo_key`;
+after: `...|16.000|8` vs `...|16.000|0`. The symptom was never seen on screen — the globe is built before any
+prebuild runs — so this is closed at the key level only.
+
+### Waste 2: only rocket arrivals warmed the geometry cache — now every entry does, but read what it buys
+
+`Planet.prebuild()` had exactly one caller (`journey_state.gd` `prewarm_destination`, reached from
+`rocket_pad.gd:1042` and `space_travel.gd:1002`). `SceneRouter._transition_to` now prebuilds
+`GameState.current_planet_id` after the fade-out, before every entry into `world.tscn`.
+**IT DOES NOT MAKE A LOAD SHORTER.** Measured: hub cold world build alone 413.8 ms; prebuild + build
+245.7 + 156.2 = 401.9 ms. Both halves happen behind the same solid fade. What it buys is that the cache is
+left warm, so a second load of the same planet in one session is ~2.4x faster (hub 385 -> 161 ms), and every
+entry point now gets the warm path instead of only rocket arrivals.
+
+### THE TITLE SCREEN MUST NEVER PREBUILD — a round-1 idea that measured out as a regression
+
+It looked like free CPU time. Three measurements killed it, and the reasoning is written into
+`title_screen.gd` so nobody re-adds it:
+1. It runs BEFORE `SaveManager.load_game()`, so it scatters against an empty GameState — this is what caused
+   the collectible bug above.
+2. It is wasted for any upgraded home: `effective_radius` reads `GameState.home_planet_size`, still 0 at title
+   time. Measured title-time key `home|11|6|12.000|8` against the post-load `home|11|6|16.000|8`; the whole
+   ~232 ms bake is thrown away.
+3. THE PREMISE WAS WRONG. "Idle" is not the same as "still". The title is ANIMATING — orbiting rocket, turning
+   globe, panning camera, sparkles — and the load it would have saved sits inside a solid black fade where a
+   stall is invisible by design. Measured prebuild stall: home 232.4 ms, hub 243.0. So it moved a ~240 ms
+   freeze OUT of the screen where it cannot be seen and INTO the one where it can.
+
+### NAMING A `class_name` INSIDE AN AUTOLOAD LOADS IT FOR EVERY SCENE IN THE PROJECT
+
+Writing `Planet.prebuild(data)` directly in `scene_router.gd` (an autoload) made that autoload's script resolve
+the whole 68 KB `Planet` class at parse time for every scene, and the forced early load leaked **331 ObjectDB
+instances, 29 resources still in use and 64 RIDs across 4 RendererDummy types** in
+`showcase/characters_lineup.tscn` — a scene with no connection to SceneRouter. It made `tools/check.sh` FAIL.
+Reproduced 3/3 by a builder and again independently by a critic; both clean trees report nothing. The fix is
+to call it dynamically: `load("res://src/planet/planet.gd").call("prebuild", data)`. The same reference inside
+a plain scene script (not an autoload) does NOT leak.
+
+### Ruled out, so nobody repeats the work
+
+**`_build()` must NOT write its freshly built mesh into `_geo_cache`.** It looks free — the title globe would
+warm the home cache for nothing — but the title builds from a MUTATED duplicate, and the key cannot see every
+mutated field. It would hand a level-2 home player the title globe's collectible-free ground bake.
+
+### Not caused by this change, and now settled
+
+Director play-throughs do not render identically twice. Measured same-tree run-to-run divergence: pristine
+BEFORE 0.13-1.11%, AFTER 0.05-0.18% on named captures; on a 25 s movie BEFORE 0.58-1.09% and AFTER 0.62-1.34%,
+not compounding, frame counts identical. A contributing cause, pre-existing: `collectible.gd:42` and
+`trash_piece.gd:34,52` draw their bob/spin phase from the UNSEEDED global `randf()`. Freeze or seed those before
+pixel-diffing a play-through.
+
+### Still open
+
+* Nothing here was measured on a phone, on the Compatibility renderer's timing, or on the web build.
+* An unclaimed hand-off survives an unrelated world load (measured: hub's ~80 nodes stayed resident through a
+  full zorp visit). Correct, bounded to one planet, and freed at exit — but it is a whole planet held in memory.
+* `prebuild()` is a landmine if ever called from a node's `_ready`: `loop.root.add_child(tmp)` fails with
+  "Parent node is busy setting up children" and every prop placement then returns identity. Both current call
+  sites await first; nothing guards it.
+* During prebuild the scratch planet joins group `"planet"`, so for one synchronous frame two planets sit at
+  the origin and `PlanetProps.planet_under()`'s nearest-planet fallback is a coin flip. No path exercises it.
+* The state stamp covers the one player-state read that exists in the scatter today. Nothing enforces that a
+  future addition to the scatter declares itself.
+
+### TRIED AND REVERTED: warming the destination's shaders during the cruise
+
+Built, measured, failed its critic, and REMOVED. Recorded so nobody builds it again without beating these
+numbers. The idea: under Compatibility Godot writes no shader cache, so the first arrival on a world pays a
+large one-shot pipeline compile; `prebuild()` now parks the destination's real prop MeshInstance3Ds out of the
+tree for the whole cruise, so rendering them once into an offscreen SubViewport during the flight should
+compile those pipelines while the GPU is idle (the flight is 1.82 ms/frame against gameplay's 4.10).
+
+IT WORKED, AND IT STILL WAS NOT WORTH IT. The mechanism is real: attaching the departure planet's Environment
+to the warm-up viewport (so the compiled VARIANTS match) cut the warm-up's own cost from 316-319 ms to
+194-200 ms for the same gain, which is the proof that variants are what matter. Arrival frame 0 improved and
+the stall did NOT merely move to frame 1 - the critic checked the first 40 frames. But:
+* IT RELOCATES THE STALL, IT DOES NOT REMOVE IT. Critic's medians: hub arrival f0..f5 1043.9 -> 849.8 ms
+  (-194) against a seam cost of 140.2 -> 322.5 ms (+182). Zorp arrival 498.5 -> 286.6 ms (-212) against a seam
+  cost of 142.6 -> 377.1 ms (+235), ranges non-overlapping - on zorp it ADDS MORE THAN IT SAVES. The held seam
+  frame grows from ~1 frame (~150 ms) to ~3 frames (~360-410 ms), and the flight itself gets 0.22-0.27 s longer.
+* IT WARMED WORLDS THAT WERE ALREADY RESIDENT. `_geo_cache` is written only by `prebuild()`, never by
+  `_build()`, so the world loaded at process start is never in it: every flight HOME did the whole warm-up for
+  nothing (+41 ms at that cut, and the home arrival measured worse in both runs). Fixable with a set of ids
+  already drawn this process - but it does not change the relocation arithmetic above.
+* THE CLAIM "A REVISIT COSTS 18-20 ms" DID NOT REPRODUCE, and it is the number a player decision was resting
+  on. The critic could not get it by any route: a second zorp arrival by rocket in the same process was
+  395.2 ms against 487.4 for the first, only ~19% cheaper. The GPU compile IS one-shot (home's second load
+  206 ms against 3044 ms at startup), but the residual arrival cost is 200-400 ms of CPU SCENE BUILDING, not
+  20 ms. "Shader compiles do not accumulate" is therefore UNPROVEN, and the phone-heat question stays open.
+Verdict: a wash on total work, a new cross-file coupling, and its motivating premise unproven. Reverted to the
+state that passed the items 1-2 critic. Anyone retrying it must measure the SEAM cost, not only the arrival.

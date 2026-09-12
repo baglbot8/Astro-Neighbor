@@ -505,11 +505,103 @@ static var _geo_cache: Dictionary = {}
 ## Guards against two prebuilds of the same planet overlapping.
 static var _geo_pending: Dictionary = {}
 
-## Cache key for a planet's baked geometry. THE RADIUS IS PART OF IT, and it is the RESOLVED radius
-## (PlanetData.effective_radius), not the authored one — a home-planet size upgrade changes the key,
-## so the cache misses and the new, larger mesh is built instead of the old one being handed over.
+## AT MOST ONE pending prop hand-off, keyed by `_geo_key`: the `Props` and `Collectibles` roots that
+## `prebuild()` already scattered, plus the prop bookkeeping the ground bake was made from
+## (`_prop_dirs`, `_prop_radii`, `_ao_cells`).
+##
+## WHY. The ground bake needs a contact-shade pool under every prop (see `_bake_color` / COLOR.a), so
+## `prebuild()` has to scatter the props before it can build the mesh. It used to throw that scatter
+## away, and `_build()` then ran the identical seeded scatter a SECOND time. Measured duplicate cost
+## per prebuilt visit (headless, median of 3 reps, 2026-09-12): hub 39 ms, zorp 9 ms, bolt 7 ms.
+##
+## Handing the NODES over rather than re-deriving them is bit-identical BY CONSTRUCTION — the live
+## planet gets literally the nodes the bake measured — where a re-run would only stay identical for
+## as long as nothing unseeded ever crept into the scatter. Prop transforms are written as LOCAL
+## transforms and both planets sit at identity, so re-parenting does not move anything.
+##
+## The two roots are held OUT OF THE TREE while pending, so their StaticBody3D and Area3D colliders
+## are in NO physics space during the ~16 s cruise; an in-tree holder would put a whole planet's
+## worth of solid props at the origin while the player is flying. Out-of-tree orphans do not free
+## themselves, so `_drop_props_handoff` runs before every new hand-off and again when the scene tree
+## shuts down (measured: without the exit hook Godot reports "ObjectDB instances were leaked at
+## exit" plus the bodies' and instances' RIDs).
+static var _props_cache: Dictionary = {}
+
+## True when the PLAYER STATE that the scatter reads has not moved since the hand-off was built.
+##
+## The scatter is seeded and deterministic with ONE exception, and this is it:
+## `planet_props.gd::_collectibles()` skips building a Collectible node when
+## `Collectible.was_picked_today(data.id, id)` is true, which reads `GameState.day_count` and
+## `GameState.picked_collectibles`. So the parked `Collectibles` node is a function of player state,
+## not of the seed, and a hand-off built under one state must never be adopted under another.
+## MEASURED both directions on zorp with zorp_0/1/2 picked on day 1 (2026-09-12):
+##   * prebuild with an empty pick list (the title screen prebuilds BEFORE the save is loaded), then
+##     build with the three picked -> 10 live collectibles instead of 7. Everything picked today
+##     comes back on Continue.
+##   * pick three, prebuild, then let the day roll over during the cruise -> 7 instead of 10. The
+##     three that should have RESPAWNED stay missing.
+## The second case is why this is a state stamp and not a re-filter: a re-filter can only remove
+## collectibles, never restore them.
+##
+## NOT affected, and deliberately not re-derived: `register_prop` runs for every `collectible_count`
+## direction BEFORE the picked test (`planet_props.gd:2407` vs `:2411`), so `_prop_dirs`,
+## `_prop_radii`, `_ao_cells` and the ground bake are identical under any pick state. Measured: all
+## three are bit-identical across every case above. Only the node set differs, so only the node set
+## is refused — `_geo_cache` is player-state-independent and is still reused on a mismatch.
+##
+## The pick list is compared by VALUE, element by element and in order. Order can only ever make this
+## STRICTER (a false mismatch costs one re-scatter; a false match would ship the bug), and in practice
+## the list is only ever appended to, so a reorder cannot happen.
+static func _handoff_matches_state(h: Dictionary, d: PlanetData) -> bool:
+	if int(h.get("day", -1)) != GameState.day_count:
+		return false
+	var was: Array = h.get("picked", [])
+	var now: Array = GameState.picked_collectibles.get(d.id, [])
+	if was.size() != now.size():
+		return false
+	for i in was.size():
+		if was[i] != now[i]:
+			return false
+	return true
+
+## Frees any pending, unclaimed prop hand-off. Safe to call at any time and with nothing pending.
+static func _drop_props_handoff() -> void:
+	for key in _props_cache.keys():
+		var h: Dictionary = _props_cache[key]
+		for n: Variant in [h.get("props", null), h.get("collectibles", null)]:
+			if n is Node and is_instance_valid(n):
+				(n as Node).free()
+	_props_cache.clear()
+
+## Cache key for a planet's baked geometry AND, since the prop hand-off, for its scatter. It has to
+## name every field that can make two PlanetData resources bake or scatter differently.
+##
+## THE RADIUS IS THE RESOLVED one (PlanetData.effective_radius), not the authored one — a home-planet
+## size upgrade changes the key, so the cache misses and the new, larger mesh is built instead of the
+## old one being handed over.
+##
+## COLLECTIBLE_COUNT IS IN THE KEY because of one concrete collision, which was real before this line
+## was added. `title_screen.gd:178-182` builds the title's background globe from
+## `home.tres.duplicate()` with `radius = 16.0` and `collectible_count = 0`. A duplicate has an EMPTY
+## `resource_path`, so `PlanetData.effective_radius` skips its `home` branch and returns 16.0
+## verbatim — and `PlanetData.HOME_RADII[2]` is also 16.0, so for a player whose home is at size
+## level 2 the globe's key equalled the real home planet's. The title ALSO calls
+## `Planet.prebuild(real home data)` on its idle path (title_screen.gd:137), so the two met in one
+## process. Collectibles are not cosmetic to the bake: `planet_props.gd::_collectibles()` calls
+## `planet.register_prop(d, 0.45)` for each one, so a collectible-free planet bakes a different
+## ground colour — and with the hand-off the globe could have adopted the real home's props outright.
+##
+## Checked 2026-09-12 by grepping every `PlanetData` field assignment in `src/`: `title_screen.gd`
+## is the ONLY site that mutates a PlanetData before a Planet is built from it, and `radius` was
+## already covered, so `collectible_count` was the only field missing. The player showcases build a
+## bare `PlanetData.new()` with `id = "home"` and `radius = 16.0`, which would otherwise be a second
+## collision — they are safe only because `home.tres` has `seed = 11` against the default 1. If a new
+## caller ever mutates a PlanetData, check it against this list before trusting the cache.
+## (`environment.gd:318` also writes `pd.radius`, but that `pd` is a throwaway descriptor that is
+## never handed to a Planet, so it cannot reach this key. Named here so the next grep does not
+## have to re-decide it.)
 static func _geo_key(d: PlanetData) -> String:
-	return "%s|%d|%d|%.3f" % [d.id, d.seed, d.mesh_subdivisions, PlanetData.effective_radius(d)]
+	return "%s|%d|%d|%.3f|%d" % [d.id, d.seed, d.mesh_subdivisions, PlanetData.effective_radius(d), d.collectible_count]
 
 
 ## Builds and caches a planet's geometry ahead of time. Safe to call more than once; the second
@@ -522,8 +614,9 @@ static func prebuild(d: PlanetData) -> void:
 		return
 	_geo_pending[key] = true
 	# A detached Planet gives us the real terrain functions without entering the tree. Props are
-	# scattered into a throwaway root because the ground bake needs their contact-shade pools, and
-	# they are deterministic (seeded RNG), so the geometry matches what the live planet will build.
+	# scattered here because the ground bake needs their contact-shade pools — and they are then
+	# HANDED TO `_build()` rather than thrown away (see `_props_cache`), so the live planet gets the
+	# exact scatter this bake was measured from instead of repeating it.
 	# The scratch planet has to be IN the tree: prop placement reads global transforms, and a
 	# detached node returns identity plus an error per call. It is parented off-screen, never
 	# rendered (`_built` is pre-set so `_ready` does not build it a second time), and freed
@@ -541,16 +634,41 @@ static func prebuild(d: PlanetData) -> void:
 	tmp.collision_layer = 0
 	loop.root.add_child(tmp)
 	tmp._setup_terrain()
-	var junk_props := Node3D.new()
-	var junk_coll := Node3D.new()
-	tmp.add_child(junk_props)
-	tmp.add_child(junk_coll)
+	# Named exactly as `_build()` names them, because these ARE the nodes `_build()` will adopt and
+	# several systems (favor_system, the showcase, the perf probe) find them by name.
+	var pre_props := Node3D.new()
+	pre_props.name = "Props"
+	var pre_coll := Node3D.new()
+	pre_coll.name = "Collectibles"
+	tmp.add_child(pre_props)
+	tmp.add_child(pre_coll)
 	var props := PlanetProps.new()
-	props.populate(tmp, junk_props, junk_coll)
+	props.populate(tmp, pre_props, pre_coll)
 	tmp._build_ao_index()
 	var mesh := PlanetMeshBuilder.build(d.mesh_subdivisions, tmp.height_at, tmp._bake_color)
 	_geo_cache[key] = {"mesh": mesh, "shape": mesh.create_trimesh_shape()}
 	_geo_pending.erase(key)
+	# Detach the two roots BEFORE the scratch planet is freed, so they survive it, and register the
+	# shutdown hook that frees a hand-off nobody ever claims. `is_connected` rather than a static
+	# flag: the flag would go stale if the tree were ever rebuilt inside one process.
+	_drop_props_handoff()
+	tmp.remove_child(pre_props)
+	tmp.remove_child(pre_coll)
+	# The player state `_collectibles()` read, stamped so `_build()` can refuse a hand-off that was
+	# scattered under a different day or pick list (see `_handoff_matches_state`). `duplicate()`
+	# because `picked_collectibles[id]` is a live array the game appends to.
+	_props_cache[key] = {
+		"props": pre_props,
+		"collectibles": pre_coll,
+		"dirs": tmp._prop_dirs.duplicate(),
+		"radii": tmp._prop_radii.duplicate(),
+		"ao": tmp._ao_cells.duplicate(),
+		"day": GameState.day_count,
+		"picked": (GameState.picked_collectibles.get(d.id, []) as Array).duplicate(),
+	}
+	var on_exit := Planet._drop_props_handoff
+	if not loop.root.tree_exiting.is_connected(on_exit):
+		loop.root.tree_exiting.connect(on_exit)
 	loop.root.remove_child(tmp)
 	tmp.queue_free()
 
@@ -562,19 +680,49 @@ static func is_prebuilt(d: PlanetData) -> bool:
 
 func _build() -> void:
 	_built = true
+	var key := _geo_key(data)
 	# Props are scattered FIRST (they only need height_at, never the mesh) so the ground bake can put
 	# a real contact-shade pool under every one of them — see _bake_color / COLOR.a.
-	props_root = Node3D.new()
-	props_root.name = "Props"
-	add_child(props_root)
-	collectibles_root = Node3D.new()
-	collectibles_root.name = "Collectibles"
-	add_child(collectibles_root)
-	var props := PlanetProps.new()
-	props.populate(self, props_root, collectibles_root)
-	_build_ao_index()
+	# If `prebuild()` already did that scatter for this exact key it left the finished nodes behind;
+	# adopt them instead of running the identical seeded scatter a second time (see `_props_cache`).
+	# The hand-off is ONE-SHOT: erased before it is used, so a second Planet built from the same data
+	# in the same process scatters normally rather than adopting freed nodes.
+	var handoff: Dictionary = _props_cache.get(key, {})
+	var props_ready := false
+	if not handoff.is_empty() and not _handoff_matches_state(handoff, data):
+		# Scattered under a different day / pick list: its Collectibles node is wrong in a way no
+		# filtering here could repair. Throw it away and scatter fresh. `_geo_cache` is untouched —
+		# the mesh does not depend on player state, so the expensive half is still reused.
+		# MEASURED COST of landing here (critic, 2026-09-12): +30-60 ms over a warm load, because
+		# `free()` on a planet's worth of prop nodes runs synchronously right here. Still far below
+		# the ~200 ms a cold mesh build would cost, which is why the geometry cache is kept.
+		_drop_props_handoff()
+		handoff = {}
+	if not handoff.is_empty():
+		_props_cache.erase(key)
+		var hp: Variant = handoff.get("props", null)
+		var hc: Variant = handoff.get("collectibles", null)
+		if hp is Node3D and hc is Node3D and is_instance_valid(hp) and is_instance_valid(hc):
+			props_root = hp
+			collectibles_root = hc
+			add_child(props_root)
+			add_child(collectibles_root)
+			# The bake read these three, so they come across with the nodes rather than being rebuilt.
+			_prop_dirs = handoff["dirs"]
+			_prop_radii = handoff["radii"]
+			_ao_cells = handoff["ao"]
+			props_ready = true
+	if not props_ready:
+		props_root = Node3D.new()
+		props_root.name = "Props"
+		add_child(props_root)
+		collectibles_root = Node3D.new()
+		collectibles_root.name = "Collectibles"
+		add_child(collectibles_root)
+		var props := PlanetProps.new()
+		props.populate(self, props_root, collectibles_root)
+		_build_ao_index()
 
-	var key := _geo_key(data)
 	var cached: Dictionary = _geo_cache.get(key, {})
 	var mesh: ArrayMesh = cached.get("mesh", null)
 	if mesh == null:

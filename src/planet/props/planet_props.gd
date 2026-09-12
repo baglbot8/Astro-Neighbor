@@ -7,6 +7,14 @@ extends RefCounted
 
 const DECO_LAYER := 1 << 3   # physics layer 4 "decoration": player & NPCs collide with it
 
+## MEASUREMENT HOOK (2026-09-12). How many times the scatter ran, process-wide. `planet.gd` USED TO
+## run it twice on a cold-cache prebuilt visit: once on the throwaway planet inside
+## `Planet.prebuild()`, whose ground bake needs the props' contact-shade pools, and once again for
+## real in `Planet._build()`. Measured cost of the second run: hub 38-42 ms, zorp 7.5-12, bolt
+## 6.4-9.8. `prebuild()` now hands its prop nodes to `_build()` instead of throwing them away, so the
+## scatter runs ONCE per visit. `showcase/planet_perf.tscn` reads this counter to prove it stays 1.
+static var populate_calls: int = 0
+
 var planet: Planet
 var data: PlanetData
 var root: Node3D
@@ -38,6 +46,7 @@ func _n(n: int, keep_min: int = 0) -> int:
 	return maxi(int(round(float(n) * _ascale)), keep_min)
 
 func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
+	populate_calls += 1
 	planet = p
 	data = p.data
 	root = props_root

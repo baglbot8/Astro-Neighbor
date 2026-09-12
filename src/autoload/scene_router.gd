@@ -60,6 +60,8 @@ func _transition_to(path: String) -> void:
 		get_tree().paused = false
 	_busy = true
 	await fade_out(0.45)
+	if path == WORLD_SCENE:
+		_prebuild_current_planet()
 	get_tree().change_scene_to_file(path)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -68,6 +70,42 @@ func _transition_to(path: String) -> void:
 		get_tree().paused = false
 	await fade_in(0.6)
 	_busy = false
+
+## Safety net for every path into the world, not only a rocket arrival: warms Planet's static
+## geometry cache for GameState.current_planet_id here, after the fade-out has finished and before
+## `change_scene_to_file` builds the scene. Unlike a title-screen prebuild (removed, see
+## title_screen.gd), this is safe: it runs AFTER a Continue/New Game has already called
+## `SaveManager.load_game()` / `GameState.reset_new_game()`, so it bakes against the real
+## GameState, not an empty one.
+## BE HONEST ABOUT WHAT THIS BUYS: it does not shrink the total work of a first visit. Measured
+## with the geometry cache cold, prebuild + world build costs about the same as a plain world build
+## alone (hub: 413.8ms alone vs. 245.7ms prebuild + 156.2ms world = 401.9ms combined) - both halves
+## run behind the same solid fade, so this MOVES the cost out of `world.gd::_ready()` rather than
+## removing it. What it genuinely buys: `Planet.prebuild` is idempotent, so a rocket arrival that
+## already prebuilt during its cruise (src/rocket/journey_state.gd prewarm_destination) pays
+## nothing extra here; the geometry cache is left warm afterward, so a second load of the same
+## planet in one session is about 2.4x faster (hub 385ms -> 161ms); and every entry point into the
+## world now gets that warm-cache path, not only rocket arrivals.
+## Calls `Planet.prebuild` through a dynamically loaded script reference, NOT the `Planet` class_name
+## symbol directly. Measured: writing `Planet.prebuild(...)` here made this AUTOLOAD's script resolve
+## the whole Planet class (68 KB) at parse time for every scene in the project, not just world
+## entries, and that early/forced load leaked resources at process exit in
+## `showcase/characters_lineup.tscn` - a scene that never runs this function and has nothing to do
+## with SceneRouter. Independently re-measured: 331 leaked ObjectDB instances, 29 resources still in
+## use, and 64 RIDs across 4 RendererDummy types. Bisected: a `Planet.prebuild` reference in
+## title_screen.gd (a plain scene script, not an autoload) does not leak, and a stub with no
+## `Planet` symbol at all does not either - so the dynamic call below is the fix, not a workaround
+## for something else. Do not "simplify" this back to `Planet.prebuild(data)`.
+func _prebuild_current_planet() -> void:
+	var pid := GameState.current_planet_id
+	var data_path := "res://src/planet/data/%s.tres" % pid
+	if not ResourceLoader.exists(data_path):
+		return
+	var data: Resource = ResourceLoader.load(data_path)
+	if data == null:
+		return
+	var planet_script: GDScript = load("res://src/planet/planet.gd")
+	planet_script.call("prebuild", data)
 
 func fade_out(duration: float) -> void:
 	var t := create_tween()
