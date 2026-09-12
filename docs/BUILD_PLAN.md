@@ -89,6 +89,21 @@ power cells). The lead checks the cross-world links as one map before the builde
 world needs something that is not reachable yet. Sonnet critics with a checklist; the lead times one
 full play-through.
 
+**Changed 2026-09-12** (the user, after playing on her phone; see CORE_LOOP "Mini-games instead of
+fetch trips"): flying back and forth for fetch steps "will get old fast and heats up the phone", so
+every world's project uses a **mini-game played on that world** as one of its steps - either "catch
+the runaways" or a "ring run", whichever suits that neighbour. Two consequences for this phase:
+
+* The mini-game **system** (both shapes: the drifting catch bodies, and the ring course with its
+  checkpoints, both built on the existing jetpack glide) is ONE builder's job **before** the four
+  world builders start, because all four use it. Each world builder then writes only its own flavour,
+  spots and lines.
+* A neighbour's mini-game, once the story has unlocked it, **can reappear as one of their favours**,
+  so there is a reason to visit that is not another fetch trip. Favours are retired during the story
+  (Phase 4, builder J) - this is the shape they come back in.
+* The cross-world link stays, but it must not be a fetch errand: prefer a step that sends you to play
+  the other world's mini-game.
+
 ## Phase 4: Neighbours visit your crash site
 
 **Play at the end:** between trips, a friend lands at your crash site and asks for something there.

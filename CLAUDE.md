@@ -117,6 +117,9 @@ returns the conclusion, not the dump.
   served web build and read the peak, with a positive control (an oscillator at a known gain) in the
   same graph. The shipped web build measured peak 0.000000 while the context said "running", and an
   earlier round closed the bug on the resume alone (2026-09-11 web-audio diagnosis).
+- `TouchControls.debug_stick` / `debug_widget` **silently do nothing unless the run also passes
+  `--ui=mobile`** — the whole TouchControls node is inactive otherwise, and `_pointer_down` just
+  returns false with no warning. Two blank test runs were lost to this (2026-09-12 ring critic).
 - **Agent runs never use the user's real save folder.** Test in a scratch copy with `config/name`
   renamed (user:// follows the name) and hash the real save before and after. A run through the title
   with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this

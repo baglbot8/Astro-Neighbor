@@ -1408,3 +1408,91 @@ the stall did NOT merely move to frame 1 - the critic checked the first 40 frame
   20 ms. "Shader compiles do not accumulate" is therefore UNPROVEN, and the phone-heat question stays open.
 Verdict: a wash on total work, a new cross-file coupling, and its motivating premise unproven. Reverted to the
 state that passed the items 1-2 critic. Anyone retrying it must measure the SEAM cost, not only the arrival.
+
+## 46. [2026-09-12] The phone can hear it, and can now say which build it is running
+
+**CONFIRMED ON THE PHONE (the user, after pushing eadeebd): "I hear sound and I see the stamp."** That closes
+the story item 34 opened on 2026-09-06 and item 44 diagnosed: the web build had been silent since the Music and
+SFX buses were added, and the last layer was iOS's audio session.
+
+* **The last audio layer.** WebKit plays Web Audio on the "ambient" session: it follows the RINGER volume and
+  goes quiet in silent mode, while `<audio>`/`<video>` use the media session - which is why YouTube was loud on
+  the same phone in the same browser. A WKWebView harness on this Mac (real WebKit, no Safari setting touched),
+  fed bytes sha256-identical to the live page, played the title music at peak 0.47-0.62 - so the engine, the
+  Stream fix and WebKit itself were all fine, and only an iOS-only layer was left. `export_presets.cfg`'s
+  head script now sets `navigator.audioSession.type = 'playback'` (guarded, re-asserted on the first gesture);
+  measured on macOS WebKit, where the API unexpectedly exists: initial type "auto", set once at load, no
+  exception, audio still peaking 0.60. The user chose that trade knowing silent mode no longer mutes the game.
+* **export_presets.cfg is now tracked in git.** It was ignored with Godot's import cache, but it is not
+  generated data: its `html/head_include` IS the audio fix (the unlock shim plus the line above). While it was
+  ignored, both lived on one Mac; a fresh clone would have exported a silent game with nothing to explain why.
+* **The build is now visible in the game.** The title screen prints the same short commit as the page's
+  `<meta name="astro-build">`, and "#dev" outside an export, fed by a project setting `publish_web.sh` writes
+  before the export and restores after - crash-safe: SIGTERM or SIGINT now kills the child export and restores
+  project.godot within about 0.22 s (an EXIT-only trap never fired at all). Twice in two days we could not tell
+  whether the phone had the build we had just shipped; item 33 lost three rounds to exactly that.
+* **Emote on the phone.** There was no way to emote or dance with a thumb (the keyboard has C). The Jump button
+  is now an Emote button, because a tap on Fly already jumps: measured, a 50 ms tap gives 0.300 m of height,
+  a hold gives 2.48 m then 3.86 m and still climbing.
+* **A hidden developer menu** (`src/ui/pause/dev_menu.gd`, five taps on the Settings title): jump to any
+  planet, set rocket parts 0-5, set the day, give or clear currencies, flip the campaign gates, replay the
+  crash intro and the part celebration, and drive a neighbour's project. Every Phase 2 call is guarded, so it
+  works in the shipped build, which has no Phase 2, and in the working folder, which does.
+
+**THE LESSON, and it nearly shipped a dead game:** a file that ships WITHOUT its dependency must never name the
+class statically. `src/ui/shop/shop_panel.gd` called `ProjectSystem.bench_items()` by type; with `src/projects`
+absent, check.sh failed with `Identifier "ProjectSystem" not declared`, and because `hud.gd` hard-types
+`ShopPanel` it cascaded into `world.tscn` and eight more scenes - the whole game stops loading. Found by the dev
+menu's critic (its round-2 FAIL was this, not the menu), fixed with a guard and re-proved both ways: Phase 2
+removed, CHECK PASSED over 47 scenes and the bench opens empty; Phase 2 present, a real build and fit still run
+(scrap 20 -> 14 -> 6, finish stage 0 -> 1, the celebration signal fired). The pattern, now used by `world.gd`,
+`conversation.gd`, `dev_menu.gd` and `shop_panel.gd`: a path const, `ResourceLoader.exists()`, then
+`load(PATH).call(...)`.
+
+**Process note:** the dev-menu step failed its critic twice, which by the user's rule stops the step - but both
+failures were the same defect in a file its builder did not own. The lead shipped it anyway after running the
+decisive test the critic could not: in the git copy, where Phase 2 genuinely is absent, CHECK PASSED, all seven
+worlds boot and `world.tscn` boots with zero errors.
+
+## 47. [2026-09-12] The mini-game system: catch the runaways, and the ring run
+
+Built from CORE_LOOP's "Mini-games instead of fetch trips" (the user: fetch errands that send her flying back
+and forth "will get old fast and heats up the phone"). Two builders, each PASSED its own critic on round 1.
+
+**The system** (`src/minigames/minigame_system.gd`): `get_or_create()` like the favour and project systems,
+`start(kind, config)`, `stop`, `sync_owners`, two signals, its own small "3 of 5" pill with a chevron pointing
+at the next target, and the contract for adding a third game written in the header. It opens no modal, never
+writes `input_enabled` and never pauses the tree, so it cannot leave the player frozen (OPEN_ISSUES 39, 42).
+State rides in `GameState.projects` through the project system - no new save field. A new `minigame` step type
+is documented in `project_system.gd`'s schema header, so a Phase 3 world can ask for one.
+
+**Catch the runaways** (`catch_game.gd`): N of a neighbour's things (bolt / lantern / seed pod flavours) drift
+on great circles 3.2 m +/- 0.30 above the ground under them - measured in engine at 2.90-3.50 m, above the
+tallest prop (2.62 m) and below the jetpack's climb latch (3.8 m) and its 4.6 m ceiling. Catching needs the
+thruster lit, so walking and jumping can never reach one: 32 real jumps, closest approach 1.33 m against a
+1.15 m catch radius, 0 catches; one Fly hold caught it. Played 5 of 5 on bolt, zorp, grig and hub at
+--ui=mobile 1560x720 on Compatibility. Cost: +0.037 ms render CPU for 5 (+0.074 for 12), +23 nodes, 2 draw
+calls each. Palette gates hold per region.
+
+**Ring run** (`ring_game.gd`): hoops on one great circle, 1.0-3.6 m up and about 11 m apart, so the rhythm is
+hop, glide, land to refuel. Only the next hoop is armed and glows; passing is proximity, in order; there is no
+timer and no fail. A full course completed on all seven worlds. Cost +0.03 to +0.18 ms. A real bug was found
+and fixed during the build: the course anchor defaulted to the live player position, so a resumed run built a
+different course (measured: hoop 2 at (-1.06,-13.87,-1.53) fresh against (0.01,13.99,0.04) resumed); it is
+seed-derived now and both land on the same coordinates.
+
+**Open, none blocking:**
+* The armed hoop's beacon (additive, alpha 0.15) is faint over Bolt's bright chrome ground; the pill and
+  chevron still identify it.
+* A hoop near the top of the height range needs a full tank: a flyer that spent fuel manoeuvring circled for
+  30 s before landing to refuel and passing it in one climb. No fail state, so it only costs time.
+* A mini-game started from the DEV MENU dies when you fly to another planet and nothing restarts it; only a
+  project-owned game resumes. Tell the user before she tries it mid-flight.
+* Runaways have no collider and will clip a tall hub building (hub is not a catch world by design).
+* For one frame after spawn a runaway sits at the planet centre, inside the planet, before `_process` places it.
+* Only one game runs at a time by design: a second owner replaces the first. Phase 3 has one project per world,
+  so it cannot happen yet.
+* `src/minigames/ring_probe.gd/.tscn` are a QA harness, NOT shipped - they must stay out of every sync until
+  they are moved under `tests/` (the Web preset already excludes `tests/*`).
+* Zorp's whole-frame saturation p90 sits at 0.667 before any mini-game and 0.673 with one, against a 0.68 gate,
+  and its sky region reads 0.700 with or without. Pre-existing, but there is no headroom left on that world.

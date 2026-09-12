@@ -43,6 +43,14 @@ const NODE_NAME := "DevMenu"
 const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
 const PART_CELEBRATION_SCENE := "res://src/campaign/part_celebration.tscn"
 const CRASH_INTRO_SCRIPT := "res://src/onboarding/crash_intro.gd"
+## Phase 3 mini-games (docs/CORE_LOOP.md "Mini-games instead of fetch trips"). Same guard: the path
+## is checked before it is loaded, and MinigameSystem is never named as a static type here.
+const MINIGAME_SYSTEM_PATH := "res://src/minigames/minigame_system.gd"
+const MINIGAME_NAMES := {"catch": "Catch the runaways", "rings": "Ring run"}
+## The flavour each world's own neighbour would use (CORE_LOOP: Bolt's bolts, Zorp's river lights,
+## Grig's seed pods), so a dev round looks like the real step. Anywhere else falls back to Bolt's.
+const MINIGAME_FLAVOURS := {"bolt": "bolt", "zorp": "light", "grig": "pod"}
+const MINIGAME_DEV_COUNT := 5
 
 var is_open := false
 
@@ -312,8 +320,16 @@ func _rebuild_rows() -> void:
 	else:
 		_add_note("Neighbour projects: not in this build yet.")
 
+	_add_section("Mini-games — start one here on the world you are standing on")
+	if ResourceLoader.exists(MINIGAME_SYSTEM_PATH):
+		for kind: String in MINIGAME_NAMES:
+			_add_action_row("Play: %s" % str(MINIGAME_NAMES[kind]).to_lower(),
+				func() -> void: _play_minigame(kind), "Play")
+	else:
+		_add_note("Mini-games: not in this build yet.")
+
 	_add_section("More")
-	_add_note("More rows land here as new systems ship (the CORE_LOOP mini-games don't exist yet).")
+	_add_note("More rows land here as new systems ship.")
 
 
 func _add_section(text: String) -> void:
@@ -528,6 +544,37 @@ func _play_celebration() -> void:
 		return
 	_close_all_menus()
 	EventBus.rocket_part_fitted.emit(str(CampaignData.PARTS[0].get("id", "part_zorp")))
+
+
+# ============================================================================= actions: mini-games
+## Starts a mini-game on the CURRENT world through MinigameSystem's own public `start()`, with no
+## project behind it - the point of the row is that the user can try one on her phone without
+## playing a neighbour's project first. The owner is "dev:<kind>", which is deliberately NOT the
+## project system's "project:" prefix, so its own refresh can never cancel this one.
+##
+## Menus close BEFORE the game starts: `close()` unpauses the tree, and the progress pill's pop-in is
+## an ordinary tween that would sit still on a paused tree.
+func _play_minigame(kind: String) -> void:
+	var pretty := str(MINIGAME_NAMES.get(kind, kind.capitalize()))
+	if not ResourceLoader.exists(MINIGAME_SYSTEM_PATH):
+		EventBus.toast_requested.emit("Mini-games: not in this build.", "warn")
+		return
+	var script: Variant = load(MINIGAME_SYSTEM_PATH)
+	if not bool(script.call("has_game", kind)):
+		EventBus.toast_requested.emit("%s: not built yet." % pretty, "warn")
+		return
+	var sys: Variant = script.call("get_or_create")
+	if not (sys is Node):
+		EventBus.toast_requested.emit("Fly into the game first — there's no world loaded.", "warn")
+		return
+	_close_all_menus()
+	var ok: Variant = (sys as Node).call("start", kind, {
+		"owner": "dev:" + kind,
+		"count": MINIGAME_DEV_COUNT,
+		"flavour": str(MINIGAME_FLAVOURS.get(GameState.current_planet_id, "bolt")),
+	})
+	if not bool(ok):
+		EventBus.toast_requested.emit("%s could not start here." % pretty, "warn")
 
 
 # ============================================================================= actions: projects

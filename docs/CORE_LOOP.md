@@ -128,6 +128,27 @@ and Grig each day (`data/*.tres` `collectible_count`); each favor pays 60 to 140
 (`favor_system.gd:27-28`), plus 20% or 40% at higher trust; and cleaning space trash pays stardust
 (`trash_piece.gd:122`). The new amounts are set when this is built and checked in a play-through.
 
+## Mini-games instead of fetch trips (decided 2026-09-12)
+
+The user, after playing on her phone: flying back and forth for fetch favours "will get old fast and heats up
+the phone". So a neighbour's step is something you play ON their world, built on the jetpack the game already
+has (rises 5.6 m/s, ceiling 4.6 m, fuel refilled by landing; the worlds are 9.5-14.5 m across).
+
+**Two shapes, and which one a neighbour uses is part of their character.** She picked both (2026-09-12):
+
+1. **Catch the runaways.** Something of theirs comes loose and drifts at glide height - Bolt's bolts off his
+   machines, Zorp's river lights, Grig's seed pods off the terraces. You jump, glide and catch N of them
+   before they drift over the horizon. Reuses the collectible plumbing; no change to the jetpack.
+2. **Ring run.** A chain of hoops loops around the planet 1-4 m up. You fly the course in order, landing to
+   refuel, and a finished lap is the step. Needs a course builder and checkpoints.
+
+**They come back as favours.** The first time you play a neighbour's mini-game it is a story step. After that
+it can reappear as one of that neighbour's favours, so there is a reason to visit that is not another fetch
+trip.
+
+**Rejected for now:** updraft towers (vents that push you above the jetpack's 4.6 m ceiling). It would change a
+tuned number, and the two shapes above cover the need.
+
 ## Open questions
 
 - **What is in the post-story game** besides decorating and friendship? Not decided.
