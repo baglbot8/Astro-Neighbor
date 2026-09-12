@@ -387,15 +387,23 @@ Ruled out first: the engine itself is fine (a `--write-movie` capture on desktop
 peak of 32768), and the samples ARE in the export (`assets/audio` is 46 MB on disk, QOA-compressed by
 `compress/mode=2`, and the pack contains the paths).
 
-The cause is the browser: iOS suspends an `AudioContext` until a user gesture, and Godot's own resume
-was not enough there. Godot's `GodotAudio.ctx` lives in module scope and **cannot be reached from
-`JavaScriptBridge.eval()`** (verified by probing `window.Godot` and `window.Engine`), so the fix goes
-in `html/head_include` in `export_presets.cfg`: a shim that wraps `AudioContext` **before the engine
-constructs one**, keeps a registry, and resumes every context on any pointer, touch, key or
-visibility event. Verified in a desktop browser — the shim captures exactly one context (48 kHz).
+**WRONG CONCLUSION - corrected 2026-09-11, see item 44.** The cause was NOT the browser. What this round
+built is real and still ships: iOS suspends an `AudioContext` until a user gesture, Godot's `GodotAudio.ctx`
+lives in module scope and **cannot be reached from `JavaScriptBridge.eval()`** (verified by probing
+`window.Godot` and `window.Engine`), so a shim in `html/head_include` in `export_presets.cfg` wraps
+`AudioContext` **before the engine constructs one**, keeps a registry, and resumes every context on any
+pointer, touch, key or visibility event. Re-measured 2026-09-11: the shim works, the context goes suspended
+-> running on a real click, and `currentTime` advances.
 
-**Still unverified on the device**, and worth checking before more work: **iOS Web Audio obeys the
-physical ring/silent switch.** If that switch is on, a phone plays nothing regardless of this fix.
+**The verification was too weak, and the real bug hid behind it for five days.** "The shim captures exactly
+one context (48 kHz)" proves a context exists, not that a SOUND comes out. Measured 2026-09-11 on the shipped
+build: an analyser on `ctx.destination` read peak 0.000000 while that same context said "running". The real
+cause is the web bus graph losing its edge to the destination when the Music and SFX buses are added at
+runtime (item 44). The rule now, in CLAUDE.md's tooling traps: put an analyser on `ctx.destination`, read the
+peak, and keep a positive control in the same graph.
+
+**Also ruled out 2026-09-11:** the physical ring/silent switch. The user's iPhone has no such switch, and the
+same silence reproduces in desktop Chrome, where no such switch exists.
 
 ### Still open: lag
 The low-power profile helped but did not remove it. Frame cost on a phone is now dominated by the
@@ -1130,3 +1138,116 @@ asteroid, then it becomes rusted and dirty." Both built by one builder each, bot
 * `voices.py` `SHIPPED_VOICE_NAMES` still lists `voice_zorp_*` and the comms framing files, so a full
   `build_all --voices` keeps regenerating them. Deliberate while one const can bring Zorp's voice back.
 * Neither change has been proven with a real finger, a real key press, or on the phone.
+
+## 44. [2026-09-11] Three phone reports, diagnosed: silent web audio, where the heat really is, and neighbours stuck on their own buildings
+
+Three investigators plus an Opus skeptic who re-measured every claim that decides what gets built. The fixes
+are being built separately; this item records what was MEASURED.
+
+**1. The web build is silent for everyone - not the phone, not iOS, not the ring switch.**
+An analyser tap on `ctx.destination` in the SHIPPED build (a93925d, local export byte-identical to the live
+page) read peak 0.000000 at 20 s and again at 83 s, while the AudioContext said "running" and the title music
+was "playing"; a positive-control oscillator at gain 0.03 in the same graph read 0.029999999. The NATIVE
+desktop build is loud: `--write-movie` of `showcase/ui_title.tscn` wrote PCM peak 19520/32768 (-4.5 dBFS),
+959,487 of 960,000 samples non-zero. The break is WEB-ONLY.
+Cause, from the live edge list: at startup `audio_manager.gd:110-115` adds the Music and SFX buses. The
+exported `index.js` `Bus.connect()` begins `this.getOutputNode().disconnect()`, and the engine re-points
+Master's output into each new bus, ending at Master -> SFX -> Music -> Master, a closed loop with NO edge to
+`ctx.destination`. The only node still reaching the destination is the software-mixer AudioWorkletNode, which
+carries nothing while `audio/general/default_playback_type.web` is 1 (Sample). PROOF BY REPAIR: reconnecting
+Master to the destination in the live page took the peak from 0.000000 to 0.495.
+Measured FALSE, do not chase: "music is stuck at -40 dB because volume_db after play() is ignored" (the live
+music sample's gains are 1.0/1.0; an SFX sample read 0.501 = -6 dB); "the title track plays once because loop
+is false" (the source is replaced every 33 s); "the AudioContext never unlocks" (measured suspended -> running
+on a real click, currentTime advancing 1.003 s per second).
+Open, untested: the SFX bus's output goes into the MUSIC bus, not Master, so the SFX slider may be scaled by
+the music slider.
+**Item 34's audio conclusion was WRONG.** It blamed the browser ("iOS suspends an AudioContext") and verified
+only that the unlock shim captured a context - never that a sound came out. The shim works and still ships; the
+silence had a different cause and sat undetected for five days. The rule that follows is now in CLAUDE.md: put
+an analyser on `ctx.destination` and read the peak, with a positive control, the same way we look at the picture.
+
+**2. The heat is not the flights, and nothing accumulates.**
+All numbers are this Mac under gl_compatibility at 1280x720: ratios transfer to a phone, absolutes do not, and
+NOTHING was measured on a phone.
+* The flight cutscene is the CHEAPEST thing in the game: 1.82 ms/frame and 49 draw calls, against 4.10 ms and
+  240 draws standing on home - 0.44x gameplay cost. The user's theory that flights cause the heat is wrong.
+* Planet hops leak nothing: 8-10 hops through the real `JourneyState.swap_scene` return node counts exactly
+  (hub 1704, zorp 833, bolt 857), orphans 0, texture memory flat, static memory flat after the first revisit.
+* The largest single item in the frame was the REALTIME SKY RADIANCE cubemap, re-rendered at 256 px every frame
+  to feed an ambient weight of 0.10 (`environment.gd:452-453`, `:460`). INCREMENTAL measured -1.063 and
+  -1.053 ms on hub (22.6% and 22.2% of the frame), twice, tightly; an earlier run's -1.48 ms did NOT reproduce.
+* Loads are bursts, not a drain: first-ever hub 1022-1324 ms; repeats 399.8 ms cold, 165.6 ms with the geometry
+  cache warm. `Planet.prebuild()` is called from exactly one place (`journey_state.gd:366`), so only a rocket
+  arrival gets a warm cache; a save load or a Director load rebuilds everything.
+* `planet.gd:549` scatters props inside `prebuild()` and `planet.gd:574` scatters the identical deterministic
+  set again in `_build()`: hub 38-42 ms, zorp/bolt 6-12 ms of duplicated work per prebuilt visit.
+* First-visit shader compiles are the biggest stalls: hub first frame 1879 ms, then 221, settling at 16.6 ms; a
+  repeat visit's first frame is 69 ms. Under Compatibility Godot writes NO shader cache, so whether the phone
+  re-pays this on every page load is unknown - and it is the best candidate for heat that BUILDS while
+  quest-hopping, which is exactly what the user reports ("everywhere, it builds up").
+* Not levers: shadows are already off under Compatibility (`_no_cast_shadows`), glow and SSAO off, fog
+  0.01-0.05 ms, and the per-frame environment rewrite is 0.013-0.018 ms - below the noise floor.
+* The remaining big lever is `run/max_fps` 60 -> 30 (`project.godot:17`): measured to land frames at exactly
+  33.3 ms, halving frames rendered, at the cost of visible smoothness on pans and flights. The user chose to
+  try the free fix first (2026-09-11).
+* `platform.gd:104` printed "3D scale 0.5" while `platform.gd:96` set 0.75 - one string that misled two briefs
+  and an investigator.
+
+**3. Five hub neighbours are stuck on their own buildings, not just the Professor.**
+`npc_data.gd` gives mayor_orbit home_offset_m 3.2 with home_side_m 0.0 - dead centre on the Town Hall's door
+axis - while `town_hall.gd:59`'s step_block spans 2.93-4.05 m out along it, and `building_base.gd:415-426`
+bakes every footprint shape into one StaticBody3D "Footprint" on layer 7, which `npc.gd:81` carries in its
+collision mask. His home spot is inside the steps. `npc.gd`'s `if planet.surface_distance(r, home_dir) <
+OWN_ZONE_M: continue` then skips avoidance of his OWN building entirely, and `_spot_blocked` never consults the
+real collider. Measured over 75 s: Footprint contact in 150 of 150 samples, walking in place 13-14 s at a
+stretch, longest freeze 34.5 s, about half a metre travelled. Stella freezes 18 s, DJ Nova 33 s, and Pip and
+Pop never move at all - their home spots are blocked too. 40-60% of every hub NPC's wander disc is rejected by
+`_spot_blocked` (pip 103/200, pop 119/200, stella 92/200, mayor_orbit 121/200, dj_nova 80/200), partly because
+`planet.gd:1143-1147` discards each reserved zone's real radius and `npc.gd` falls back to a flat 2.6 m for
+buildings that reserve up to 7.0 m.
+
+**Trap found here (now in CLAUDE.md):** `--skip-title` makes `title_screen._auto_start()` call
+`reset_new_game()`, which resets `current_planet_id` to "home" AFTER the Director parsed `--planet=`, so a
+"hub" test silently measures the empty home planet. Run `res://src/world/world.tscn -- --planet=hub` instead.
+
+### Fixed 2026-09-12, each with an independent critic
+
+* **Web audio (PASS round 1).** One line: `audio/general/default_playback_type.web = 0` (Stream) in
+  project.godot. Two web builds exported from ONE tree differing only in that section: title music peak at
+  `ctx.destination` 0.000000 without it, 0.509995 with it (builder) and 0.570404 (critic, whose analyser sat
+  IN SERIES on every edge into the destination, so an engine disconnect would kill the tap too); positive
+  control 0.030000 in both graphs. In-game SFX measured as well: footsteps 0.286774, UI tick 0.354691. Both
+  sliders scale the peak, and SFX is NOT scaled by the music slider despite the SFX -> Music edge (Music at
+  0%: music 0.000000, footsteps still 0.286774). Native is unchanged (PCM peak 19520/32768, RMS -18.09 dBFS;
+  the builder's 32760 figure did NOT reproduce - do not quote it). Latency identical in both builds:
+  baseLatency 5.33 ms, outputLatency 24 ms. `audio_manager.gd` needed no change.
+  STILL TRUE AFTER THE FIX: the bus graph is still severed (the sever is logged in the fixed build too);
+  Stream routes around it through the worklet mixer, so anything that opts back into Sample playback on the
+  web would be silent again. The CPU cost of Stream mode is unmeasured (the browser pane runs at ~1 fps), and
+  nothing is proven on the phone.
+* **Sky radiance (PASS round 1).** `sky.process_mode = PROCESS_MODE_INCREMENTAL`. Re-measured saving about
+  0.7-0.8 ms/frame on hub and home - smaller again than the 1.06 ms that replaced the first 1.48 ms, so quote
+  0.7-0.8 ms. Pictures agree to <= 0.007 RGB (0-255) and <= 0.003 top-1% luma across bolt and home, day and
+  night, both renderers. A confound found on the way: `night_life.gd` uses an unseeded RNG, so fireflies and
+  shooting stars alone move a night capture by up to 82 code values between two runs of the SAME sky mode -
+  freeze NightLife before comparing night frames.
+* **Stuck neighbours (FAIL round 1, PASS round 2).** Round 1 moved two home offsets (mayor_orbit 3.2 -> 4.6,
+  stella 3.0 -> 3.6) and the contacts stopped - but the critic measured the Professor, Pip and Pop travelling
+  0.00 m in 95 s: they had stopped hitting the building by not moving at all, with `_path_blocked` rejecting
+  100% of the spots `_spot_blocked` allowed. Round 2 fixed the class in `npc.gd`: `_resolve_home_dir` now
+  pushes a bad home offset clear of the real Footprint (`_clear_of_own_building`), and `_pick_wander_target`
+  is a two-pass picker with an away-from-the-building sampling bias whose relaxed pass still refuses water,
+  the own building and props (0.35 m buffer) and only drops the soft reserved-zone test. Critic's own 95 s
+  soak on hub, campaign off AND on: all five neighbours 0 Footprint contacts, 0 walk-in-place frames, 18-34 m
+  travelled each, against a pre-fix baseline it reproduced itself (pip/pop 0.00 m; mayor 9009 contact frames
+  and 56.9 s standing on the steps). Decisive metric - accepted spots whose capsule really overlaps a
+  building, per 200 picks: 18/17/54/68/92 before, 0/0/0/0/0 after, and still 0/0/0/0/0 with the OLD bad data.
+  Open from this round: the npc_data.gd offset edits are now redundant (the code clears a bad offset by
+  itself); the Professor's pass-0 disc is 199/200 blocked so he lives on the relaxed fallback, and tightening
+  that pass later would refreeze him (first cause is prop and reserved radii, `planet.gd`); the relaxed pass
+  checks only the NPC's OWN building, not others; `home_offset_m = 0.0` still drops an NPC below the planet
+  (pre-existing); Pip and Pop's pushed-out home sits 0.06 m inside a prop circle; `_pick_wander_target` costs
+  804 us/call for the Professor against 264 us before; `_own_building_checked` latches on its first lookup and
+  is safe only because `world.gd` spawns NPCs before buildings; and the Town Hall's own front-yard decor (two
+  lanterns, a noticeboard, a flagpole) shares the exact band its steps occupy.

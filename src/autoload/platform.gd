@@ -101,7 +101,14 @@ func _apply_quality_profile() -> void:
 	# fraction of quality 4's cost.
 	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
 	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW)
-	print("[Platform] low-power profile applied (no MSAA, 3D scale 0.5, soft-low shadows)")
+	# WAS a literal "3D scale 0.5" string that had gone stale since line 96 moved to 0.75 (2026-09-xx)
+	# and misled two builder briefs into quoting a number this code was not actually using. Read the
+	# value back from `vp` instead of hardcoding either number, so it always prints what this run
+	# actually set. `vp` (assigned above from `get_viewport()`) is null only in the rare case this
+	# runs before a viewport exists — this function has already returned above on a normal desktop
+	# run, which is neither Compatibility nor mobile and never reaches this print line at all.
+	var scale_report := "3D scale %.2f" % vp.scaling_3d_scale if vp != null else "3D scale unknown (no viewport)"
+	print("[Platform] low-power profile applied (no MSAA, %s, soft-low shadows)" % scale_report)
 
 
 ## Compatibility is the renderer WITHOUT a RenderingDevice. True for the web export (forced onto

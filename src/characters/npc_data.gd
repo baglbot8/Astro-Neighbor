@@ -338,7 +338,11 @@ const DATA := {
 		"accent": "#ff5d8f",
 		"home_dir": Vector3(0.50, 0.50, 0.71),
 		"building": "clothes_store",
-		"home_offset_m": 3.0,
+		# 3.0 put her dead centre on the door axis, 0.05-1.03 m INSIDE the front-steps collider
+		# (clothes_store.gd:59 step_block spans 2.02-3.05 m out on this axis) -- measured stuck-in-
+		# steps, the same class of bug as the Professor (docs/OPEN_ISSUES.md, this fix). 3.6 clears
+		# the steps' outer edge (3.05 m) by 0.55 m, past her own 0.34 m body radius with margin.
+		"home_offset_m": 3.6,
 		"home_side_m": 0.0,
 		"wander_radius_m": 5.0,
 		"intro": [
@@ -402,7 +406,12 @@ const DATA := {
 		"accent": "#c9a15c",
 		"home_dir": Vector3(0.0, 0.99, 0.12),
 		"building": "town_hall",
-		"home_offset_m": 3.2,
+		# 3.2 sat him DEAD CENTRE ON THE DOOR AXIS, INSIDE the front steps: town_hall.gd:59 bakes a
+		# step_block spanning 2.93-4.05 m out on this exact axis, so his own home spot was on the
+		# steps -- not just his wander -- which is the actual "stuck on the door" bug (measured:
+		# 150/150 Footprint contacts, docs/OPEN_ISSUES.md, this fix). 4.6 clears the steps' outer
+		# edge (4.05 m) by 0.55 m, past his own 0.34 m body radius with margin to spare.
+		"home_offset_m": 4.6,
 		"home_side_m": 0.0,
 		"wander_radius_m": 4.0,
 		"intro": [

@@ -72,6 +72,14 @@ var _footstep_surface: String = "grass"
 var _rng := RandomNumberGenerator.new()
 var _body_scale: float = 1.0
 var _marker_h: float = MARKER_HEIGHT
+## Cached lookup of this NPC's own building node (for `_point_blocked_by_own_building`), so the
+## scene isn't walked on every one of the ~120 _spot_blocked calls a single wander pick can make.
+var _own_building: Node = null
+var _own_building_checked := false
+## Bearing (in `_pick_wander_target`'s own angle convention) pointing straight away from this NPC's
+## own building, set once in `_resolve_home_dir`. NAN for every non-hub neighbour (no "building" in
+## npc_data.gd), which keeps sampling the full circle exactly as before this fix.
+var _away_bias_ang: float = NAN
 
 
 func _ready() -> void:
@@ -343,6 +351,7 @@ func _resolve_home_dir() -> Vector3:
 	var hd: Variant = d.get("home_dir", Vector3.UP)
 	var v: Vector3 = hd if hd is Vector3 else Vector3.UP
 	v = v.normalized()
+	_away_bias_ang = NAN
 	var building := str(d.get("building", ""))
 	if building != "" and planet.has_method("building_dir"):
 		var bd: Vector3 = planet.building_dir(building)
@@ -353,47 +362,217 @@ func _resolve_home_dir() -> Vector3:
 			if absf(side) > 0.01:
 				var xf := planet.surface_transform(v, spawn - v * spawn.dot(v))
 				v = (v + xf.basis.x * (side / planet.radius)).normalized()
+			# npc_data.gd's hand-picked offset/side is a distance to the building's SIMPLE axis, not
+			# to its real (possibly asymmetric) Footprint shapes -- Stella's 3.0 landed 0.05-1.03 m
+			# INSIDE the steps before this fix, and the round-2 critic still found Pip/Pop sitting
+			# within body-radius of theirs. Never trust the number: push straight out along the same
+			# bearing from the building until the real collider says clear, same margin _spot_blocked
+			# uses everywhere else. This is the "half" of the class-of-bug fix that was missing --
+			# _spot_blocked checked the real footprint for WANDER picks, this one checks it for the
+			# home spot itself.
+			v = _clear_of_own_building(bd, v)
+			# The bearing straight from home back to the building is exactly where every one of its
+			# own shapes lives (the steps, and -- for Town Hall -- the lanterns, flagpole and board,
+			# all closer to the door than a cleared home spot). Wander sampling below excludes that
+			# whole side instead of relying on AVOID_PROP_M/AVOID_RESERVED_M to catch each shape one
+			# by one, which is what left Professor Comet's disc ~99% blocked (own_footprint 83/200 +
+			# prop 115/200, round-2 critic) even after his home spot itself cleared the steps.
+			_away_bias_ang = _bearing_away_from(v, bd)
 	return v
+
+
+## Iteratively pushes `v` straight out along its own great-circle bearing from the building centre
+## `bd` until `_point_blocked_by_own_building` clears it, in 0.3 m steps (12 max = 3.6 m of extra
+## travel -- more than any hub building's footprint half-width, so a genuinely bad number in
+## npc_data.gd fails safe by giving up rather than spinning). No fitted constant: the stopping
+## condition is the same real-collider check `_spot_blocked` already uses for wander picks.
+## Extrapolates by hand rather than calling `planet.step_dir` again: that helper clamps its weight to
+## [0, 1] (it can only move a point BETWEEN `bd` and its target, never past it), so feeding it a
+## distance already beyond `v` is a silent no-op. `Vector3.slerp`'s own weight is an unclamped
+## rotation angle fraction, so calling it directly with weight > 1 is the correct way to keep going
+## along the same great circle past `v`.
+func _clear_of_own_building(bd: Vector3, v: Vector3) -> Vector3:
+	var a := bd.normalized()
+	var b := v.normalized()
+	var ang := acos(clampf(a.dot(b), -1.0, 1.0))
+	if ang < 0.0001:
+		return v                       # home sits on the building's own centre; no bearing to push along
+	for i in 12:
+		if not _point_blocked_by_own_building(planet.surface_point(v)):
+			return v
+		var meters := planet.surface_distance(bd, v) + 0.3
+		v = a.slerp(b, meters / (planet.radius * ang)).normalized()
+	return v
+
+
+## The angle (in `_pick_wander_target`'s cos-on-x/sin-on-z convention) pointing from home `v`
+## straight AWAY from the building at `bd`. NAN when they coincide (no meaningful bearing), which
+## tells `_pick_wander_target` to fall back to sampling the full circle, unchanged from before this
+## fix -- exactly what happens for every non-hub neighbour (no "building" in npc_data.gd) already.
+func _bearing_away_from(v: Vector3, bd: Vector3) -> float:
+	var xf := planet.surface_transform(v)
+	var to_building := planet.surface_point(bd) - planet.surface_point(v)
+	var bx := to_building.dot(xf.basis.x)
+	var bz := to_building.dot(xf.basis.z)
+	if absf(bx) < 0.0001 and absf(bz) < 0.0001:
+		return NAN
+	return atan2(-bz, -bx)
+
+
+## Half-width of the arc `_pick_wander_target` samples around `_away_bias_ang`, for NPCs that have
+## one (every hub shopkeeper). 150 deg rather than a full 180 deg away-facing half-circle: every
+## shape belonging to a hub building sits closer to its own door than a cleared home spot does (see
+## `_resolve_home_dir`), so the true safe arc is the full away half -- this keeps a 15 deg margin off
+## that boundary on each side rather than sampling right up to it, the same kind of standoff BODY_
+## RADIUS already gives the footprint check, not a number fitted to any one neighbour's geometry.
+const AWAY_ARC := 150.0 * PI / 180.0
 
 
 func _pick_wander_target() -> Vector3:
 	var from_dir := current_dir()
 	var xf := planet.surface_transform(home_dir)
-	for attempt in 24:
-		var ang := _rng.randf_range(0.0, TAU)
-		var dist := _rng.randf_range(1.4, maxf(wander_radius_m, 1.6))
-		var tangent := xf.basis.x * cos(ang) + xf.basis.z * sin(ang)
-		var d := (home_dir + tangent * (dist / planet.radius)).normalized()
-		if _spot_blocked(d):
-			continue
-		if _path_blocked(from_dir, d):
-			continue
-		return d
+	# Pass 0 is the normal, fully-checked pick. A hub shopkeeper's yard can be small enough that pass
+	# 0 never succeeds no matter how many of the 24 tries it gets (measured: Pip 83/83 and Pop 59/59
+	# of every spot that survived _spot_blocked still failed _path_blocked, round-2 critic) -- and the
+	# old fallback here was `return home_dir`, i.e. give up and never move again, which is the exact
+	# "stopped moving entirely" regression that failed round 1. Pass 1 relaxes the SOFT rules (other
+	# props, other reserved zones) but keeps both HARD ones (water, this NPC's own building) so a
+	# neighbour always ends up going somewhere even in a cluttered yard, and never through their own
+	# wall to get there.
+	for pass_i in 2:
+		var relaxed := pass_i == 1
+		for attempt in 24:
+			var ang := _rng.randf_range(0.0, TAU)
+			if not is_nan(_away_bias_ang):
+				ang = _away_bias_ang + _rng.randf_range(-AWAY_ARC * 0.5, AWAY_ARC * 0.5)
+			var dist := _rng.randf_range(1.4, maxf(wander_radius_m, 1.6))
+			var tangent := xf.basis.x * cos(ang) + xf.basis.z * sin(ang)
+			var d := (home_dir + tangent * (dist / planet.radius)).normalized()
+			if _spot_blocked(d, relaxed):
+				continue
+			if _path_blocked(from_dir, d, relaxed):
+				continue
+			return d
 	return home_dir
 
 
 ## Samples along the great circle so an NPC never sets off straight across a river or a building.
-func _path_blocked(from_dir: Vector3, to_dir: Vector3) -> bool:
+func _path_blocked(from_dir: Vector3, to_dir: Vector3, relaxed: bool = false) -> bool:
 	for i in PATH_SAMPLES:
 		var t := float(i + 1) / float(PATH_SAMPLES + 1)
-		if _spot_blocked(from_dir.slerp(to_dir, t).normalized()):
+		if _spot_blocked(from_dir.slerp(to_dir, t).normalized(), relaxed):
 			return true
 	return false
 
 
-func _spot_blocked(d: Vector3) -> bool:
+## `relaxed` (the second pass of `_pick_wander_target`) drops only the truly SOFT check -- other
+## reserved zones, most of which (spawn, pad, another neighbour's mis-reserved home, docs/OPEN_ISSUES)
+## have no collider at all -- and keeps every check that guards a REAL collider the NPC would
+## otherwise visibly clip or grind against: water, this NPC's own building, and every registered prop
+## (`nearest_prop_distance`, still required to clear -- see FOOTPRINT_MARGIN_BUFFER below for why it
+## can't just be dropped).
+func _spot_blocked(d: Vector3, relaxed: bool = false) -> bool:
 	if planet.is_underwater(d):
 		return true
 	var wr := planet.water_radius()
 	if wr > 0.0 and planet.height_at(d) < wr + 0.25:
 		return true
-	if planet.nearest_prop_distance(d) < AVOID_PROP_M:
+	# OWN_ZONE_M below tells the reserved-circle loop to stop treating this NPC's own building as an
+	# obstacle near home, so a shopkeeper can stand close to their shop -- but that flattened circle
+	# is not the shop's real shape, and the real "Footprint" StaticBody3D building_base.gd bakes for
+	# every hub building (steps, bays, cylinders and all) sits INSIDE it. Skipping the reserved circle
+	# without also checking the real collider is exactly what let every hub NPC pick a wander target
+	# or a path sample inside their own building and then walk in place against it forever (measured:
+	# Professor Comet 150/150 Footprint contacts, 13-34s freezes -- docs/OPEN_ISSUES.md, this fix).
+	# This check runs unconditionally, INSIDE the own-zone skip's radius or not, because a real
+	# footprint can extend past OWN_ZONE_M (the Town Hall's steps reach 4.05 m).
+	if _point_blocked_by_own_building(planet.surface_point(d)):
 		return true
+	# The plaza fountain and its ring of benches sit on the SAME spawn<->town-hall corridor Professor
+	# Comet's home is stepped along, close enough that AVOID_PROP_M's full 1.1 m comfort buffer blocks
+	# his entire away-facing wander arc (measured: 200/200 samples, this fix's own round-2
+	# remeasurement) -- so dropping prop avoidance outright, the way the reserved-zone check is
+	# dropped below, would have him grinding on the fountain instead of the door (measured before this
+	# line existed: 2644 physics frames of sustained "Fountain0" contact over the same 95 s soak).
+	# Unlike a reserved zone, a prop is usually a REAL collider (fountain, benches: `_spawn_blocking`
+	# in planet_props.gd), so relaxed mode only sheds the 1.1 m of personal-space comfort, not the
+	# clearance that keeps the capsule off the mesh -- FOOTPRINT_MARGIN_BUFFER already proved, on Pop,
+	# to be enough real daylight past a registered footprint for that.
+	var prop_clear := FOOTPRINT_MARGIN_BUFFER if relaxed else AVOID_PROP_M
+	if planet.nearest_prop_distance(d) < prop_clear:
+		return true
+	if relaxed:
+		return false
 	for r: Vector3 in planet.get_reserved_dirs():
 		if planet.surface_distance(r, home_dir) < OWN_ZONE_M:
 			continue                                  # that reserved circle is this NPC's own spot
 		if planet.surface_distance(d, r) < AVOID_RESERVED_M:
 			return true
+	return false
+
+
+## Resolves (once) the Node for this NPC's own "building" (NpcData's `building` key), so its real
+## Footprint shapes can be read straight from the scene instead of a second flattened radius that
+## would just repeat planet.gd's `get_reserved_dirs()` losing each zone's real size. Every hub
+## building is spawned and named by its building_id (src/world/world.gd `_spawn_buildings`), so a
+## name-based lookup from scene root works without planet.gd or building_base.gd growing an API.
+func _own_building_node() -> Node:
+	if _own_building_checked:
+		return _own_building
+	_own_building_checked = true
+	var bid := str(NpcData.get_data(npc_id).get("building", ""))
+	if bid == "":
+		return null
+	_own_building = get_tree().root.find_child(bid, true, false)
+	return _own_building
+
+
+## Extra clearance added on top of this NPC's own body radius in `_point_blocked_by_own_building`.
+## Without it, a spot right at the zero-clearance boundary reads as "clear" but still lets an
+## ordinary CharacterBody3D capsule graze the real collider while resting or walking past it --
+## measured on Pop after the round-2 fix: 839 physics frames of sustained "Footprint" slide contact
+## in one ~14 s stretch right after spawn, then none for the rest of a 95 s soak, because her home
+## spot (pushed clear by `_clear_of_own_building`) landed exactly on that boundary. 0.35 m is a
+## hand's width of daylight -- the same order of magnitude as the 0.55 m clearances already
+## hand-picked in npc_data.gd -- not a number fitted to Pop specifically.
+const FOOTPRINT_MARGIN_BUFFER := 0.35
+
+
+## True when `world_pos` sits inside (or within this NPC's own body radius of) any shape under this
+## NPC's own building's "Footprint" StaticBody3D (building_base.gd `_make_footprint`). NPCs with no
+## "building" (every non-hub neighbour) always return false here, unchanged from before this fix.
+func _point_blocked_by_own_building(world_pos: Vector3) -> bool:
+	var building := _own_building_node()
+	if building == null:
+		return false
+	var fp := building.get_node_or_null("Footprint")
+	if fp == null:
+		return false
+	var margin := BODY_RADIUS * _body_scale + FOOTPRINT_MARGIN_BUFFER
+	for c: Node in fp.get_children():
+		if c is CollisionShape3D and _shape_contains(c as CollisionShape3D, world_pos, margin):
+			return true
+	return false
+
+
+## Local-space containment test against one Footprint collider shape, inflated by `margin` (this
+## NPC's own body radius) so its CAPSULE can never overlap the geometry even though the point tested
+## is its FEET. Covers every shape `_footprint_shapes()` overrides actually build (box, cylinder,
+## sphere); an unrecognised shape is treated as not blocking, same as today's total absence of a check.
+func _shape_contains(cs: CollisionShape3D, world_pos: Vector3, margin: float) -> bool:
+	var shape := cs.shape
+	if shape == null:
+		return false
+	var local: Vector3 = cs.global_transform.affine_inverse() * world_pos
+	if shape is BoxShape3D:
+		var half: Vector3 = (shape as BoxShape3D).size * 0.5 + Vector3.ONE * margin
+		return absf(local.x) <= half.x and absf(local.y) <= half.y and absf(local.z) <= half.z
+	if shape is CylinderShape3D:
+		var cyl := shape as CylinderShape3D
+		var horiz := Vector2(local.x, local.z).length()
+		return horiz <= cyl.radius + margin and absf(local.y) <= cyl.height * 0.5 + margin
+	if shape is SphereShape3D:
+		return local.length() <= (shape as SphereShape3D).radius + margin
 	return false
 
 
@@ -522,6 +701,12 @@ func _face_marker_to_camera() -> void:
 	_marker.rotation.y = atan2(local.x, local.z)
 
 
+## Phase 2 (builder E): the project system, loaded by path like conversation.gd so this file still
+## parses without it. The script is cached because _refresh_marker runs every MARKER_POLL per neighbour.
+const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
+var _projects_script: Script = null
+
+
 ## Shows the "!" when this neighbour has a favour to offer, one ready to hand in, or a gift to receive.
 func _refresh_marker() -> void:
 	if _marker == null:
@@ -530,4 +715,31 @@ func _refresh_marker() -> void:
 	if favors == null or _talking:
 		_marker.visible = false
 		return
+	# A neighbour with a project shows the "!" only when there is something to do today (E's
+	# wants_marker: 1 show, 0 hide, -1 no opinion). Without this Bolt showed "!" through every locked
+	# day of his project and then said "come back tomorrow" (Phase 2 critic, captures c06-c09b).
+	var pm := _project_marker()
+	if pm >= 0:
+		_marker.visible = pm == 1 or _favor_ready_here(favors)
+		return
 	_marker.visible = favors.has_marker(npc_id)
+
+
+## A ready hand-in or a gift for this neighbour in the bag. conversation.gd runs both BEFORE the project,
+## so they keep their "!" on a project's locked or unmet day too. Without this the "!" hid while a talk
+## would still hand in or open a gift (wiring critic, R3 cases E3/E7/E9: visible=false with
+## favors_has_marker=true).
+func _favor_ready_here(favors: FavorSystem) -> bool:
+	if favors.is_ready_to_turn_in(favors.active_favor_for(npc_id)):
+		return true
+	var delivery := favors.delivery_for(npc_id)
+	return not delivery.is_empty() and GameState.has_item(str(delivery.get("target_item", "")))
+
+
+func _project_marker() -> int:
+	if _projects_script == null:
+		if not ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+			return -1
+		_projects_script = load(PROJECT_SYSTEM_PATH)
+	var ps = _projects_script.get_or_create()
+	return -1 if ps == null else int(ps.wants_marker(npc_id))

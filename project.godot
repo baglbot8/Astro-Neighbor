@@ -17,6 +17,34 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 run/max_fps=60
 config/icon="res://icon.svg"
 
+[audio]
+
+; THE WEB BUILD WAS DIGITALLY SILENT (2026-09-11). Proved by exporting TWO builds from one tree and
+; tapping ctx.destination with an AnalyserNode in each: WITHOUT this line the peak is 0.000000 while
+; the AudioContext is "running" and the title music is "playing"; WITH it the same title music peaks
+; 0.509995. A positive control in the same graph (oscillator at gain 0.03) read 0.030000 both times,
+; so the tap was live and the 0.000000 was real silence. The critic repeated the whole experiment with
+; its own export and its own tap wired IN SERIES on every edge into the destination (so an engine
+; disconnect kills the tap too, and a cut-off node cannot read as a false positive): 0.000000 without
+; the line, 0.570404 with it. In-game SFX measured too: footsteps 0.286774, a UI tick 0.354691.
+; Native is untouched: the same scene under --write-movie writes PCM peak 19520/32768, RMS
+; -18.09 dBFS, measured twice by the critic. (A builder figure of 32760 did not reproduce; do not
+; quote it.)
+; Cause, read off the LIVE graph rather than inferred: the exported index.js connects a bus to
+; ctx.destination in exactly one place (Bus.setSend(null), bus 0 only), while Bus.connect() begins
+; getOutputNode().disconnect(). audio_manager.gd:110-115 adds "Music" and "SFX" at runtime, and the
+; probe logged Master's output node disconnected twice at t=512/513 ms - the only destination edge,
+; gone for the rest of the run. That WebAudio bus graph carries SAMPLE playback only. STREAM playback
+; goes through the software mixer's AudioWorkletNode, which holds its own connect() to
+; ctx.destination that no bus disconnect can reach: with this line the sever still happens (logged
+; again at t=277 ms) and the sound comes out anyway. Bus volumes are then mixed in wasm from the real
+; bus layout, so the sliders stay independent - measured twice, by two agents, with different exact
+; values but the same behaviour. The critic's run: at Music 0% the music peak is 0.000000 while
+; footsteps still peak 0.286774, and Sounds at 100/45/0% takes one UI tick to 0.354691 / 0.159531 /
+; 0.000000. So SFX is NOT scaled by the music slider, despite the SFX -> Music bus edge.
+; No latency cost (baseLatency 5.33 ms / outputLatency 24 ms in both builds).
+general/default_playback_type.web=0
+
 [autoload]
 
 EventBus="*res://src/autoload/event_bus.gd"
@@ -220,9 +248,6 @@ lights_and_shadows/directional_shadow/soft_shadow_filter_quality=4
 textures/default_filters/anisotropic_filtering_level=3
 anti_aliasing/quality/msaa_3d=2
 environment/defaults/default_clear_color=Color(0.53, 0.78, 0.96, 1)
-; Desktop and mobile both run Forward+. The web export forces Compatibility (WebGL2),
-; where SSAO and some glow modes are unavailable.
-renderer/rendering_method="forward_plus"
 
 [shader_globals]
 

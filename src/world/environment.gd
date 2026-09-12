@@ -449,7 +449,31 @@ func _build_environment() -> void:
 	_sky_mat = ShaderMaterial.new()
 	_sky_mat.shader = SKY_SHADER
 	sky.sky_material = _sky_mat
-	sky.process_mode = Sky.PROCESS_MODE_REALTIME
+	# WAS PROCESS_MODE_REALTIME: re-renders the 256px radiance cubemap from scratch every frame to
+	# feed ambient light (weighted 0.10, see ambient_light_sky_contribution below) and SKY
+	# reflections. The sky the PLAYER SEES is the background pass in sky.gdshader, drawn straight to
+	# the screen, and never reads this cubemap — REALTIME's whole-frame freshness bought nothing
+	# visible. INCREMENTAL re-renders one face (of 6, further split into mip passes) per frame
+	# instead of the whole cubemap, so the ambient/reflection data lags the sky by up to a few
+	# frames, which a clock that moves 24h per 600s (0.04 h/frame at 60fps) cannot show.
+	# RE-MEASURED (fix3b/env round 1, independent harness: a scratch probe scene building the real
+	# planet.tscn + environment.tscn under a static gameplay camera, gl_compatibility, disable-vsync,
+	# max-fps 0, A/B/A/B, median render time over 240 sampled frames): REALTIME 1.28-1.35 ms,
+	# INCREMENTAL 0.52-0.59 ms, both worlds, four runs each, tightly reproduced -> ~0.7-0.8 ms saved
+	# per frame on hub AND home. That is SMALLER than the earlier -1.063/-1.053 ms claim quoted here
+	# before; per CLAUDE.md ("quote the smaller, reproduced number") this is the number to trust. A
+	# whole-frame percentage is NOT claimed: Performance.TIME_PROCESS was too noisy run to run on
+	# this Mac at uncapped fps to divide by honestly (see fix3b/env builder report).
+	# Visual proof, clock FROZEN (time_scale=0), Bolt (chrome, the world that actually reads this
+	# cubemap for reflections) and Home, both renderers, day (13h) AND night (2h): sky band, ground
+	# band and (Bolt) a reflective prop crop all agree to <=0.007 RGB (0-255) and top-1% luminance to
+	# <=0.003 between REALTIME and INCREMENTAL - effectively bit-identical.
+	# CONFOUND FOUND AND CONTROLLED: night_life.gd:30 seeds its RNG with `.randomize()` (not fixed),
+	# so fireflies/shooting stars alone moved a "night" capture by up to 82 code values between two
+	# runs of the IDENTICAL sky mode - nothing to do with this change. The numbers above are with
+	# NightLife's fireflies forced invisible every frame in the test probe only; night_life.gd itself
+	# is untouched (not owned this round). Worth a docs/OPEN_ISSUES.md entry for the next capture.
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	sky.radiance_size = Sky.RADIANCE_SIZE_256
 	_env.sky = sky
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY

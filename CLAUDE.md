@@ -109,6 +109,14 @@ returns the conclusion, not the dump.
 - `--resolution` is **silently ignored when `--write-movie` is used**: the project's 1280x720 viewport
   wins, so a "1560x720 phone" movie is really 1280x720. For a real phone-size frame, use a Director
   `--capture-dir` run without `--write-movie` (2026-09-11 intro critic).
+- `--skip-title` makes `title_screen._auto_start()` call `GameState.reset_new_game()`, which resets
+  `current_planet_id` to "home" **after** the Director parsed `--planet=`. A "hub" test then measures
+  the empty home planet. Run the world scene directly instead:
+  `godot --path <copy> res://src/world/world.tscn -- --planet=hub` (2026-09-11).
+- **Audio: "the context resumed" is not proof of sound.** Put an analyser on `ctx.destination` in the
+  served web build and read the peak, with a positive control (an oscillator at a known gain) in the
+  same graph. The shipped web build measured peak 0.000000 while the context said "running", and an
+  earlier round closed the bug on the resume alone (2026-09-11 web-audio diagnosis).
 - **Agent runs never use the user's real save folder.** Test in a scratch copy with `config/name`
   renamed (user:// follows the name) and hash the real save before and after. A run through the title
   with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this
