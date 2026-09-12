@@ -30,6 +30,23 @@ const MENU_BOTTOM := 96.0
 const LOGO_TOP := 46.0
 const LOGO_HEIGHT := 250.0
 const TAGLINE_TOP := LOGO_TOP + 222.0
+## Written by `tools/publish_web.sh` right before it exports, holding the same short commit SHA the
+## page gets stamped with (<meta name="astro-build">) — then reverted, so a normal editor run never
+## sees it and a developer tree is never left dirty. Lets a phone report say exactly which build a
+## screenshot came from (docs/OPEN_ISSUES.md 33: a cached service worker once froze a phone on a
+## two-day-old build for three rounds of "fixes" nobody could tell weren't reaching it).
+##
+## A PROJECT SETTING, NOT a res:// file - measured, not guessed (round 1): a plain text file at the
+## project root does not survive the "Web" export. `export_filter="all_resources"` only bundles
+## files the ResourceLoader recognises (.gd/.tscn/.tres, imported assets) - a raw .txt with no
+## importer was silently absent from every exported .pck, along with CLAUDE.md and every tools/*.sh
+## and tools/*.py, none of which the export ever touches either. Fixing that needs an
+## `include_filter` entry in export_presets.cfg, which lives only in the git copy (out of this
+## builder's brief). project.godot's settings are compiled into project.binary, which every export
+## always bundles regardless of any filter - confirmed by grepping the exported .pck for the
+## setting's key and value after export.
+const BUILD_STAMP_SETTING := "astro/build_stamp"
+const BUILD_STAMP_FALLBACK := "dev"
 
 @export var demo_mode: bool = false
 
@@ -100,6 +117,25 @@ func _continue_game() -> void:
 func _quit() -> void:
 	UIStyle.play_cancel()
 	get_tree().quit()
+
+## THE TITLE MUST NOT PREBUILD A PLANET, even though it sits idle while the player reads it - a
+## round 1 attempt here (`_prewarm_likely_planet`, removed) looked like free CPU time but measured
+## out as a regression, for the next person who has the same idea:
+##   1. PLAYER-REACHABLE BUG: any prebuild here runs before `_continue_game()` calls
+##      `SaveManager.load_game()`, so it scatters props (planet_props.gd) against an empty
+##      GameState - `Collectible.was_picked_today` reads `GameState.picked_collectibles` /
+##      `day_count`, both still default. Measured on a real save: already-picked collectibles came
+##      back (10 live instead of 7). That scatter is what SceneRouter's prebuild then hands to the
+##      real world - see `_prebuild_current_planet` in scene_router.gd, which runs AFTER the save
+##      loads and is the only place this is safe to do.
+##   2. WASTED FOR AN UPGRADED HOME: `PlanetData.effective_radius` reads `GameState.home_planet_size`,
+##      which is also still unset at title time - measured title-time key
+##      `home|11|6|12.000|8` vs. the post-load `home|11|6|16.000|8`. The whole bake is thrown away.
+##   3. THE PREMISE WAS WRONG: the title is ANIMATING (orbiting rocket, turning globe, panning
+##      camera, sparkles), not idle in the sense that matters - a measured ~230-245ms prebuild
+##      stall is a visible stutter here. The world load it was meant to save happens inside
+##      SceneRouter's solid black fade, where a stall of the same size is invisible by design. So
+##      this moved the freeze OUT of the screen where it can't be seen and INTO the one where it can.
 
 # ----------------------------------------------------------------------------- 3D world
 func _build_world() -> void:
@@ -457,6 +493,13 @@ func _build_ambient_sparkles() -> void:
 	_cam_pivot.add_child(p)
 
 # ----------------------------------------------------------------------------- UI overlay
+## Reads the build stamp `tools/publish_web.sh` writes before exporting (see BUILD_STAMP_SETTING).
+## `get_setting(key, default)` returns the default silently when the key is absent (any normal
+## editor run) - no error, no warning.
+func _build_stamp() -> String:
+	var s := str(ProjectSettings.get_setting(BUILD_STAMP_SETTING, BUILD_STAMP_FALLBACK)).strip_edges()
+	return s if s != "" else BUILD_STAMP_FALLBACK
+
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
@@ -557,13 +600,27 @@ func _build_ui() -> void:
 		l.add_theme_color_override("font_color", Color(UIStyle.CREAM, 0.85))
 		pair.add_child(l)
 		hints.add_child(pair)
+	# Version line + build stamp, kept clear of a phone's notch/home-indicator (MobileUI.safe_area,
+	# zero on desktop) the same way the HUD does it: inset + a fixed pad, never a bare offset.
+	var version_row := HBoxContainer.new()
+	version_row.name = "Version"
+	version_row.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	version_row.grow_horizontal = Control.GROW_DIRECTION_END
+	version_row.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	version_row.add_theme_constant_override("separation", 10)
+	version_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sa := MobileUI.safe_area()
+	version_row.offset_left = 24.0 + sa.x
+	version_row.offset_bottom = -(22.0 + sa.w)
+	_ui.add_child(version_row)
 	var version := UIStyle.make_label("Astro Neighbor · prototype", "Hint")
 	version.add_theme_color_override("font_color", Color(UIStyle.CREAM, 0.6))
-	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	version.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	version.offset_left = 24.0
-	version.offset_bottom = -22.0
-	_ui.add_child(version)
+	version_row.add_child(version)
+	# Small and dim on purpose - this is a build id for a report, not something a player reads.
+	var stamp := UIStyle.make_label("#" + _build_stamp(), "Hint")
+	stamp.add_theme_font_size_override("font_size", 11)
+	stamp.add_theme_color_override("font_color", Color(UIStyle.CREAM, 0.4))
+	version_row.add_child(stamp)
 
 	_confirm = ConfirmPopup.new()
 	_confirm.name = "Confirm"

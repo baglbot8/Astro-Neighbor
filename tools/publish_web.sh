@@ -10,12 +10,80 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO/../../build/web"
 cd "$REPO"
 
+BASE="$(git rev-parse --short HEAD)"
+
 echo "exporting..."
 rm -rf "$OUT"; mkdir -p "$OUT"
-godot --headless --path . --export-release "Web"
-printf '' > "$OUT/.nojekyll"   # stop GitHub Pages running Jekyll over the export
 
-BASE="$(git rev-parse --short HEAD)"
+# --- Stamp the build INTO the game, not just the page ------------------------------------------
+# The page has carried <meta name="astro-build"> for a while (below the export); the GAME could not
+# show it, so a phone report still could not prove which build was on screen without console
+# access (docs/OPEN_ISSUES.md 33 - a cached service worker once froze a phone on a two-day-old
+# build for three rounds of "fixes" that never reached it).
+#
+# A PLAIN res:// FILE DOES NOT SURVIVE THIS EXPORT - measured, not guessed: `export_filter=
+# "all_resources"` only bundles files the ResourceLoader recognises (.gd/.tscn/.tres, imported
+# assets). A build_stamp.txt dropped at the project root, and every tools/*.sh, tools/*.py and
+# docs/*.md, were silently absent from the exported .pck (grepped for after export). Making a raw
+# file survive needs an `include_filter` entry in export_presets.cfg, which is not this script's to
+# edit. project.godot's settings compile into project.binary, which every export bundles regardless
+# of any filter, so the stamp goes there instead - a throwaway custom setting the game reads with
+# `ProjectSettings.get_setting("astro/build_stamp", "dev")` (src/ui/title/title_screen.gd).
+#
+# Written directly into project.godot, then restored from an exact backup - not "undone" by
+# pattern-matching the appended text back out - so a crash mid-export can never leave a developer
+# tree dirty.
+#
+# The restore has to run on INT and TERM, not just EXIT - measured, not guessed. A plain
+# `trap ... EXIT` misses the ordinary way this script actually dies: SIGTERM's default
+# disposition is immediate termination, and a signal with no trap of its own never runs the
+# shell's EXIT trap at all - project.godot stayed stamped and project.godot.prestamp was left
+# behind (sent SIGTERM to this script's own pid while it sat blocked in the foreground `godot`
+# export, both on this script and in an isolated repro).
+#
+# Adding `trap ... TERM INT` around that same foreground `godot` call is not enough by itself -
+# also measured. While the shell is blocked in a *foreground* exec, delivery of a signal it does
+# have a trap for is deferred until that foreground command exits on its own, so the handler
+# didn't run until the export finished anyway, and the export - now nobody's job to stop - kept
+# baking the stamped project.binary regardless of the trap. Backgrounding `godot` and blocking on
+# `wait` instead fixed it: `wait` on a specific job returns as soon as a trapped signal arrives,
+# so the handler runs immediately and can kill the still-running export before it finishes.
+GODOT_PID=""
+_restore_project() {
+	# Idempotent - the EXIT trap and the interrupt path can both call this.
+	if [ -f project.godot.prestamp ]; then
+		mv -f project.godot.prestamp project.godot
+	fi
+}
+_on_interrupt() {
+	# Clear every trap first so this can't re-enter itself, and so the `exit` below doesn't
+	# also re-fire the EXIT trap.
+	trap - EXIT INT TERM
+	if [ -n "$GODOT_PID" ] && kill -0 "$GODOT_PID" 2>/dev/null; then
+		kill -TERM "$GODOT_PID" 2>/dev/null || true
+		# Give it up to 2s to exit on its own before project.godot is touched, then make sure.
+		for _ in 1 2 3 4 5 6 7 8 9 10; do
+			kill -0 "$GODOT_PID" 2>/dev/null || break
+			sleep 0.2
+		done
+		kill -KILL "$GODOT_PID" 2>/dev/null || true
+		wait "$GODOT_PID" 2>/dev/null || true
+	fi
+	_restore_project
+	exit 143
+}
+cp project.godot project.godot.prestamp
+trap _restore_project EXIT
+trap _on_interrupt INT TERM
+printf '\n[astro]\n\nbuild_stamp="%s"\n' "$BASE" >> project.godot
+godot --headless --path . --export-release "Web" &
+GODOT_PID=$!
+wait "$GODOT_PID"
+trap - INT TERM
+_restore_project
+trap - EXIT
+
+printf '' > "$OUT/.nojekyll"   # stop GitHub Pages running Jekyll over the export
 
 # --- Kill the service worker that PWA builds left registered on real devices -------------------
 # Builds published before 2026-09-06 21:00 shipped Godot's PWA service worker. It caches

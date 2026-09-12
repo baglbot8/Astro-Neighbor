@@ -516,6 +516,11 @@ func _build_hints() -> void:
 	# in it names a key a phone does not have. The node is still created (a lot of this file reads
 	# `_hints`), it is simply never populated and never shown; TouchControls carries the bag,
 	# journal and pause affordances instead.
+	#
+	# CHECKED FOR THE 2026-09-12 EMOTE-BUTTON CHANGE (the touch Jump satellite became Emote): this
+	# whole row is skipped below on mobile before `pairs` is ever built, so there was never a phone
+	# hint mentioning "Jump" to correct - `_build_hints_row`'s `pairs` list stays keyboard-only,
+	# unaffected by what TouchControls now draws.
 	_build_hints_row()
 
 

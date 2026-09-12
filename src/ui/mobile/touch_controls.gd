@@ -5,7 +5,7 @@ extends Control
 ##   * a FLOATING left thumbstick - analogue, so a small push walks and a full push runs; there is
 ##     no run button (see `TouchStick`),
 ##   * a right ACTION CLUSTER - one large context button whose label follows
-##     `EventBus.interact_prompt_changed` (Talk / Enter / Place / Pick up / Fly), with Jump and
+##     `EventBus.interact_prompt_changed` (Talk / Enter / Place / Pick up / Fly), with Emote and
 ##     Boost satellites, plus rotate / cancel while a decoration is being placed,
 ##   * CAMERA BY DRAG anywhere on the open right-hand side, and PINCH TO ZOOM,
 ##   * small round HUD buttons for the bag, the favours journal and pause, because the keyboard
@@ -18,7 +18,7 @@ extends Control
 ## ---------------------------------------------------------------------------------------------
 ## HOW IT REACHES THE REST OF THE GAME
 ## Only through the ordinary input actions. Nothing in `src/player/**` changes: the stick writes
-## `move_*` with an analogue strength plus `run`, the buttons hold `interact` / `jump` / `boost`,
+## `move_*` with an analogue strength plus `run`, the buttons hold `interact` / `emote` / `boost`,
 ## the camera drag writes `camera_left/right/up/down` (the rig turns those into a rate), and pinch
 ## sends `zoom_in` / `zoom_out`. That is also why this file may not be replaced by direct calls
 ## into `CameraRig` - the rig is another builder's file and is being edited concurrently.
@@ -58,7 +58,7 @@ const IDLE_PRIMARY_LABEL := "—"
 
 var _stick: TouchStick
 var _primary: TouchButton
-var _jump: TouchButton
+var _emote: TouchButton
 var _boost: TouchButton
 var _rot_l: TouchButton
 var _rot_r: TouchButton
@@ -156,11 +156,19 @@ func _build() -> void:
 	_primary = _make_button("primary", MobileUI.PRIMARY_R, MobileUI.PRIMARY_HIT_R,
 		UIStyle.YELLOW, UIStyle.YELLOW_EDGE, ["interact"])
 	_primary.font_size = 26
-	_jump = _make_button("jump", MobileUI.SAT_R, MobileUI.SAT_HIT_R,
-		UIStyle.CREAM, UIStyle.CREAM_EDGE, ["jump"])
-	_jump.glyph = TouchButton.Glyph.JUMP
-	_jump.label = "Jump"
-	_jump.font_size = 15
+	# Replaces the old Jump satellite (2026-09-12, user request: "jump and fly are basically the
+	# same button since flying is a jump if you tap it" - see the Fly comment below, which already
+	# made every tap on Fly a jump). One tap here presses "emote", exactly like the keyboard's C:
+	# `Player.EMOTE_CYCLE` (player.gd:123) advances wave -> happy -> dance one step per press-edge.
+	# `TouchButton.Glyph` has no EMOTE case and lives in another builder's file this round, so the
+	# icon is a small overlay child (`_add_emote_glyph` below) drawn directly by this file instead
+	# of a new enum case - same ink colour, same "painted, not photographic" language as the other
+	# glyphs, without editing a file outside this build's brief.
+	_emote = _make_button("emote", MobileUI.SAT_R, MobileUI.SAT_HIT_R,
+		UIStyle.CREAM, UIStyle.CREAM_EDGE, ["emote"])
+	_emote.label = "Emote"
+	_emote.font_size = 15
+	_add_emote_glyph(_emote)
 	# Boost holds BOTH actions, because the keyboard's boost IS the space bar: a tap is a jump and
 	# only a hold lights the thruster (Player.BOOST_GROUND_DELAY). Pressing only `boost` would fly,
 	# but it would not be "exactly as holding the key does".
@@ -216,6 +224,50 @@ func _make_button(id: String, r: float, hit: float, fill: Color, edge: Color,
 	return b
 
 
+## Draws the Emote button's icon as a plain child Control rather than a new `TouchButton.Glyph`
+## case - `touch_button.gd` is another builder's file this round and stays untouched. A five-point
+## star, the same "filled shape + stroked outline" recipe `TouchButton._draw_flame` already uses
+## for Boost, in the amber accent (STYLE_GUIDE) rather than Boost's orange so the two read as
+## different controls at a glance. Sits well above the button's own centred label (`glyph` stays
+## `NONE` on this button, so `TouchButton._draw` centres "Emote" there instead of pushing it to the
+## rim the way it does for a button WITH a glyph) - see `EmoteGlyph._draw` for the measured offset.
+func _add_emote_glyph(owner_btn: TouchButton) -> void:
+	var g := EmoteGlyph.new()
+	g.name = "Glyph"
+	g.icon_radius = owner_btn.radius * 0.40
+	owner_btn.add_child(g)
+
+
+## Inline rather than its own file for the same reason as `_add_emote_glyph` above: everything this
+## build touches has to stay inside `touch_controls.gd` / `hud.gd`.
+class EmoteGlyph:
+	extends Control
+	var icon_radius := 18.0
+	## Measured against a live capture at 1560x720 / --ui=mobile: the button's centred "Emote"
+	## label (font 15) sits roughly from button-centre-5 to +11, so the star's lowest point is
+	## pulled up to button-centre-8 - clear of the text with room to spare - by lifting the star's
+	## own centre `icon_radius * 1.5` above the button centre.
+	const LIFT_FACTOR := 1.5
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		var c := size * 0.5 - Vector2(0.0, icon_radius * LIFT_FACTOR)
+		var outer := icon_radius
+		var inner := icon_radius * 0.42
+		var pts := PackedVector2Array()
+		for i in 10:
+			var ang := deg_to_rad(-90.0) + float(i) * deg_to_rad(36.0)
+			var rr := outer if i % 2 == 0 else inner
+			pts.append(c + Vector2(cos(ang), sin(ang)) * rr)
+		draw_colored_polygon(pts, Color(UIStyle.YELLOW, 0.9))
+		var closed := pts.duplicate()
+		closed.append(pts[0])
+		draw_polyline(closed, UIStyle.TEXT_BROWN, 2.5, true)
+
+
 # ----------------------------------------------------------------------------- layout
 func _layout() -> void:
 	if _stick == null:
@@ -236,7 +288,7 @@ func _layout() -> void:
 	# Satellites sit on an arc in the upper-left quadrant of the primary, far enough apart that
 	# their (larger) hit circles never overlap: 66 + 44 + 26 = 136 between centres vs 78 + 54 = 132.
 	var arc := MobileUI.PRIMARY_R + MobileUI.SAT_R + 26.0
-	_jump.centre = pc + Vector2(0.0, -arc)
+	_emote.centre = pc + Vector2(0.0, -arc)
 	_boost.centre = pc + Vector2(-arc * 0.86, -arc * 0.50)
 	# Placement row, clear above the cluster so nothing lands under the thumbs.
 	var prow := pc.y - arc - MobileUI.SAT_R * 2.0 - 26.0
@@ -572,7 +624,7 @@ func _pointer_move(id: int, pos: Vector2) -> void:
 ## under it rather than snapping it somewhere.
 ##
 ## *** BUTTONS ARE EXCLUDED, DELIBERATELY. *** A resting thumb becoming a synthetic touch-down must
-## never be able to FIRE something. If the drag is over Jump, Boost, the context button (Talk /
+## never be able to FIRE something. If the drag is over Emote, Boost, the context button (Talk /
 ## Enter / Fly), the bag, the journal or pause, adoption is refused outright and the finger stays a
 ## ghost until it is lifted — a dead control is a far smaller bug than a rocket launched by a thumb
 ## the player never pressed with. Only the two CONTINUOUS, self-cancelling roles can be adopted:
@@ -589,7 +641,9 @@ func _pointer_move(id: int, pos: Vector2) -> void:
 ## Measured, four late drags with no touch-down (`--ui=mobile`, 1280x720, Compatibility):
 ##   over the context button (1184,624) -> pointers=0, primary alpha 0.45 (i.e. NOT pressed: a
 ##                                         pressed button paints at ALPHA_ACTIVE 0.88)
-##   over Jump (1184,488)               -> pointers=0, jump alpha 0.45
+##   over Emote (1184,488)              -> pointers=0, emote alpha 0.45 (re-measured 2026-09-12
+##                                         when Emote took this slot over from Jump - same spot,
+##                                         same result, the exclusion loop is button-name-agnostic)
 ##   in the camera zone (940,500)       -> pointers=1, role "cam"
 ##   in the stick zone (240,500)        -> pointers=1, role "stick", push 0.96, move 0.962
 ## The two that must do nothing do nothing; the two that must work, work.
@@ -775,7 +829,7 @@ func debug_drag(id: int, x: float, y: float) -> void:
 	_pointer_move(DEBUG_ID_BASE + id, Vector2(x, y))
 
 
-## Puts a finger on the CENTRE of a named widget ("primary", "jump", "boost", "bag", "journal",
+## Puts a finger on the CENTRE of a named widget ("primary", "emote", "boost", "bag", "journal",
 ## "pause", "rotate_l", "rotate_r", "place_cancel") and lifts it again on the next call.
 func debug_widget(id: String, pressed: bool) -> void:
 	var b: TouchButton = _buttons.get(id)
@@ -867,14 +921,27 @@ func debug_report(tag: String = "") -> void:
 	var dist := float(rig.call("get_zoom_distance")) if rig != null and rig.has_method("get_zoom_distance") else -1.0
 	var player := get_tree().get_first_node_in_group("player")
 	var speed := 0.0
+	var ground := -1.0
+	var anim := "?"
 	if player != null and player.has_method("get_tangent_velocity"):
 		speed = (player.call("get_tangent_velocity") as Vector3).length()
+	# TEMPORARY, ADDED FOR THE 2026-09-12 EMOTE-BUTTON PROOF: `get_ground_height` and
+	# `AstronautModel.get_state` are both pre-existing public getters (player.gd, astronaut_model.gd)
+	# - nothing in `src/player/**` changed to add this line - it just gives a Director timeline a way
+	# to measure the Fly button's tap-jumps / hold-flies split and the emote cycle as NUMBERS, not
+	# only as screenshots.
+	if player != null and player.has_method("get_ground_height"):
+		ground = float(player.call("get_ground_height"))
+	if player != null and player.has_method("get_model"):
+		var model: Object = player.call("get_model")
+		if model != null and model.has_method("get_state"):
+			anim = str(model.call("get_state"))
 	var sa := MobileUI.safe_area()
-	print("TOUCH %s mobile=%s vis=%s modals=%s push=%.2f move=%.3f run=%s speed=%.2f dist=%.2f prompt='%s' | alpha layer=%.2f stick=%.2f primary=%.2f jump=%.2f chrome=%.2f | safe=(%.0f,%.0f,%.0f,%.0f)" % [
+	print("TOUCH %s mobile=%s vis=%s modals=%s push=%.2f move=%.3f run=%s speed=%.2f ground=%.3f anim=%s dist=%.2f prompt='%s' | alpha layer=%.2f stick=%.2f primary=%.2f emote=%.2f chrome=%.2f | safe=(%.0f,%.0f,%.0f,%.0f)" % [
 		tag, str(MobileUI.is_mobile()), str(visible), str(EventBus.open_modals()), _stick.push,
 		Input.get_vector("move_left", "move_right", "move_forward", "move_back").length(),
-		str(Input.is_action_pressed("run")), speed, dist, _prompt,
-		_layer_alpha, _stick.modulate.a, _primary.modulate.a, _jump.modulate.a, _bag.modulate.a,
+		str(Input.is_action_pressed("run")), speed, ground, anim, dist, _prompt,
+		_layer_alpha, _stick.modulate.a, _primary.modulate.a, _emote.modulate.a, _bag.modulate.a,
 		sa.x, sa.y, sa.z, sa.w])
 
 
