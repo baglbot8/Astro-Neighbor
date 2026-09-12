@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 	<head>
-	<meta name="astro-build" content="62bd40a">
+	<meta name="astro-build" content="eadeebd">
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
 		<title>Astro Neighbor</title>
@@ -93,7 +93,7 @@ body {
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
-<script>(function(){var R=[];var N=window.AudioContext||window.webkitAudioContext;if(!N)return;function W(o){function C(){var c=new N(arguments[0]);R.push(c);return c}C.prototype=N.prototype;return C}var P=W();window.AudioContext=P;if(window.webkitAudioContext)window.webkitAudioContext=P;window.__astroAudio={ctxs:R,resume:function(){R.forEach(function(c){if(c.state!=='running'){try{c.resume()}catch(e){}}})}};var go=function(){window.__astroAudio.resume()};['touchstart','touchend','pointerdown','pointerup','mousedown','click','keydown'].forEach(function(e){window.addEventListener(e,go,{capture:true,passive:true})});document.addEventListener('visibilitychange',go);})();</script>
+<script>(function(){var S=function(){try{if(navigator.audioSession&&navigator.audioSession.type!=='playback')navigator.audioSession.type='playback'}catch(e){}};S();var R=[];var N=window.AudioContext||window.webkitAudioContext;if(!N)return;function W(o){function C(){var c=new N(arguments[0]);R.push(c);return c}C.prototype=N.prototype;return C}var P=W();window.AudioContext=P;if(window.webkitAudioContext)window.webkitAudioContext=P;window.__astroAudio={ctxs:R,session:S,resume:function(){R.forEach(function(c){if(c.state!=='running'){try{c.resume()}catch(e){}}})}};var go=function(){S();window.__astroAudio.resume()};['touchstart','touchend','pointerdown','pointerup','mousedown','click','keydown'].forEach(function(e){window.addEventListener(e,go,{capture:true,passive:true})});document.addEventListener('visibilitychange',go);})();</script>
 	</head>
 	<body>
 		<canvas id="canvas">
@@ -112,7 +112,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":14354640,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":14356688,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
