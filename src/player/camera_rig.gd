@@ -1355,9 +1355,11 @@ func _update_occluder_fade(delta: float, cam_pos: Vector3) -> void:
 		e["t"] = t
 		var alive := false
 		var meshes: Array = e["meshes"]
-		for g: GeometryInstance3D in meshes:
+		# Variant, not GeometryInstance3D: a typed loop variable errors on a freed mesh before
+		# is_instance_valid() can skip it, and the error stops this function every frame.
+		for g: Variant in meshes:
 			if is_instance_valid(g):
-				g.transparency = 0.0 if _fade_off else t * FADE_TO
+				(g as GeometryInstance3D).transparency = 0.0 if _fade_off else t * FADE_TO
 				alive = true
 		if not alive or (t <= 0.0 and want <= 0.0):
 			done.append(id)

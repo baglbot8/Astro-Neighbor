@@ -1605,3 +1605,31 @@ center"; a star 25 px high reads as off-centre next to Fly on her screen. Rule: 
   beside the pad and the props that grow around it - not the camera solver. The next attempt should move the
   bench (`build_bench.gd`'s placement) or keep a cutscene clearing free of props around it, then re-check the
   shipped solver, instead of a third camera round.
+
+## 53. [2026-09-13] A freed find beacon flooded the log and switched the camera fade off
+
+Found in passing by the Phase 3a light-link critic. Fixed in `camera_rig.gd` `_update_occluder_fade` (not yet
+committed). Measured in scratch copies with a read-only harness on Bolt's step 0; an independent critic re-measured
+every number below in its own copy.
+
+* **Cause.** A beacon's collider is on layer 4, so the camera fades it like a prop and keeps its meshes in
+  `_faded`. When `ProjectMarkers.clear_markers` frees it (`_clear_step_world` on a finished step, or
+  `_refresh_world`), `for g: GeometryInstance3D in meshes:` raised "Trying to assign invalid previously freed
+  instance" at camera_rig.gd:1358, BEFORE `is_instance_valid(g)` on the next line could skip it. The error ends
+  the whole function, so the dead entry was never erased: 359 errors per repro run, one per frame, forever.
+  Walking up to a marker does not free it (measured: node still valid, found=true).
+* **Worse than log spam.** The abort also skipped every `_faded` entry after the dead one. With beacon m0 freed,
+  beacon m1 in the sight line sat at t=0.000, transparency 0.000 for the whole 10 s window. In a debug build one
+  freed beacon turned the camera fade off for the rest of the session.
+* **Fix.** The loop variable is `Variant` and the cast comes after the check. After: 0 errors in all three free
+  paths (step, refresh, one marker), the dead entry leaves `_faded` within 2 frames, m1 reaches 0.900 and fades
+  back out. `tools/check.sh` CHECK PASSED; home, zorp, bolt, hub, fen, grig and vela boot with 0 errors. The web
+  build is `--export-release`, where this check is probably compiled out - not measured.
+* **Lesson: a typed loop variable is not a safe place for an object that may be freed.** `for x: SomeType in arr`
+  type-checks each element as it is assigned, so `is_instance_valid(x)` inside the loop never gets to run on a
+  freed one. Loop as `Variant`, check, then cast.
+* **OPEN - the camera fade does not show in the Compatibility renderer (the web build).** Same harness, same spot,
+  m1 at transparency 0.900: Compatibility drew the beacon fully solid, the same as at 0.000 (2 critic captures);
+  Forward+ drew a faint ghost (1 lead capture). This agrees with entry 50 ("The Compatibility renderer ignores
+  transparency"). So `GeometryInstance3D.transparency`, which is the whole near-geometry fade, probably does
+  nothing on the phone. Not checked on a real phone, not fixed here; a fix would have to fade inside the materials.
