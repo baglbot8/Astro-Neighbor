@@ -28,6 +28,8 @@ const BUILD_BENCH_SCENE := "res://src/projects/build_bench.tscn"
 ## Phase 2 builder N: the short cutscene when a rocket part is fitted (it listens for
 ## EventBus.rocket_part_fitted). Home only - the bench and the rocket are both at the crash site.
 const PART_CELEBRATION_SCENE := "res://src/campaign/part_celebration.tscn"
+## Phase 2 builder E: loaded by path, not class_name, so this file parses without it.
+const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
 const NPC_DIR := "res://src/characters/npcs/"
 const BUILDING_DIR := "res://src/hub/buildings/"
 
@@ -56,6 +58,12 @@ func _ready() -> void:
 	_spawn_optional(ROCKET_PAD_SCENE, "Rocket")
 	_spawn_optional(DECO_MANAGER_SCENE, "Decorations")
 	_spawn_optional(TRASH_SYSTEM_SCENE, "TrashField")
+	# Phase 2 builder E asked for this: the project system must exist on EVERY world from the landing.
+	# Without it the find markers and place ring only appeared after the first talk with that neighbour,
+	# and project items and the part showed nameless in the bag until then (E's critic measured 0 markers
+	# after a reload). Before the bench, which reads ProjectSystem.bench_items().
+	if ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+		load(PROJECT_SYSTEM_PATH).get_or_create()
 	if pid == "home":
 		_spawn_optional(BUILD_BENCH_SCENE, "BuildBench")
 		_spawn_optional(PART_CELEBRATION_SCENE, "PartCelebration")

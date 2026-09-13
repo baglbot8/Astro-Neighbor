@@ -87,6 +87,12 @@ func _hook_actions(entry: Dictionary) -> Array:
 			actions.append({"id": "wear", "label": "Wear", "primary": true})
 		"favor_item":
 			actions.append({"id": "use", "label": "Use", "primary": true})
+	# Project items and rocket parts (Phase 2; each carries "project": npc_id) are one of a kind, and
+	# Drop destroyed them (builder E's report). No Drop for them; a part says where it goes instead.
+	if str(def.get("project", "")) != "":
+		if kind == "rocket_part":
+			actions.append({"id": "fit_hint", "label": "Fit it at the bench", "disabled": true})
+		return actions
 	actions.append({"id": "drop", "label": "Drop"})
 	return actions
 

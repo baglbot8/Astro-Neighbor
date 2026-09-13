@@ -160,15 +160,17 @@ func _build() -> void:
 	# same button since flying is a jump if you tap it" - see the Fly comment below, which already
 	# made every tap on Fly a jump). One tap here presses "emote", exactly like the keyboard's C:
 	# `Player.EMOTE_CYCLE` (player.gd:123) advances wave -> happy -> dance one step per press-edge.
-	# `TouchButton.Glyph` has no EMOTE case and lives in another builder's file this round, so the
-	# icon is a small overlay child (`_add_emote_glyph` below) drawn directly by this file instead
-	# of a new enum case - same ink colour, same "painted, not photographic" language as the other
-	# glyphs, without editing a file outside this build's brief.
+	# Draws its star through `TouchButton.Glyph.EMOTE` (2026-09-12: the user found the star was not
+	# centred - it used to be a separate overlay Control drawn ABOVE this button's own centred
+	# label, with a hand-derived lift to clear it, and still measured 25 px off-centre). Using the
+	# glyph enum instead gives Emote the exact same "icon centred, label pushed to the rim" layout
+	# `TouchButton._draw` already gives Fly - see the `Glyph.EMOTE` case and `_draw_star` in
+	# `touch_button.gd` (this build's file too, this round).
 	_emote = _make_button("emote", MobileUI.SAT_R, MobileUI.SAT_HIT_R,
 		UIStyle.CREAM, UIStyle.CREAM_EDGE, ["emote"])
 	_emote.label = "Emote"
 	_emote.font_size = 15
-	_add_emote_glyph(_emote)
+	_emote.glyph = TouchButton.Glyph.EMOTE
 	# Boost holds BOTH actions, because the keyboard's boost IS the space bar: a tap is a jump and
 	# only a hold lights the thruster (Player.BOOST_GROUND_DELAY). Pressing only `boost` would fly,
 	# but it would not be "exactly as holding the key does".
@@ -224,48 +226,13 @@ func _make_button(id: String, r: float, hit: float, fill: Color, edge: Color,
 	return b
 
 
-## Draws the Emote button's icon as a plain child Control rather than a new `TouchButton.Glyph`
-## case - `touch_button.gd` is another builder's file this round and stays untouched. A five-point
-## star, the same "filled shape + stroked outline" recipe `TouchButton._draw_flame` already uses
-## for Boost, in the amber accent (STYLE_GUIDE) rather than Boost's orange so the two read as
-## different controls at a glance. Sits well above the button's own centred label (`glyph` stays
-## `NONE` on this button, so `TouchButton._draw` centres "Emote" there instead of pushing it to the
-## rim the way it does for a button WITH a glyph) - see `EmoteGlyph._draw` for the measured offset.
-func _add_emote_glyph(owner_btn: TouchButton) -> void:
-	var g := EmoteGlyph.new()
-	g.name = "Glyph"
-	g.icon_radius = owner_btn.radius * 0.40
-	owner_btn.add_child(g)
-
-
-## Inline rather than its own file for the same reason as `_add_emote_glyph` above: everything this
-## build touches has to stay inside `touch_controls.gd` / `hud.gd`.
-class EmoteGlyph:
-	extends Control
-	var icon_radius := 18.0
-	## Measured against a live capture at 1560x720 / --ui=mobile: the button's centred "Emote"
-	## label (font 15) sits roughly from button-centre-5 to +11, so the star's lowest point is
-	## pulled up to button-centre-8 - clear of the text with room to spare - by lifting the star's
-	## own centre `icon_radius * 1.5` above the button centre.
-	const LIFT_FACTOR := 1.5
-
-	func _ready() -> void:
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	func _draw() -> void:
-		var c := size * 0.5 - Vector2(0.0, icon_radius * LIFT_FACTOR)
-		var outer := icon_radius
-		var inner := icon_radius * 0.42
-		var pts := PackedVector2Array()
-		for i in 10:
-			var ang := deg_to_rad(-90.0) + float(i) * deg_to_rad(36.0)
-			var rr := outer if i % 2 == 0 else inner
-			pts.append(c + Vector2(cos(ang), sin(ang)) * rr)
-		draw_colored_polygon(pts, Color(UIStyle.YELLOW, 0.9))
-		var closed := pts.duplicate()
-		closed.append(pts[0])
-		draw_polyline(closed, UIStyle.TEXT_BROWN, 2.5, true)
+## FORMER HOME OF THE EMOTE STAR (removed 2026-09-12). It used to be a plain child `Control`
+## drawn ABOVE this button's own centred label, with a lift hand-derived from font metrics because
+## `TouchButton.Glyph` had no EMOTE case - and it still measured 25 px above the button's true
+## centre, because a button with `glyph == Glyph.NONE` centres its label ASTRIDE the middle
+## instead of pushing it to the rim, so the star had nowhere centred to sit. The star is now
+## `TouchButton.Glyph.EMOTE` / `_draw_star` in `touch_button.gd`, drawn and centred exactly the way
+## Boost's flame is - see `_make_button` call for "emote" above.
 
 
 # ----------------------------------------------------------------------------- layout
@@ -840,6 +807,17 @@ func debug_widget(id: String, pressed: bool) -> void:
 		_pointer_down(DEBUG_ID_BASE + 90, b.centre)
 	else:
 		_pointer_up(DEBUG_ID_BASE + 90)
+
+
+## Sets a named widget's `dimmed` flag directly, for a timeline to capture the dimmed paint state -
+## no button on the satellite row is ever dimmed by ordinary play (only `_primary` and `_bag` are),
+## so there is no gameplay path that reaches it otherwise.
+func debug_set_dimmed(id: String, v: bool) -> void:
+	var b: TouchButton = _buttons.get(id)
+	if b == null:
+		push_warning("TouchControls.debug_set_dimmed: no widget '%s'" % id)
+		return
+	b.dimmed = v
 
 
 ## Pushes the stick from its resting home by a fraction of full travel, in screen direction

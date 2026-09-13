@@ -378,6 +378,114 @@ def shooting_star():
     return _rev(y, 0.35, 0.85, tone=9000.0)
 
 
+# --------------------------------------------------------------------------- campaign
+
+# "part_fitted" plays over the part celebration (BUILD_PLAN Phase 2, builder N's 5-8 s cutscene) when a
+# rocket part is fitted at the bench. STYLE_GUIDE "Sound identity": no mallet jingle - no marimba,
+# vibraphone, glockenspiel or bell arpeggio. It is built from the rocket's own world instead: a latch
+# seating the part, the ship's systems powering up, one warm chord, and the comms two-beep. Three takes
+# for the user to judge by ear (no agent can hear); PART_FITTED_TAKE picks the one that ships.
+PART_FITTED_TAKE = "a"
+
+
+def _at(x, start_s, n):
+    """x (mono or stereo) placed start_s seconds into an n-sample stereo buffer."""
+    x = S.to_stereo(x)
+    out = np.zeros((2, n))
+    s = S.n_samples(start_s)
+    m = min(n - s, x.shape[-1])
+    out[:, s:s + m] = x[:, :m]
+    return out
+
+
+def _latch(seed=240):
+    """The part seating home: a low thunk, a click and a short metal-plate tink (plate modes, not a bar)."""
+    n = S.n_samples(0.45)
+    t = S.times(n)
+    thunk = S.sine(120.0 * np.exp(-t / 0.03) + 52.0, n) * S.env_perc(n, 0.09, 0.001) * 0.9
+    click = S.bandpass(S.noise(n, seed), 2600.0, 1.2) * S.env_perc(n, 0.012, 0.0005) * 0.5
+    f0 = 940.0
+    tink = (S.sine(f0, n) + 0.7 * S.sine(f0 * 1.59, n, 0.3) + 0.45 * S.sine(f0 * 2.14, n, 0.6)) \
+        * S.env_perc(n, 0.07, 0.001) * 0.1
+    return thunk + click + tink
+
+
+def _systems_rise(dur=0.9, seed=241):
+    """The rocket's systems coming online: detuned saws on a fifth, filter opening, a sub gliding C2 -> C3."""
+    n = S.n_samples(dur)
+    t = S.times(n)
+    build = np.clip(t / dur, 0.0, 1.0)
+    f = S.glide_freq(65.41, 130.81, n, dur * 0.8)
+    saws = S.saw(f * 2.0 * 0.997, n) + S.saw(f * 2.0 * 1.003, n, 0.4) + S.saw(f * 3.0, n, 0.7)
+    y = S.sweep_lowpass(saws / 3.0, 250.0, 3200.0, dur * 0.45)
+    sub = S.sine(f, n) * 0.5
+    air = S.highpass(S.noise(n, seed), 4000.0) * 0.05 * build
+    return (y * 0.6 + sub + air) * (0.15 + 0.85 * build ** 1.5) * S.adsr(n, 0.02, 0.0, 1.0, 0.04)
+
+
+def _comms_confirm(f1=783.99, f2=1046.5):
+    """Two short clean sine beeps a fourth apart (G5, C6): the comms channel saying 'confirmed'."""
+    one = S.n_samples(0.075)
+
+    def beep(f):
+        return S.sine(f, one) * S.adsr(one, 0.004, 0.02, 0.8, 0.02)
+    return np.concatenate([beep(f1), np.zeros(S.n_samples(0.05)), beep(f2)]) * 0.35
+
+
+def _sparkle(dur=1.4):
+    """The new finish gleaming: a thin band of high noise, decorrelated left and right, decaying."""
+    n = S.n_samples(dur)
+    t = S.times(n)
+    env = np.exp(-t / 0.45) * S.adsr(n, 0.08, 0.0, 1.0, 0.1) * 0.12
+    return np.stack([S.bandpass(S.noise(n, 242), 9000.0, 0.9) * env, S.bandpass(S.noise(n, 243), 9000.0, 0.9) * env])
+
+
+def _warm_chord(notes="[C4,E4,G4,C5]", dur=1.4, gain=0.6):
+    """One held chord on the warm saw pad (a quick 0.1 s swell, not a struck note)."""
+    def inst(f, d, v=1.0):
+        return I.pad(f, d, v, cutoff=2000.0, attack=0.1, release=1.0)
+    return _seq("%s:%.2f@0.7" % (notes, dur), inst, bpm=60.0, seconds=dur + 1.2, gain=gain)
+
+
+def part_fitted_a():
+    """Take A 'power-up': latch, systems rise 0.9 s, warm C major chord + comms confirm + sparkle."""
+    n = S.n_samples(3.2)
+    y = _at(_latch(), 0.0, n)
+    y += _at(_systems_rise(0.9), 0.10, n) * 0.55
+    y += _at(_warm_chord(), 0.95, n)
+    y += _at(_comms_confirm(), 1.05, n)
+    y += _at(_sparkle(), 0.98, n)
+    return _rev(y, 0.2, 0.7, tone=8000.0)
+
+
+def part_fitted_b():
+    """Take B 'ignite': latch, a short engine rev (the rocket's own ignition, cut at 0.8 s), chord, sparkle."""
+    n = S.n_samples(3.2)
+    rev = rocket_ignite()[..., :S.n_samples(0.8)]
+    rev = rev * S.adsr(S.length(rev), 0.02, 0.0, 1.0, 0.18)
+    y = _at(_latch(), 0.0, n)
+    y += _at(rev, 0.12, n) * 0.5
+    y += _at(_warm_chord(), 0.9, n)
+    y += _at(_sparkle(), 0.92, n)
+    return _rev(y, 0.2, 0.7, tone=8000.0)
+
+
+def part_fitted_c():
+    """Take C 'settle': latch, a slow airy swell (no rise), comms confirm on top. The softest take."""
+    n = S.n_samples(3.2)
+    swell = _seq("[C5,G5]:1.6@0.7", I.shimmer, bpm=60.0, seconds=2.8)
+    y = _at(_latch(), 0.0, n)
+    y += _at(swell, 0.05, n) * 1.4
+    y += _at(_warm_chord("[C3,G3,E4]", 1.5, 0.45), 0.2, n)
+    y += _at(_comms_confirm(), 0.9, n)
+    y += _at(_sparkle(), 0.6, n) * 0.7
+    return _rev(y, 0.25, 0.75, tone=8000.0)
+
+
+def part_fitted():
+    return {"a": part_fitted_a, "b": part_fitted_b, "c": part_fitted_c}[PART_FITTED_TAKE]()
+
+
 # name -> (generator, stereo?, loop?)
 SFX = {
     "footstep_grass_0": (lambda: footstep_grass(0), False, False),
@@ -416,6 +524,7 @@ SFX = {
     "dance_beat": (dance_beat, True, True),
     "text_advance": (text_advance, True, False),
     "shooting_star": (shooting_star, True, False),
+    "part_fitted": (part_fitted, True, False),
 }
 
 

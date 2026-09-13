@@ -1496,3 +1496,45 @@ seed-derived now and both land on the same coordinates.
   they are moved under `tests/` (the Web preset already excludes `tests/*`).
 * Zorp's whole-frame saturation p90 sits at 0.667 before any mini-game and 0.673 with one, against a 0.68 gate,
   and its sky region reads 0.700 with or without. Pre-existing, but there is no headroom left on that world.
+
+## 48. [2026-09-12] Bolt's trip home became a mini-game, and the bench now closes after a fit
+
+**Bolt's project** (`src/projects/data/bolt.gd`, PASSED round 1, Opus critic). The user: "swap Bolt's step for a
+mini-game". Step 2 used to be BUILD the Yard Regulator at the crash-site bench at home for 6 scrap and fly it back
+- the round trip she named. It is now a `minigame` step: catch 5 of Bolt's loose bolts on his own world. Step 3's
+`place` gives the regulator (the schema's existing `give` key - `project_system.gd` needed no change). Measured:
+**2 flights instead of 4** (to Bolt, and home to fit), one step per in-game day, friendship 0 -> 6 -> 11 -> 16.
+The critic's own run caught 5 of 5 for real; the builder's "unbroken" run had caught 0 and completed through a
+fallback that teleports and forces boost, with scrap set by hand - its claim was wrong, the step is right.
+* **Scrap no longer limits Bolt's project.** Without the 6-scrap build, the whole project costs nothing until the
+  8-scrap fit, and one pickup (3-6 scrap) nearly pays it. Home grows 8 scrap pickups a day. For Phase 6 pacing.
+* **Pre-existing:** the place ring's centre is blocked by a prop (nearest free spot 1.26 m; 71% of the ring is
+  placeable), so a player standing in the middle sees a red ghost and has to step aside.
+* **Outside scope, a real bug:** `EventBus.travel_started` fires TWICE per flight (`rocket_pad.gd:1198` and
+  `space_travel.gd`), so anything counting that signal counts double.
+* Untested and harmless: an old working-folder save stopped after the regulator was BUILT would be handed a
+  second one at the day-3 talk. The phone never had that version.
+
+**The bench closes after a fit** (`player.gd`, `shop_panel.gd`, `item_grid_panel.gd`, PASSED round 1, Opus
+critic). Item 42's measured fix, applied: `_on_modal_changed` sets `_interact_was_pressed` from the held key so a
+key still down when a modal closes is not a new press; `_try_fit` closes the panel; `open_panel` kills a running
+close tween. On all four Yes paths (tap, held action, a real E key event, a one-frame Director tap, plus Enter,
+pad A and mouse) the bench closes 2-4 ms after Yes, never re-opens, and the celebration starts by itself
+0.42-0.50 s later (SETTLE_SECONDS 0.35 by design). **The test was proved able to fail:** the same probe with only
+the `player.gd` line removed re-opens the bench 0.125 s after an E Yes, with the modal stuck and 0 m walked.
+Held-E closes of a talk, the bag and the pause menu next to an interactable re-open nothing.
+* A **Space** "Yes" still made the astronaut hop (Space is also jump), delaying the celebration to ~1.0 s after
+  the close. FIXED the same way (`_on_modal_changed` also seeds `_jump_was_pressed`; boost needed nothing,
+  because `_boost_hold` resets while gated and needs 0.18 s held). With the fix: no hop, celebration 0.335 s
+  after the Yes. The test was proved able to fail: with that one line disabled, a real jump fired (0.55 m) and
+  the celebration came 0.80 s late. A tap on Fly still jumps 0.314 m; holding Fly still climbs to ~3.79 m.
+* **Leftover:** `showcase/ui_mobile.gd`'s demo loop still calls `debug_widget("jump", ...)` in `_release()`, an id
+  that no longer exists since Jump became Emote - a harmless push_warning whenever that showcase auto-plays.
+
+**LESSON - a critic passed a half-fix its own numbers disproved.** The Emote star brief asked for the icon to be
+centred "the same way Fly's glyph + label stack is". The builder derived a better lift and was honest that the
+star still sat -25.1 px above centre (-0.57 of the radius) against Fly's -2.4 px, because TouchButton centres a
+glyph only when the button HAS a glyph, and Emote used Glyph.NONE with an overlay. The critic re-measured exactly
+those numbers, confirmed the horizontal centring, and PASSED it. The user had asked for "perfectly in the
+center"; a star 25 px high reads as off-centre next to Fly on her screen. Rule: when a brief names a reference
+("like Fly's"), the critic's pass bar is that reference, numerically, on every axis - not "improved".

@@ -66,6 +66,8 @@ var _details_h := 460.0
 ## Mobile close button in the header - a panel must not need a keyboard Esc on a phone.
 var _close_btn: Button
 var _scroll_tween: Tween
+## The tween `close_panel()` starts (UIStyle.pop_out). See `open_panel()`.
+var _close_tween: Tween
 
 var _modal_name := "inventory"
 var _entries: Array[Dictionary] = []
@@ -538,6 +540,15 @@ func open_panel() -> void:
 	if is_open:
 		refresh()
 		return
+	# DEFENSIVE (docs/OPEN_ISSUES.md 42, "Latent"). UIStyle.pop_out's own end callback hides `_panel`
+	# UNCONDITIONALLY, 0.18 s after close_panel() ran, regardless of what is_open reads by then - so an
+	# open_panel() landing inside that window (a re-open racing the fix above, or any future caller
+	# closing and reopening the same panel quickly) would otherwise be undone: this open sets
+	# visible=true now, and the stale tween's callback still fires later and sets it back to false,
+	# leaving an open-but-invisible, input-blocking panel with no visible symptom. Killing the tween
+	# here removes that whole failure mode regardless of what raced it.
+	if _close_tween != null and _close_tween.is_valid():
+		_close_tween.kill()
 	is_open = true
 	visible = true
 	_cooldown = 0.2
@@ -562,6 +573,7 @@ func close_panel() -> void:
 	var t := create_tween()
 	t.tween_property(_backdrop, "modulate:a", 0.0, 0.18)
 	var p := UIStyle.pop_out(_panel)
+	_close_tween = p
 	p.chain().tween_callback(func() -> void:
 		if not is_open:
 			visible = false)

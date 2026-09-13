@@ -15,7 +15,7 @@ extends Control
 
 signal tapped
 
-enum Glyph { NONE, JUMP, BOOST, BAG, JOURNAL, PAUSE, ROTATE_L, ROTATE_R, CLOSE }
+enum Glyph { NONE, JUMP, BOOST, BAG, JOURNAL, PAUSE, ROTATE_L, ROTATE_R, CLOSE, EMOTE }
 
 ## Actions held down while this button is touched (empty for a TAP button).
 var actions: PackedStringArray = []
@@ -124,6 +124,8 @@ func _draw() -> void:
 				deg_to_rad(340.0), 20, Color(ink, 0.55), 3.0, true)
 		Glyph.BOOST:
 			_draw_flame(c, radius * 0.62, ink)
+		Glyph.EMOTE:
+			_draw_star(c, radius * 0.56, ink)
 		Glyph.BAG:
 			_draw_bag(c, radius * 0.60, ink)
 		Glyph.JOURNAL:
@@ -173,6 +175,24 @@ func _draw_flame(c: Vector2, r: float, ink: Color) -> void:
 	var closed := out.duplicate()
 	closed.append(out[0])
 	draw_polyline(closed, ink, 3.0, true)
+
+
+## Five-point star for Emote, same recipe as `_draw_flame`: a filled shape in an accent colour
+## plus a stroked outline, sized from the button's radius rather than fixed pixels. Ten vertices
+## alternating an outer and an inner radius around `c`, tip pointing straight up - a regular star
+## like this is 5-fold rotationally symmetric, so its own area centroid sits exactly on `c` with no
+## extra offset needed, unlike the inline overlay this replaces (docs/OPEN_ISSUES.md).
+func _draw_star(c: Vector2, r: float, ink: Color) -> void:
+	var inner := r * 0.42
+	var pts := PackedVector2Array()
+	for i in 10:
+		var ang := deg_to_rad(-90.0) + float(i) * deg_to_rad(36.0)
+		var rr := r if i % 2 == 0 else inner
+		pts.append(c + Vector2(cos(ang), sin(ang)) * rr)
+	draw_colored_polygon(pts, Color(UIStyle.YELLOW, 0.9))
+	var closed := pts.duplicate()
+	closed.append(pts[0])
+	draw_polyline(closed, ink, 2.5, true)
 
 
 func _draw_bag(c: Vector2, r: float, ink: Color) -> void:

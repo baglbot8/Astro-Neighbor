@@ -66,7 +66,10 @@ func random_reward_decoration(rng: RandomNumberGenerator = null) -> Dictionary:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
-	var pool: Array = items_of_kind("decoration")
+	# Project items (Phase 2: each carries "project": npc_id) are one neighbour's fix, never a reward.
+	# The draw favours "common", so without this a project's fix was the likeliest favor reward - with
+	# the campaign off too (measured by builder E's critic: fixer_in_reward_pool=true).
+	var pool: Array = items_of_kind("decoration").filter(func(d): return str(d.get("project", "")) == "")
 	if pool.is_empty():
 		return {}
 	var candidates: Array = pool.filter(func(d): return GameState.item_count(d["id"]) < 3)

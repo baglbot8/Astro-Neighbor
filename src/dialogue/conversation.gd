@@ -62,8 +62,15 @@ static func run(npc: NPC, player: Node3D) -> void:
 	# handle_conversation(runner, npc, player) -> bool. It returns true whenever this neighbour has an
 	# active project - including "come back tomorrow" - so a random favor never competes with the
 	# project for the same conversation (favor_system.can_offer has no campaign gate of its own).
+	# Two things still go before the project, both from the Phase 2 checks:
+	# - project_system.gd returns FALSE when a delivery gift for this neighbour is in the bag (builder
+	#   E's one exception, accepted by the lead), so the delivery branch below must stay FIRST.
+	# - a favour already accepted from this neighbour and ready to hand in: a project that starts later
+	#   (a Phase 1 campaign save loaded by this build) would otherwise hold it for three game days.
 	var project_handled := false
-	if ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+	var active_now: Dictionary = favors.active_favor_for(npc_id) if favors != null else {}
+	var favor_ready := not active_now.is_empty() and favors.is_ready_to_turn_in(active_now)
+	if not favor_ready and ResourceLoader.exists(PROJECT_SYSTEM_PATH):
 		var projects = load(PROJECT_SYSTEM_PATH).get_or_create()
 		if projects != null and projects.has_method("handle_conversation"):
 			project_handled = await projects.handle_conversation(runner, npc, player)

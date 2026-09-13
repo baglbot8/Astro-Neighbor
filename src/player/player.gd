@@ -230,6 +230,26 @@ func _exit_tree() -> void:
 ## `modal=0`: physics is off as well, which is the pad's freeze, not a stale gate.
 func _on_modal_changed(_name: String) -> void:
 	input_enabled = not EventBus.is_modal_open()
+	# ROOT CAUSE FIX (docs/OPEN_ISSUES.md 42). While a modal is open, gameplay==false above keeps
+	# `interact_pressed` (and therefore `_interact_was_pressed`) forced to false every physics frame
+	# no matter what the physical button is doing - see the read-input block below. If a modal closes
+	# while E/Enter/pad A is still physically held (answering a confirm dialog's "Yes", which fires on
+	# that same key), the NEXT physics frame would otherwise see `interact_pressed=true` against a
+	# stale `_interact_was_pressed=false` and read the still-held key as a brand NEW press, firing
+	# `_target.interact()` again - the measured cause of the bench (or any interactable) silently
+	# reopening one physics frame after a keyboard/pad "Yes". Seeding it here, at the moment the gate
+	# actually lifts, means an already-held key is never mistaken for a fresh one.
+	_interact_was_pressed = Input.is_action_pressed("interact")
+	# SAME BUG, SAME FIX, for Space. Space is both the confirm dialog's "Yes" and the jump button, and
+	# `jump_just := jump_pressed and not _jump_was_pressed` is exactly the same stale-previous-frame
+	# comparison as interact above - gated to false every frame the modal was open, so a Space "Yes"
+	# still physically held the instant the modal closes would otherwise read as a brand new jump
+	# press on the very next physics frame (measured: bench closes, astronaut hops, the celebration -
+	# which waits for idle - starts ~1.0 s late instead of the ~0.4 s every other Yes path gets).
+	# `_boost_hold`/`_boosting` do NOT need the same seeding: boost is a held-duration accumulator, not
+	# an edge compare, and `_update_boost_state` already zeroes `_boost_hold` every frame the modal
+	# gates `held` to false, so the first post-close frame starts counting from 0 like a fresh press.
+	_jump_was_pressed = Input.is_action_pressed("jump")
 
 
 # ============================================================================= public API
