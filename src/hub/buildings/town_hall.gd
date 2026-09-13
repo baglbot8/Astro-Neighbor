@@ -433,8 +433,14 @@ func _on_board(player: Node3D) -> void:
 	if not begin_flow(player):
 		return
 	var placed: int = (GameState.placed_decorations.get("home", []) as Array).size()
+	# "press Tab" was reported from a real phone (docs/OPEN_ISSUES.md #49) — no Tab key on a
+	# touchscreen. Tab opens the bag straight to its decorations tab (hud.gd's `decorate` handler);
+	# the touch front end's bag button is the same panel, one tab over. Routes through
+	# MobileUI.bag_hint rather than a local is_mobile() ternary, so the wording lives in exactly
+	# one place — intro_director.gd's own placement hint uses the same helper.
+	var decorate_tip := "Tip: %s to decorate anywhere on your planet." % MobileUI.bag_hint()
 	var tips: Array[String] = [
-		"Tip: press Tab to decorate anywhere on your planet.",
+		decorate_tip,
 		"Tip: Cosmo Depot restocks every single morning.",
 		"Tip: neighbours pay well for little favours.",
 		"Tip: stardust regrows overnight. Sweep the hills!",

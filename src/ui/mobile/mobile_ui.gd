@@ -198,6 +198,29 @@ static func pick(d: float, m: float) -> float:
 	return m if is_mobile() else d
 
 
+## Names the control that fires `interact` — the E key on a keyboard, the big primary/context
+## button on a phone (docs/OPEN_ISSUES.md #49: "press E" reported straight off a real iPhone,
+## rocket_pad.gd's rocket hint). `capital` picks the form for the start of a sentence. Every
+## onboarding hint that tells the player to interact routes through this ONE place rather than
+## repeating a `MobileUI.is_mobile()` string pair next to each hint.
+static func interact_hint(capital: bool = false) -> String:
+	if is_mobile():
+		return "Tap the big button" if capital else "tap the big button"
+	return "Press E" if capital else "press E"
+
+
+## Names the control that opens the bag — Tab on a keyboard, the HUD bag button on a phone
+## (docs/OPEN_ISSUES.md #49: "press Tab" reported off a real phone, from intro_director.gd's
+## placement hint and town_hall.gd's bulletin tip — both hardcoded the same is_mobile() pair
+## before this existed). `capital` picks the form for the start of a sentence. Every hint that
+## tells the player to open their bag routes through this ONE place, same reasoning as
+## `interact_hint` above.
+static func bag_hint(capital: bool = false) -> String:
+	if is_mobile():
+		return "Tap the bag button" if capital else "tap the bag button"
+	return "Press Tab" if capital else "press Tab"
+
+
 ## Interact prompts are authored for a keyboard and some of them carry a key hint - the placement
 ## controller's is "Place - Q/R turn". On a phone there is no Q or R, and the rotate buttons are on
 ## screen anyway, so everything from the first separator is dropped. Desktop text is untouched.

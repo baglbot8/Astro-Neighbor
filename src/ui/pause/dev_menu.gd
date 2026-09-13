@@ -435,10 +435,21 @@ func _refresh_values() -> void:
 		_scrap_label.text = str(GameState.scrap)
 	if _stardust_label != null:
 		_stardust_label.text = str(GameState.stardust)
+	# BLOCKED, not a plain assignment (found 2026-09-12, docs/OPEN_ISSUES.md item 49): ToggleSwitch has
+	# no set_pressed_no_signal — its `on` setter (`set_on`) always emits `toggled` itself, and this sync
+	# runs on every open (a fresh ToggleSwitch defaults to `on = false`, so the very first refresh on
+	# each world flips it to match a `true` GameState value) as well as after every action. Without the
+	# block, that flip fires the real handler and toast — "Campaign active: true" on open, never asked
+	# for — exactly as if the player had touched the switch. A hand tap still toggles and toasts: this
+	# only wraps the menu's own read-back of state, not ToggleSwitch.activate()'s own set_on call.
 	if _campaign_toggle != null:
+		_campaign_toggle.set_block_signals(true)
 		_campaign_toggle.on = GameState.campaign_active
+		_campaign_toggle.set_block_signals(false)
 	if _story_toggle != null:
+		_story_toggle.set_block_signals(true)
 		_story_toggle.on = GameState.story_done
+		_story_toggle.set_block_signals(false)
 	for npc_id: String in _project_labels:
 		(_project_labels[npc_id] as Label).text = _project_status_text(npc_id)
 
@@ -749,16 +760,24 @@ func _scroll_into_view(control: Control) -> int:
 ## Real tap (`MobileUI.synth_tap`) at `local_point` in `control`'s own local space: scrolls the
 ## control into view first, then computes the screen position from `_list_relative_position` and
 ## `_scroll`'s own (scroll-stable) global rect — never from `control.get_global_rect()`.
+##
+## AWAITS one `process_frame` after `_scroll_into_view` (found 2026-09-12, docs/OPEN_ISSUES.md item
+## 49): `_list_relative_position` reads container `.position` values, which a fresh
+## `scroll_vertical` write has not propagated to yet on the SAME frame — measured on this exact list,
+## tapping "Play: catch the runaways" landed on whichever row had been on screen before the scroll
+## and flew the harness to Zorp instead. Every caller of `_tap_point` (directly, or through
+## `_tap_control`) is now a coroutine and must be awaited.
 func _tap_point(control: Control, local_point: Vector2) -> void:
 	var target_v := _scroll_into_view(control)
+	await get_tree().process_frame
 	var pos := _list_relative_position(control)
 	var p := _scroll.get_global_rect().position + Vector2(pos.x, pos.y - float(target_v)) + local_point
 	MobileUI.synth_tap(p)
 
 
-## Real tap at `control`'s own centre.
+## Real tap at `control`'s own (post-scroll, drawn) centre.
 func _tap_control(control: Control) -> void:
-	_tap_point(control, control.size * 0.5)
+	await _tap_point(control, control.size * 0.5)
 
 
 ## Taps the button with `button_text` on the row whose label reads `label_text` — covers every
@@ -768,7 +787,7 @@ func debug_tap_row_button(label_text: String, button_text: String) -> bool:
 	var b := _button_in(_row_by_label(label_text), button_text)
 	if b == null:
 		return false
-	_tap_control(b)
+	await _tap_control(b)
 	return true
 
 
@@ -780,7 +799,7 @@ func debug_tap_gate(label_text: String) -> bool:
 		return false
 	for c in row.get_children():
 		if c is ToggleSwitch:
-			_tap_control(c as ToggleSwitch)
+			await _tap_control(c as ToggleSwitch)
 			return true
 	return false
 
@@ -790,7 +809,7 @@ func debug_tap_gate(label_text: String) -> bool:
 func debug_tap_parts(i: int) -> bool:
 	if _parts_seg == null or i < 0 or i >= _parts_seg.options.size():
 		return false
-	_tap_point(_parts_seg, _parts_seg._segment_rect(i).get_center())
+	await _tap_point(_parts_seg, _parts_seg._segment_rect(i).get_center())
 	return true
 
 
@@ -811,7 +830,7 @@ func debug_tap_project_button(npc_id: String, button_text: String) -> bool:
 		var b := _button_in(buttons as Control, button_text)
 		if b == null:
 			return false
-		_tap_control(b)
+		await _tap_control(b)
 		return true
 	return false
 

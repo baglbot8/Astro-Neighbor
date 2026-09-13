@@ -585,6 +585,10 @@ func _build_ui() -> void:
 	hints.offset_bottom = -20.0
 	hints.add_theme_constant_override("separation", 18)
 	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Keyboard glyphs (E / W-S) - hide on mobile like every other hint row (docs/STYLE_GUIDE.md
+	# R2.10; pause_menu.gd and hud.gd hide theirs the same way). This is the player's FIRST screen,
+	# so a phone that ever saw this leaking would see it before anything else.
+	hints.visible = not MobileUI.is_mobile()
 	_ui.add_child(hints)
 	for h in [["interact", "Select"], ["move_forward", "Navigate"]]:
 		var pair := HBoxContainer.new()

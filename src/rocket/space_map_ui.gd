@@ -74,6 +74,14 @@ func _ready() -> void:
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hint_label := UIStyle.make_label("◀ ▶ choose  ·  E fly  ·  Esc back  ·  P pause", "Hint", HORIZONTAL_ALIGNMENT_CENTER)
 	_hint.add_child(hint_label)
+	# Keyboard-only MAP MODE (space_travel.gd's docstring: `--orbit` / `--from=` showcases and
+	# Director calls, never a real journey - see docs/OPEN_ISSUES.md #49). There is no touch
+	# equivalent for this screen's arrow-key cycling at all, so hide rather than reword, the same
+	# principle as every other hint row (docs/STYLE_GUIDE.md R2.10). Traced, not asserted: the only
+	# real-player path into this scene is rocket_pad.gd's departure cutscene, which always sets a
+	# pending RocketJourney record first, so JOURNEY MODE (`_journey == true`, hint already hidden
+	# by `set_card_visible(false)` below) is the only branch a phone can ever reach.
+	_hint.visible = not MobileUI.is_mobile()
 	column.add_child(_hint)
 
 	_toasts = VBoxContainer.new()
@@ -179,7 +187,8 @@ func toast(text: String, icon: String = "star") -> void:
 	t.setup(text, icon)
 
 
-## Hides the card and hint while the rocket is flying.
+## Hides the card and hint while the rocket is flying. `v=true` still keeps the keyboard hint off
+## on mobile (nothing passes true today, but a future caller should not be able to leak it back).
 func set_card_visible(v: bool) -> void:
 	_card.visible = v
-	_hint.visible = v
+	_hint.visible = v and not MobileUI.is_mobile()

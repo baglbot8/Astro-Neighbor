@@ -366,8 +366,13 @@ func _hint_text(b: int) -> String:
 			# home.tres / hub.tres), and an old save meets this hint there first.
 			return "See something shiny? %s to pick it up." % _grab_verb()
 		Beat.PLACE:
-			return "Tap the bag button to place something." if mobile \
-				else "Press Tab to open your bag and place something."
+			# The bag-opening verb ("press Tab" / "tap the bag button") comes from
+			# MobileUI.bag_hint - see docs/OPEN_ISSUES.md #49 - so it is written in exactly one
+			# place; only the sentence SHAPE differs here (mobile skips "open your bag" as
+			# redundant with naming the button).
+			var bag := MobileUI.bag_hint(true)
+			return ("%s to place something." % bag) if mobile \
+				else ("%s to open your bag and place something." % bag)
 		Beat.SCRAP:
 			return "Crash scrap is lying about. %s to grab it." % _grab_verb()
 		Beat.ROCKET:
@@ -388,7 +393,7 @@ func _hint_icon(b: int) -> String:
 
 
 func _grab_verb() -> String:
-	return "Tap the big button" if MobileUI.is_mobile() else "Press E"
+	return MobileUI.interact_hint(true)
 
 
 func _moved_text() -> String:
@@ -445,7 +450,8 @@ func _on_decoration_placed(_planet_id: String, _instance_id: String, _item_id: S
 		return
 	HintChannel.mark_acted(_hint_key(Beat.PLACE))
 	_set_beat(Beat.PLACE)
-	HintChannel.request("intro_placed", "Yours now. Walk up and press E to move it.", "check", 0.9)
+	HintChannel.request("intro_placed",
+		"Yours now. Walk up and %s to move it." % MobileUI.interact_hint(), "check", 0.9)
 	if _beat == Beat.PLACE:
 		_advance()
 
@@ -476,8 +482,15 @@ func _on_leave_requested(_planet_id: String) -> void:
 
 
 ## The first favour the player ever accepts: tell them where they can read it back.
+##
+## "Press P, then Favours" was the desktop route (docs/OPEN_ISSUES.md #49) — there is no P key on
+## a phone. The touch front end's round Journal HUD button (`TouchControls._open_journal`) opens
+## the very same panel directly, with no pause menu detour, so the mobile line names THAT button
+## rather than translating the desktop's two-step route one hop at a time.
 func _on_favor_accepted(_favor_id: String) -> void:
-	HintChannel.request("journal_intro", "Press P, then Favours, to see what you promised.", "check", 2.6)
+	var line := "Tap the journal button to see what you promised." if MobileUI.is_mobile() \
+		else "Press P, then Favours, to see what you promised."
+	HintChannel.request("journal_intro", line, "check", 2.6)
 
 
 # ============================================================================= the radio call

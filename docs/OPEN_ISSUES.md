@@ -1538,3 +1538,70 @@ glyph only when the button HAS a glyph, and Emote used Glyph.NONE with an overla
 those numbers, confirmed the horizontal centring, and PASSED it. The user had asked for "perfectly in the
 center"; a star 25 px high reads as off-centre next to Fly on her screen. Rule: when a brief names a reference
 ("like Fly's"), the critic's pass bar is that reference, numerically, on every axis - not "improved".
+
+## 49. [2026-09-12] Phase 2 shipped (6ba51b6): the integration play-through, and what it found
+
+**PASS on the exact tree that shipped** (an Opus integration agent, scratch copy of the git copy, save-isolated).
+* **The whole Bolt loop, one unbroken 210 s run, repeated (200 s, same result):** 2 flights; find by walking;
+  "That is enough counting for today" on a same-day talk; **5 of 5 bolts caught for real** (Fly held, thruster
+  lit, feet 1.9-2.5 m up, largest single-frame move 0.96 m - no teleport); the Yard Regulator handed over and
+  placed 2.13 m from the spot; part_bolt given; one real scrap pickup took 5 -> 8 for the 8-scrap fit; the bench
+  closed 0.004 s after Yes and never re-opened; the celebration and part_fitted started 0.319 s after Yes; the
+  finish went 0 -> 1 at the reveal; the picker read "Rocket parts 1/5" with Fen and Grig still "Needs 2 parts".
+* **Held Space on the fit confirm:** no hop (0.000 m), celebration at 0.383 s. Proved able to fail: with
+  `player.gd:252` off, a 0.72 m hop and the celebration at 0.879 s.
+* **Emote star:** bounding box (0.0, -1.5) px from the button centre, "Emote" at the rim like "Fly".
+* **Dev menu:** five-tap open; both mini-games 5 of 5; "Rocket parts" 0 -> 3 moved the finish and the range;
+  "Go to planet" worked.
+* **Old save** (campaign keys stripped) and **no `--campaign`**: no project, ordinary favours.
+* **Elsewhere:** all 5 hub neighbours moved 6-10 m in 24 s and stayed on the ground; a Cosmo Depot purchase, a
+  pause-menu save and a reload through the title all held.
+
+**Found, none blocking:**
+* **Visible on the phone - a spurious toast:** the first time the dev menu opens on each world it shows
+  "Campaign active: true", because `dev_menu.gd:439,441` set the toggles and fire `toggled`. Fix:
+  `set_block_signals(true)` around those two lines.
+* **Visible on the phone - keyboard hints on a touch screen (older than Phase 2):** "press E to fly!"
+  (`rocket_pad.gd:955`) and "Press P, then Favours" (`intro_director.gd:480`).
+* **Economy (older than Phase 2):** a new campaign game starts with 40 stardust (`game_state.gd:11`) and Cosmo
+  Depot's cheapest item costs 120, so nothing can be bought at first. For the Phase 6 pacing pass.
+* **The celebration close-up** is crowded by a mushroom tree and the bench (`m10_celebration_cheer.png`) - seen,
+  not measured.
+* **Test code only:** `dev_menu.gd:752-756` `_tap_point` taps before the scroll moves, so `debug_tap_row_button`
+  hits the row that WAS on screen ("Play: catch the runaways" flew the harness to Zorp). Earlier automated
+  results that tapped rows low in that list are unproven. Fix: wait one `process_frame` after
+  `_scroll_into_view`, then tap the control's drawn centre.
+* `WARNING: 3 ObjectDB instances were leaked at exit` in the two runs that flew; `--verbose` names 3 plain
+  RefCounted objects, so game-or-harness is not yet known.
+* `EventBus.travel_started` fired 4 times for 2 flights - the known double count (item 48, task card filed).
+
+## 50. [2026-09-13] Phone papercuts: two fixed, the celebration close-up STOPPED after two fails
+
+* **Dev menu pop-up (PASSED round 1).** `_refresh_values()` refreshes the two campaign toggles inside
+  `set_block_signals(true/false)` (ToggleSwitch has no `set_pressed_no_signal`), so opening the menu no longer
+  fires `toggled`: 0 toasts and no state change on four fresh worlds, and a negative control on the unfixed code
+  reproduced "Campaign active: true". `_tap_point` now also waits one process_frame after `_scroll_into_view`,
+  BUT the critic measured the list position identical in the same frame and one frame later, and with that line
+  reverted the taps still hit the right rows - so item 49's wrong-row tap is NOT reproduced. Treat the await as
+  unproven hardening, not a confirmed fix.
+* **Keyboard hints on a touch screen (FAILED round 1, PASSED round 2).** A sweep of src/ found six phone-visible
+  keyboard hints, not two: `rocket_pad.gd` ("press E to fly!"), two in `intro_director.gd`, a Town Hall bulletin
+  tip, the title screen's "E Select / W-S Navigate" keycaps (missed in round 1, caught by the critic) and
+  `space_map_ui.gd`'s "E fly / Esc back / P pause" row. Two helpers in `mobile_ui.gd`, `interact_hint()` and
+  `bag_hint()`, now hold the platform wording (round 1 had repeated a ternary in two files); the title and
+  space-map hint rows hide on a phone, as the pause menu's and the HUD's already did. Desktop wording is
+  byte-identical. Leftover: `radio_caption.gd:151` repeats part_celebration.gd's "Tap to skip" / "Press any key
+  to skip" ternary - correct on both platforms, just not shared.
+* **The celebration close-up - STOPPED after two critic FAILs; `part_celebration.gd` reverted to 6ba51b6.**
+  Round 1 hid the props in the way. The Compatibility renderer ignores transparency, so every hide POPPED: 7 of
+  14 real bench approaches hid 1-4 props, they vanished about 12 frames before the camera moved, they popped back
+  beside the astronaut on the first gameplay frame, and the shot ran 7.56-7.93 s against 6.6-7.3 s.
+  Round 2 hid nothing and hopped the astronaut 0.9-1.7 m to a cleaner stand instead: clean close-ups on 16 of 18
+  stands against 6 of 18 shipped - and still FAILED. From the bench's far diagonal (315-345 deg) every mask run
+  on Compatibility was over the gates (foreground up to 9.1%); the hop could land the astronaut right in front of
+  the bench so it looked stood on; a stalled frame mid-swing jumped the camera 11 deg.
+  **What both rounds point to:** the critic's 840-eye sweep found NO view from the bench's far side with the
+  astronaut unhidden and less than 37% of the helmet ring covered. The clutter is the LAYOUT - the bench's spot
+  beside the pad and the props that grow around it - not the camera solver. The next attempt should move the
+  bench (`build_bench.gd`'s placement) or keep a cutscene clearing free of props around it, then re-check the
+  shipped solver, instead of a third camera round.

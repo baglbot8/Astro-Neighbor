@@ -948,11 +948,16 @@ func _update_marker(delta: float) -> void:
 ## brand new save, which is the first thing that happens in the game. The channel shows a hint
 ## once ever (persisted in GameState.flags), never during a dialogue, shop, bag, pause menu,
 ## cutscene or scene fade, and never two at once.
+##
+## "press E" was reported from a real phone (docs/OPEN_ISSUES.md #49) — there is no E key on a
+## touchscreen. `MobileUI.interact_hint` names the same action in the words of the front end
+## actually in the player's hand; see its doc comment for every other hint that reuses it.
 func _update_hint(_delta: float) -> void:
 	if _cutscene or _busy or _found or _player_distance() < FOUND_RANGE:
 		HintChannel.mark_acted("rocket_pad")
 		return
-	HintChannel.request("rocket_pad", "Follow the arrows to the rocket pad — press E to fly!",
+	HintChannel.request("rocket_pad",
+		"Follow the arrows to the rocket pad — %s to fly!" % MobileUI.interact_hint(),
 		"star", HINT_DELAY)
 
 
