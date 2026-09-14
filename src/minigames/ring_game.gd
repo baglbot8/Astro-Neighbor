@@ -15,10 +15,11 @@ extends Node3D
 ##              clamped to COUNT_RANGE - a lap always resolves to a sensible number of hops without
 ##              a content writer having to know the planet's radius.
 ##   "done"     how many are ALREADY passed (resuming a half-run).
-##   "flavour"  which palette: "bolt", "light" or "pod" - the SAME three keys and the SAME
-##              measured-safe hex values as catch_game.gd's FLAVOURS (a neighbour's colour carries
-##              across both of their mini-games), just carried by a hoop instead of a bolt / lantern
-##              / seed pod. Unknown flavours fall back to "bolt" with a warning.
+##   "flavour"  which palette: "bolt", "light", "pod", "moth" or "spark" - READ DIRECTLY from
+##              catch_game.gd's own FLAVOURS table (one source of truth since 2026-09-13; see the
+##              const below), so a neighbour's colour carries across both of their mini-games and a
+##              new look is added in ONE place, just carried by a hoop instead of a bolt / lantern /
+##              seed pod / moth / spark. Unknown flavours fall back to "bolt" with a warning.
 ##   "title"    the line on the progress pill. Default "Ring run".
 ##   "near"     planet-local direction ([x,y,z] or Vector3) the course starts near - a neighbour's
 ##              yard, say, or wherever the player is standing when a host starts the course for the
@@ -139,14 +140,16 @@ const STUD_R := 0.19
 const BEACON_SIZE_M := 1.5
 const BEACON_ALPHA := 0.15
 
-## Same three flavours and the SAME hex values as catch_game.gd's FLAVOURS (see that file's own
-## palette-gate comment: the strongest swatch there is S 0.54). A neighbour's colour now carries
-## across both of their mini-games; only the SHAPE tells catch and rings apart.
-const FLAVOURS := {
-	"bolt": {"body": "#b3acc0", "accent": "#cf9a5f", "glow": "#dcb887"},
-	"light": {"body": "#8f79c9", "accent": "#c3b0f0", "glow": "#b9a6ee"},
-	"pod": {"body": "#93a877", "accent": "#e6ddbd", "glow": "#dcd3b4"},
-}
+## ONE SOURCE OF TRUTH (2026-09-13): this used to be ring_game.gd's OWN copy of catch_game.gd's three
+## flavours, and the Phase 3 brief called out exactly the risk that shape invites - a new look added
+## here and forgotten there, or added there and forgotten here, with no error to catch the drift.
+## Reading catch_game.gd's own `FLAVOURS` const through `preload(...)` instead means a look is
+## authored in exactly one dictionary (that file's own palette-gate comment explains the numbers);
+## this file just borrows it. `FLAVOURS` below still names the same Dictionary everywhere it is used
+## in this file (`FLAVOURS.has(...)`, `FLAVOURS[...]`), so nothing past this line changed. The extra
+## "label"/"plural" keys catch_game.gd's rows carry are simply unused here - only "body", "accent"
+## and "glow" are ever read for a hoop. Only the SHAPE tells catch and rings apart.
+const FLAVOURS := preload("res://src/minigames/catch_game.gd").FLAVOURS
 const DEFAULT_FLAVOUR := "bolt"
 
 var _system: MinigameSystem

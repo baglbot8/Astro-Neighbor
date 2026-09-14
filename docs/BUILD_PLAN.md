@@ -81,28 +81,51 @@ F and G. A real play-through is timed: Bolt should take about an hour (CORE_LOOP
 
 ## Phase 3: The other four worlds
 
-**Play at the end:** the whole story up to the last part.
+**Play at the end:** the whole story up to the last part, and a game board on the Commons that replays
+every mini-game you have unlocked.
 
-Four Sonnet builders in parallel, one per world: `src/projects/data/{zorp,fen,grig,vela}.gd` and
-each world's lines. Each project has one step that needs another world (for example, Fen needs Bolt's
-power cells). The lead checks the cross-world links as one map before the builders start, so no
-world needs something that is not reachable yet. Sonnet critics with a checklist; the lead times one
-full play-through.
+**Changed 2026-09-12, then 2026-09-13.** The first plan had one fetch-style step per project that needed
+another world. The user, after playing on their phone, found fetch trips "will get old fast and heats up
+the phone" (CORE_LOOP "Mini-games instead of fetch trips"). Then two mini-games looked too few for five
+neighbours, so they picked three more, occasional light links on two worlds only, and replays from the
+Commons (CORE_LOOP "More mini-games, one per neighbour" and "Replays from the Commons"). So this phase runs
+in two steps.
 
-**Changed 2026-09-12** (the user, after playing on her phone; see CORE_LOOP "Mini-games instead of
-fetch trips"): flying back and forth for fetch steps "will get old fast and heats up the phone", so
-every world's project uses a **mini-game played on that world** as one of its steps - either "catch
-the runaways" or a "ring run", whichever suits that neighbour. Two consequences for this phase:
+### Phase 3a: before the world builders (in parallel)
 
-* The mini-game **system** (both shapes: the drifting catch bodies, and the ring course with its
-  checkpoints, both built on the existing jetpack glide) is ONE builder's job **before** the four
-  world builders start, because all four use it. Each world builder then writes only its own flavour,
-  spots and lines.
-* A neighbour's mini-game, once the story has unlocked it, **can reappear as one of their favours**,
-  so there is a reason to visit that is not another fetch trip. Favours are retired during the story
-  (Phase 4, builder J) - this is the shape they come back in.
-* The cross-world link stays, but it must not be a fetch errand: prefer a step that sends you to play
-  the other world's mini-game.
+| builder | model | owns | does |
+|---|---|---|---|
+| GUIDE | Sonnet | new `src/minigames/guide_game.gd` | "guide them home"; first look Fen's glow moths |
+| HUNT | Sonnet | new `src/minigames/hunt_game.gd` | "signal hunt"; first look Grig's springs |
+| CALL | Sonnet | new `src/minigames/call_game.gd` | "call and response": Simon says with Use, Jump, Fly and Emote; first use Vela |
+| LINK | Sonnet | `src/projects/project_system.gd`, `src/dialogue/conversation.gd`, `src/characters/npc.gd` | a "talk" step that another neighbour completes (a light link) |
+| BOARD | Opus (travel, arrival timing, UI and rewards across systems) | new board files in `src/minigames/`, the `src/world/world.gd` hook, `src/ui/pause/dev_menu.gd` | the Commons game board and the replay trip |
+
+Lead, before they start (2026-09-13): registered "guide", "hunt" and "call" in `MinigameSystem.GAMES`
+(`has_game()` checks the file, so this is safe before the scripts exist), and added
+`ProjectSystem.played_minigames()` for the board. Critics: Opus for all five - game feel judged on real
+touch routing and rendered frames, save state, and the trip.
+
+### Phase 3b: the four worlds (in parallel, after 3a passes)
+
+Four Sonnet builders, one per world: `src/projects/data/{zorp,fen,grig,vela}.gd` and each world's lines.
+Sonnet critics with a checklist; the lead times one full play-through.
+
+| neighbour | tier | world problem | the mini-game step | light link |
+|---|---|---|---|---|
+| Zorp | 1 | the rivers are dimming | ring run along the old river ("rings", flavour "light") | none |
+| Fen | 2 | stuck at dusk | guide the glow moths home to a pool ("guide", flavour "moth") | none |
+| Grig | 2 | too dry | dowse for water under the chalk ("hunt", look "spring") | a seed pouch from Zorp |
+| Vela | 3 | frozen and silent | Simon says with her array ("call") | the old warmth readings from Fen's logbook |
+
+Each project keeps three steps on three game days, exactly one mini-game step, and ends with the part. A
+`place` step needs a `find` step first to aim at a `marker:` spot, or a radius well over 3.5 m from the
+home, pad or spawn. Every link world is reachable before the project that needs it: Zorp (tier 1) before
+Grig (tier 2), and Fen (tier 2) before Vela (tier 3).
+
+Still planned, not replaced by the board: an unlocked mini-game can come back as one of that neighbour's
+favours (the user, 2026-09-12; CORE_LOOP "They come back as favours"). That is `favor_system.gd` work, so it
+belongs to Phase 4 builder J.
 
 ## Phase 4: Neighbours visit your crash site
 
@@ -113,7 +136,7 @@ Mayor Orbit becomes Professor Comet in full, with no mayor role.
 |---|---|---|---|
 | H: visitors | Sonnet | new `src/campaign/visitor_system.gd`, `src/world/world.gd` spawn hook | spawn a friend on home by a visit schedule; their home-planet spot stays empty while away |
 | I: Commons | Sonnet | `src/hub/buildings/town_hall.gd` | no mayor role (renaming moves elsewhere or goes); Professor Comet's lines and room become a scientist's, watching the sky |
-| J: retire favors | Sonnet | `src/favors/favor_system.gd` | favors off during the story; visit requests use its item-count plumbing |
+| J: favors | Sonnet | `src/favors/favor_system.gd` | favors rarely during the story; visit requests use its item-count plumbing; an unlocked mini-game can come back as a favour |
 
 ## Phase 5: The finale
 

@@ -1025,7 +1025,7 @@ func launch_to(dest_id: String, who: Player = null) -> void:
 	_busy = true
 	_dest_id = dest_id
 	_begin_cutscene()
-	_launch(p)
+	_launch(p, true)
 
 
 func _on_destination_chosen(dest_id: String, p: Player) -> void:
@@ -1039,7 +1039,11 @@ func _on_destination_chosen(dest_id: String, p: Player) -> void:
 	_launch(p)
 
 
-func _launch(p: Player) -> void:
+## `may_cut` is true only from `launch_to` (the replay board's "Fly back", Director timelines). The
+## pad's own picker always walks: the astronaut coasts while the "Where to?" card is open, so a Fly
+## begun inside reach can measure 4.30-4.47 m by the time the card closes (polish critic round 2,
+## 2026-09-13), and a distance test there turned ordinary Flys into the far-away cut.
+func _launch(p: Player, may_cut: bool = false) -> void:
 	_begin_cutscene()
 	# The destination is known ~16 s before we land on it and the flight is dead time for the loader,
 	# so ask for everything the arrival is about to need NOW, on Godot's loader threads. See
@@ -1052,9 +1056,25 @@ func _launch(p: Player) -> void:
 	EventBus.interact_prompt_changed.emit("")
 	_freeze_player(p)
 
-	# 1. walk to the hatch along the curved surface
+	# 1. walk to the hatch along the curved surface — unless the astronaut starts farther away than
+	# an on-pad "Fly" ever does. `_launch` is the ONE function both the normal pad interact and the
+	# replay board's "Fly back" (via `launch_to`) run through, and only the second can start far from
+	# the stand. REVISED 2026-09-13 (critic round 2, BLOCKING): round 1 compared the distance to the
+	# STAND against `reach`, but the player's `reach` is measured from the INTERACTABLE, not the
+	# stand — and the interactable sits `HATCH_STAND_OFF` away from the stand at a different height
+	# (`_build_interactable`), so a normal on-pad Fly can start farther from the stand than `reach`:
+	# measured 5.26-5.37 m across all seven worlds, comfortably outside `reach` (4.2 m), which made a
+	# back-of-pad Fly take the far-cut path meant only for the replay board. Fix: measure the SAME
+	# distance the interact system used to let this Fly begin at all — player to
+	# `_interactable.global_position` (see `Player._update_interact_target`) — so every normal Fly,
+	# from any side of the pad, still walks; only a launch_to() starting outside interact range (the
+	# replay board's "Fly back", from wherever the game ended) takes the cut. See
+	# `_fade_player_to_stand` for the far case.
 	var stand := rocket.global_position + rocket.global_transform.basis.z * -HATCH_STAND_OFF
-	await _walk_player_to(p, planet.dir_of(stand), WALK_SECONDS)
+	if not may_cut or p.global_position.distance_to(_interactable.global_position) <= _interactable.reach:
+		await _walk_player_to(p, planet.dir_of(stand), WALK_SECONDS)
+	else:
+		await _fade_player_to_stand(p, stand)
 
 	# 2. door open, hop in, door shut
 	rocket.open_hatch()
@@ -1513,6 +1533,47 @@ func _walk_step(k: float) -> void:
 	var xf := planet.surface_transform(d, hint.normalized())
 	xf.origin += xf.basis.y * 0.02
 	_walk_player.global_transform = xf
+
+
+## The far-start case `_launch` step 1 falls back to instead of walking (see the call site's
+## comment). A `WALK_SECONDS` slerp across a real cross-world distance is a SLIDE, not a walk —
+## measured from 6.6 m: 10.8 m covered in 2.2 s with a 3.8 m jump inside a single frame; from 15 m,
+## 10.1 m/s mean. Nobody asked for a faster astronaut, so instead of walking we CUT: fade out (the
+## same `SceneRouter` overlay every scene change already uses — an autoload tween, so this never
+## touches `get_tree().paused`), place the astronaut at the stand facing the hatch — the same final
+## pose `_walk_player_to` leaves them in — reseat the gameplay camera behind them with the same tool
+## `_pop_out` uses after a landing (`_reseat_camera_behind`, so nothing swings once the screen is
+## visible again), then fade back in. `p` is already frozen (`_freeze_player` ran before either
+## branch), so nothing here is new state that would need cleaning up if the scene changes mid-flight
+## — the reposition is a plain transform write and the fade is owned entirely by the SceneRouter
+## autoload, not by this node.
+func _fade_player_to_stand(p: Player, stand: Vector3) -> void:
+	await SceneRouter.fade_out(0.35)
+	var stand_dir := planet.dir_of(stand)
+	# Face the hatch: the direction from the stand back to the rocket is +basis.z (the stand itself
+	# is `rocket.global_position + basis.z * -HATCH_STAND_OFF`, so this is just the reverse of that
+	# offset), which is exactly the heading a finished walk arrives facing.
+	var xf := planet.surface_transform(stand_dir, rocket.global_transform.basis.z)
+	xf.origin += xf.basis.y * 0.02
+	p.global_transform = xf
+	# STALE UP (critic round 2, BLOCKING). `p.up` / `p.up_direction` (PlanetBody) are plain fields,
+	# not derived from the transform — normally `align_to_planet()` refreshes them every physics
+	# tick, but physics is off for the whole cutscene (`_freeze_player`), so a bare transform write
+	# here left them pointing at the OLD spot's up. `CameraRig.reseat_behind_player` reads `_player.up`
+	# to build its new basis, so it reseated the camera to a stale horizon: measured on Bolt's far
+	# side, the camera sat 1.96 m under ground for 1.5 s and was upside-down at ignition; on Hub, 62
+	# rendered frames were under ground. Fix: set both from the SAME transform, before the reseat —
+	# exactly what `PlanetBody.place_on_planet` does for every other teleport.
+	p.up = xf.basis.y
+	p.up_direction = p.up
+	p.get_model().set_state("idle")
+	_reseat_camera_behind(p)
+	# Let the new transform actually settle — the camera rig's own follow is a per-frame lerp, and
+	# `reseat_behind_player`'s `_snap_to_target` needs at least one processed frame to take, exactly
+	# as it does after a real landing (`_pop_out`) — before the cut is allowed to become visible.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await SceneRouter.fade_in(0.45)
 
 
 func _hop_into_hatch(p: Player) -> void:

@@ -118,7 +118,7 @@ def main():
 
     print("== VOICES (comms: Zorp only + doot) ==")
     if do_all or args.voices:
-        # SHIPPED as of 2026-09-10 (user, after listening on her phone): Zorp keeps his comms voice
+        # SHIPPED as of 2026-09-10 (user, after listening on their phone): Zorp keeps his comms voice
         # (5 gestures) plus the shared key-up/key-down/over/bed channel furniture; every OTHER
         # neighbour's comms set is NOT shipped any more (voices.py keeps their generators, labelled
         # "not shipped", so the cast can come back later), replaced by the shared "doot" (4 pitch

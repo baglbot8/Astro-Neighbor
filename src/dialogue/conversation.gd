@@ -4,6 +4,8 @@ extends RefCounted
 ##
 ##   first meeting            -> introduction (3 lines)
 ##   first talk of the day    -> friendship-tier greeting (tracked per day in npc_data.talk_day)
+##   a light link that names them (project_system.gd "talk" step "npc") ALWAYS completes here next,
+##                                unconditionally - see the comment at that call below
 ##   then exactly one branch:
 ##     a gift is being delivered TO them   -> they open it, you get the reward
 ##     they have an active favour          -> progress nudge, or thanks + reward when it's done
@@ -55,6 +57,19 @@ static func run(npc: NPC, player: Node3D) -> void:
 		state["talk_day"] = GameState.day_count
 		state["talked_today"] = true
 		await runner.say(npc, [NpcData.greeting(npc_id, int(state.get("friendship", 0)), rng)])
+
+	# ---- a light link to this neighbour always completes here, unconditionally --------------
+	# docs/CORE_LOOP.md "More mini-games, one per neighbour": a project step ELSEWHERE may name
+	# this neighbour as who FINISHES it (project_system.gd STEP "talk" "npc"). Checked before
+	# anything below - even a favour of theirs that is ready to hand in - so a live link never has
+	# to wait a talk for something else to clear first; their own project, favour or gift below
+	# still happens in this SAME talk, right after, exactly as if the link had not happened
+	# (`complete_live_link` only speaks the link's own lines and returns - it never marks this
+	# talk "handled").
+	if ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+		var link_host = load(PROJECT_SYSTEM_PATH).get_or_create()
+		if link_host != null and link_host.has_method("complete_live_link"):
+			await link_host.complete_live_link(runner, npc)
 
 	# ---- exactly one content branch --------------------------------------------------------
 	# A neighbour's PROJECT comes first (Phase 2, docs/BUILD_PLAN.md). Wired by the lead ahead of

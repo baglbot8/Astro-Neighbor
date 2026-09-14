@@ -539,7 +539,7 @@ VOICE_GEN = {"zorp": v_zorp, "bolt": v_bolt, "dj_nova": v_dj_nova, "mayor_orbit"
 # vowel-formant filters (see _formants() / VOWELS above, used by mayor_orbit/stella); a doot has no
 # formant filter anywhere in its signal path and no vowel colour - it is one plain oscillator (plus, for
 # flavour C, one short click) shaped by an amplitude envelope. Three flavours were built for the user to
-# choose from on the Radio Check page; she picked flavour C ("a very short muted tik-doo with a soft
+# choose from on the Radio Check page; they picked flavour C ("a very short muted tik-doo with a soft
 # click") on 2026-09-11, and it now ships for EVERY neighbour, Zorp included - see doot_names() /
 # SHIPPED_VOICE_NAMES below and ZORP_COMMS_ENABLED in src/autoload/audio_manager.gd.
 DOOT_BASE_HZ = 560.0                    # a plain, neutral pitch - not tuned to register like any CAST voice

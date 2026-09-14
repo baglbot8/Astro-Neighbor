@@ -8,7 +8,7 @@ extends Control
 ## title within 2 seconds, while the Settings page is open. There is no button for it anywhere, no
 ## line in the main pause list, and no keyboard/gamepad path — the gesture reads a raw pointer/touch
 ## press on one Label, which carries no focus and never sees `UIFocus.accept_pressed()`. It stays in
-## the shipped build on purpose (the user wants it on her phone), and it is hidden, not disabled.
+## the shipped build on purpose (the user wants it on their phone), and it is hidden, not disabled.
 ##
 ## EVERY ROW EDITS LIVE GAME STATE, IMMEDIATELY, THROUGH THE SAME PUBLIC SIGNALS/METHODS THE REAL
 ## GAME USES (GameState's own fields and methods, EventBus signals) — never private helpers on
@@ -46,11 +46,41 @@ const CRASH_INTRO_SCRIPT := "res://src/onboarding/crash_intro.gd"
 ## Phase 3 mini-games (docs/CORE_LOOP.md "Mini-games instead of fetch trips"). Same guard: the path
 ## is checked before it is loaded, and MinigameSystem is never named as a static type here.
 const MINIGAME_SYSTEM_PATH := "res://src/minigames/minigame_system.gd"
-const MINIGAME_NAMES := {"catch": "Catch the runaways", "rings": "Ring run"}
-## The flavour each world's own neighbour would use (CORE_LOOP: Bolt's bolts, Zorp's river lights,
-## Grig's seed pods), so a dev round looks like the real step. Anywhere else falls back to Bolt's.
-const MINIGAME_FLAVOURS := {"bolt": "bolt", "zorp": "light", "grig": "pod"}
+## One row per kind in MinigameSystem.GAMES. A kind whose script is not in this build still gets its
+## row; pressing it says "not built yet" (`_play_minigame`). Phase 3 added guide, hunt and call
+## (docs/CORE_LOOP.md "More mini-games, one per neighbour").
+const MINIGAME_NAMES := {
+	"catch": "Catch the runaways", "rings": "Ring run",
+	"guide": "Guide them home", "hunt": "Signal hunt", "call": "Call and response",
+}
+## DELETED 2026-09-13 (critic round 2, BLOCKING: "two look tables"). This file used to keep its own
+## "planet id -> flavour" copy here, `MINIGAME_FLAVOURS`, hand-kept byte-identical to `catch_game.gd`'s
+## `PLANET_DEFAULT_FLAVOUR` — the exact drift risk that once left "fen" and "vela" both missing until
+## the lead patched it by hand (docs/OPEN_ISSUES.md item 51). `_play_minigame()` below already read
+## the live table instead (`_minigame_flavour_for`); the copy survived round 1 only because
+## `replay_board.gd`'s dev stand-in board entries look up a flavour table by CONST NAME
+## (`get_script_constant_map()` reflection, which can only see a const, not this function's return
+## value), and that file is not this pass's to edit. It is safe to delete: every mini-game kind
+## already has a real project step on some world (`src/projects/data/*.gd`), so
+## `_add_dev_entries`'s stand-in loop — the only reader of that lookup — skips every kind before it
+## ever reaches the flavour, and `get_script_constant_map().get("MINIGAME_FLAVOURS", {})` on a
+## script that no longer defines it just returns `{}`, same as it would have if this dict had ever
+## gone stale again. The lead may later point `replay_board.gd`'s stand-in lookup at
+## `catch_game.gd`'s table directly, the same guarded load `_minigame_flavour_for` already uses.
+## Phase 3 file. Guarded like everything else this menu reaches into — never a static preload, so
+## this file keeps parsing in a build with `src/minigames/**` removed.
+const CATCH_GAME_PATH := "res://src/minigames/catch_game.gd"
+## Fallback count for a kind missing from MINIGAME_DEV_COUNTS.
 const MINIGAME_DEV_COUNT := 5
+## How many of each a dev round asks for. catch 5 is Bolt's own step (src/projects/data/bolt.gd), and
+## rings stays at the 5 hoops this menu has always asked for. guide 5, hunt 3 and call 3 follow
+## docs/CORE_LOOP.md: "Find three" for the hunt, and a call-and-response that grows by one per round.
+const MINIGAME_DEV_COUNTS := {"catch": 5, "rings": 5, "guide": 5, "hunt": 3, "call": 3}
+## The world each kind belongs to in the story (CORE_LOOP's one-game-per-neighbour table). Read by the
+## game board's dev "show every game" switch for a game no project uses yet.
+const MINIGAME_HOMES := {"catch": "bolt", "rings": "zorp", "guide": "fen", "hunt": "grig", "call": "vela"}
+## Phase 3a builder BOARD. Guarded like everything else here.
+const REPLAY_BOARD_PATH := "res://src/minigames/replay_board.gd"
 
 var is_open := false
 
@@ -74,6 +104,7 @@ var _scrap_label: Label
 var _stardust_label: Label
 var _campaign_toggle: ToggleSwitch
 var _story_toggle: ToggleSwitch
+var _board_all_toggle: ToggleSwitch
 ## npc_id -> the status Label in that neighbour's project block.
 var _project_labels: Dictionary = {}
 
@@ -262,6 +293,7 @@ func _rebuild_rows() -> void:
 	_stardust_label = null
 	_campaign_toggle = null
 	_story_toggle = null
+	_board_all_toggle = null
 
 	_add_section("Go to planet — the pad's own loader, no flight")
 	for pid: String in GameState.PLANET_IDS:
@@ -327,6 +359,16 @@ func _rebuild_rows() -> void:
 				func() -> void: _play_minigame(kind), "Play")
 	else:
 		_add_note("Mini-games: not in this build yet.")
+
+	_add_section("Game board on the Commons — for testing, not saved")
+	if ResourceLoader.exists(REPLAY_BOARD_PATH):
+		var board_row := _row("Board lists all")
+		_board_all_toggle = ToggleSwitch.new()
+		_board_all_toggle.toggled.connect(func(on: bool) -> void: _set_board_show_all(on))
+		board_row.add_child(_board_all_toggle)
+		_add_note("On: every game with a script is on the board, locked or not.")
+	else:
+		_add_note("Game board: not in this build yet.")
 
 	_add_section("More")
 	_add_note("More rows land here as new systems ship.")
@@ -450,6 +492,11 @@ func _refresh_values() -> void:
 		_story_toggle.set_block_signals(true)
 		_story_toggle.on = GameState.story_done
 		_story_toggle.set_block_signals(false)
+	# Same block, same reason: reading the switch back must never fire its toast.
+	if _board_all_toggle != null and ResourceLoader.exists(REPLAY_BOARD_PATH):
+		_board_all_toggle.set_block_signals(true)
+		_board_all_toggle.on = bool(load(REPLAY_BOARD_PATH).call("dev_show_all"))
+		_board_all_toggle.set_block_signals(false)
 	for npc_id: String in _project_labels:
 		(_project_labels[npc_id] as Label).text = _project_status_text(npc_id)
 
@@ -558,8 +605,24 @@ func _play_celebration() -> void:
 
 
 # ============================================================================= actions: mini-games
+## `catch_game.gd`'s own `PLANET_DEFAULT_FLAVOUR` table, read LIVE rather than copied — this file no
+## longer keeps its own copy of that map (see the "DELETED" comment above `CATCH_GAME_PATH` for why
+## one used to live here and why deleting it was safe). `ResourceLoader.exists` + `load` +
+## `get_script_constant_map()`, never `preload`, so this file
+## keeps parsing without `src/minigames/**` — falls back to "bolt" in that case, and for a planet
+## the table doesn't list, the same default every per-planet flavour lookup in this project uses.
+func _minigame_flavour_for(planet_id: String) -> String:
+	if ResourceLoader.exists(CATCH_GAME_PATH):
+		var script := load(CATCH_GAME_PATH) as GDScript
+		var table: Variant = script.get_script_constant_map().get("PLANET_DEFAULT_FLAVOUR", {}) \
+			if script != null else {}
+		if table is Dictionary:
+			return str((table as Dictionary).get(planet_id, "bolt"))
+	return "bolt"
+
+
 ## Starts a mini-game on the CURRENT world through MinigameSystem's own public `start()`, with no
-## project behind it - the point of the row is that the user can try one on her phone without
+## project behind it - the point of the row is that the user can try one on their phone without
 ## playing a neighbour's project first. The owner is "dev:<kind>", which is deliberately NOT the
 ## project system's "project:" prefix, so its own refresh can never cancel this one.
 ##
@@ -581,11 +644,22 @@ func _play_minigame(kind: String) -> void:
 	_close_all_menus()
 	var ok: Variant = (sys as Node).call("start", kind, {
 		"owner": "dev:" + kind,
-		"count": MINIGAME_DEV_COUNT,
-		"flavour": str(MINIGAME_FLAVOURS.get(GameState.current_planet_id, "bolt")),
+		"count": int(MINIGAME_DEV_COUNTS.get(kind, MINIGAME_DEV_COUNT)),
+		"flavour": _minigame_flavour_for(GameState.current_planet_id),
 	})
 	if not bool(ok):
 		EventBus.toast_requested.emit("%s could not start here." % pretty, "warn")
+
+
+# ============================================================================= actions: game board
+## The game board's testing switch (src/minigames/replay_board.gd `set_dev_show_all`): every game with
+## a script is listed, locked or not. A runtime switch - it is kept on Engine, never in the save.
+func _set_board_show_all(on: bool) -> void:
+	if not ResourceLoader.exists(REPLAY_BOARD_PATH):
+		EventBus.toast_requested.emit("Game board: not in this build.", "warn")
+		return
+	load(REPLAY_BOARD_PATH).call("set_dev_show_all", on)
+	EventBus.toast_requested.emit("Board lists all games: %s" % ("on" if on else "off"), "star")
 
 
 # ============================================================================= actions: projects

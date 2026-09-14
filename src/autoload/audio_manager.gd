@@ -373,7 +373,7 @@ const COMMS_SILENT_DB := -60.0
 const COMMS_PUNCT := ".!?,;:—…"
 
 ## DOOT (shipped 2026-09-10; flavour C + Zorp added 2026-09-11). The user, after listening to the comms
-## voices on her phone: "I only like Zorp's new voice better than the animalese / original robot
+## voices on their phone: "I only like Zorp's new voice better than the animalese / original robot
 ## sounds. The only thing I can think of is making generic doot doot doot noises as the letters are
 ## being written out and then we dont have unique voices for each." So every neighbour but Zorp got
 ## ONE shared, neutral, non-vocal tone instead of a unique voice (comms_voice_for still resolves

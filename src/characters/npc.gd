@@ -187,6 +187,19 @@ func start_conversation(player: Player) -> void:
 	_refresh_marker()
 
 
+## TEST-ONLY HOOK, gated the same way ProjectSystem's "--project-def=" is (Director.is_active()): a
+## no-op outside a Director run. Starts a conversation with the tree's Player regardless of distance,
+## so a timeline proving a dialogue-driven system (a light link, a project step) does not also have to
+## simulate a precise walk into TALK_REACH - it still needs the same "interact" taps to advance the
+## lines that a real conversation does; this only removes the positioning.
+func debug_start_conversation() -> void:
+	if not Director.is_active():
+		return
+	var p := get_tree().get_first_node_in_group("player") as Player
+	if p != null:
+		start_conversation(p)
+
+
 ## Turns wandering on/off (shopkeepers behind a counter, cutscenes).
 func wander_enabled(enabled: bool) -> void:
 	_wander_on = enabled
@@ -342,6 +355,15 @@ func _place_home() -> void:
 	_target_dir = home_dir
 	_footstep_surface = _surface_for_biome()
 	_refresh_marker()
+
+
+## Public accessor for `_resolve_home_dir()` — the exact value it returns, not a second copy of the
+## rule. For callers that need a neighbour's home spot before that neighbour's own first physics
+## frame has run `_place_home()` and set the public `home_dir` var above (which still reads its
+## default `Vector3.UP` until then) — e.g. `replay_board_prop.gd`'s `_neighbour_homes()`, which
+## builds the Commons game board before any NPC in the scene has ticked.
+func resolve_home_dir() -> Vector3:
+	return _resolve_home_dir()
 
 
 ## Home spot: the NPC's own `home_dir`, or — for hub shopkeepers — a point a few metres in front of

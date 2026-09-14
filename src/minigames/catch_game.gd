@@ -3,17 +3,24 @@ extends Node3D
 ## decided 2026-09-12; docs/BUILD_PLAN.md Phase 3).
 ##
 ## N things belonging to a neighbour have come loose and are drifting round their world at glide
-## height - Bolt's bolts off his machines, Zorp's river lights, Grig's seed pods off the terraces.
-## You jump, light the jetpack and fly through them. Touching one catches it. They drift along great
-## circles, so every one of them goes over the horizon and comes back to where it started; there is
-## no timer, nothing is ever lost, and there is no way to fail. Catching the last one finishes the
-## game. Started and owned by MinigameSystem - read that file's header first.
+## height - Bolt's bolts off his machines, Zorp's river lights, Grig's seed pods off the terraces,
+## Fen's glow moths, Vela's warm sparks. You jump, light the jetpack and fly through them. Touching
+## one catches it. They drift along great circles, so every one of them goes over the horizon and
+## comes back to where it started; there is no timer, nothing is ever lost, and there is no way to
+## fail. Catching the last one finishes the game. Started and owned by MinigameSystem - read that
+## file's header first.
+##
+## THIS FILE'S FLAVOURS TABLE IS THE ONE SOURCE OF TRUTH for both mini-games (added 2026-09-13, the
+## Phase 3 brief: a new look was being added twice, once here and once as ring_game.gd's own copy of
+## the same three keys, and the two could drift). `ring_game.gd` reads `FLAVOURS` from THIS script
+## via `preload(...).FLAVOURS` rather than keeping its own dictionary - see that file's own comment.
+## Add a new look ONCE, here, and both games pick it up.
 ##
 ## ============================================================================== CONFIG (all optional)
 ##   "count": 5                 how many runaways. 3-8 is the useful range.
 ##   "done": 2                  how many are ALREADY caught (resuming a half-played game).
-##   "flavour": "bolt"          which art: "bolt" (Bolt), "light" (Zorp), "pod" (Grig). Unknown
-##                              flavours fall back to "bolt" with a warning.
+##   "flavour": "bolt"          which art: "bolt" (Bolt), "light" (Zorp), "pod" (Grig), "moth" (Fen),
+##                              "spark" (Vela). Unknown flavours fall back to "bolt" with a warning.
 ##   "label": "bolt"            noun for the toasts, singular. Default: the flavour's own.
 ##   "label_plural": "bolts"    ...and plural.
 ##   "title": "Bolt's bolts"    the line on the progress pill. Default "Catch the <plural>".
@@ -94,7 +101,10 @@ const HALO_SIZE_M := 1.45
 const HALO_ALPHA := 0.15
 
 ## docs/STYLE_GUIDE.md: no dominant swatch above S 0.60, saturation p90 <= 0.68. Every colour here is
-## measured under both: the strongest is the brass at S 0.54.
+## measured under both: the strongest is Vela's signature amber glow (spark) at S 0.574 - itself
+## reused verbatim, not invented (see "spark" below), and still comfortably under the 0.60 cap. Spark's
+## "body"/"accent" were SWAPPED 2026-09-13 (see that entry's own comment) - same two hexes, same
+## measured saturations, now assigned to the roles that render correctly under Vela's cool light.
 const FLAVOURS := {
 	"bolt": {
 		"body": "#b3acc0", "accent": "#cf9a5f", "glow": "#dcb887",
@@ -111,8 +121,69 @@ const FLAVOURS := {
 		"body": "#93a877", "accent": "#e6ddbd", "glow": "#dcd3b4",
 		"label": "seed pod", "plural": "seed pods",
 	},
+	# Fen's Long Dusk (docs/NEXT_WORLDS.md). REVISED 2026-09-13 after the critic's round-2 measurement
+	# ON FEN ITSELF: the first body tone (#b7a58c, S 0.235 V 0.718 raw) sat too close in both value
+	# and saturation to Fen's own PALEST ground tone (ground_color_low = S 0.167 V 0.847, measured off
+	# fen.tres) to read as pale against it, and rendered rust-brown under Fen's warm sun_color
+	# (1.0, 0.745, 0.526). Seen from above - the real gameplay camera angle, not "seen from below
+	# against the sky" as this comment used to assume; that assumption was never checked against the
+	# ground and was wrong - it had the lowest contrast of any flavour on its own world. Fix: the
+	# whole palette moved one step paler - "body" is now the old "accent" tone (already proven pale
+	# enough for its old job as the wing's small bright mark), and a new "accent" sits between it and
+	# "glow", which is unchanged. See _build_moth()'s own header for why "body" still carries the wing
+	# rather than switching to the palest colour outright.
+	"moth": {
+		"body": "#e6d4a8", "accent": "#ecddb4", "glow": "#f2e6bf",
+		"label": "glow moth", "plural": "glow moths",
+	},
+	# Vela's Still Frost: the one warm thing on a cold blue world. REVISED 2026-09-13 after the
+	# critic's round-2 measurement: the first cut put the warm colour ("accent") on a thin waist band
+	# around a body built from the dark ember tone, so the object read as MOSTLY dark - and Vela's own
+	# light (sun_color (0.91,0.93,0.98), ambient_color (0.49,0.55,0.71), both measured off vela.tres
+	# and both cool, with no warm bounce anywhere to lift a dark warm-brown) rendered that dark
+	# majority near-black. Fix: "body" and "accent" are SWAPPED - same two hexes, now putting the
+	# amber on the MAJORITY surface and the dark ember on a minority trim; see _build_spark()'s own
+	# header for the shape change that went with it. "glow" (her signature amber #d8a25c, verbatim -
+	# the SAME hex as vela_model.gd's AMBER and the relay masts' lamp glow in planet_props.gd's
+	# _vela(), reused rather than reinvented so the spark reads as HER light) is unchanged.
+	"spark": {
+		"body": "#e0a868", "accent": "#7a5a3e", "glow": "#d8a25c",
+		"label": "warm spark", "plural": "warm sparks",
+	},
 }
 const DEFAULT_FLAVOUR := "bolt"
+
+## Per-world DEFAULT flavour for both mini-games - which look a planet suggests when nothing more
+## specific picks one. ADDED 2026-09-13 (critic round 2, BLOCKING): `src/ui/pause/dev_menu.gd` kept
+## its OWN small "planet id -> flavour" map for its "Play: catch the runaways" / "Play: ring run"
+## dev-menu rows, and it had drifted - "fen" and "vela" were both missing, so neither new look could
+## be previewed on its own world from the phone's dev menu. That is exactly the two-copies-can-drift
+## risk this file's FLAVOURS table exists to prevent (see this file's header comment), one level up,
+## so the fix belongs in the same place: ONE table, here.
+##
+## FIXED 2026-09-13 (Phase 3a polish): `_play_minigame()`'s own lookup in `dev_menu.gd` now reads
+## this table live instead of a hand-copied literal - `ResourceLoader.exists(path)` guarded, then
+## `load(path).get_script_constant_map()`, NEVER `preload(...)`, because that file must still parse
+## in a build with `src/minigames/**` removed (its own PHASE 2/3 GUARD rule, which a static preload
+## would break outright). See `dev_menu.gd::_minigame_flavour_for`.
+##
+## `dev_menu.gd`'s own `MINIGAME_FLAVOURS` const is GONE now too (critic round 2, BLOCKING: round 1
+## left it in place, reasoning that `replay_board.gd`'s dev stand-in board entries read that exact
+## const NAME via `get_script_constant_map()` reflection, which can only see a CONST, and that a
+## guarded runtime load could not populate one to replace it with - true, but beside the point: that
+## stand-in lookup only runs for a mini-game kind with no real project step yet, and every kind
+## already has one (`src/projects/data/bolt.gd`, `zorp.gd`, `grig.gd`, `fen.gd`, `vela.gd` - one
+## each), so the lookup is never reached and its fallback to "bolt" when the const is simply absent
+## costs nothing observable. A planet not listed here has no mini-game content yet; callers fall
+## back to "bolt" for an unknown id, the same way `FLAVOURS.get(id, FLAVOURS["bolt"])` already does
+## elsewhere in this file.
+const PLANET_DEFAULT_FLAVOUR := {
+	"bolt": "bolt",
+	"zorp": "light",
+	"grig": "pod",
+	"fen": "moth",
+	"vela": "spark",
+}
 
 var _system: MinigameSystem
 var _planet: Planet
@@ -444,6 +515,10 @@ static func _body_mesh(flavour: String) -> Mesh:
 			_build_light(kit, body, accent)
 		"pod":
 			_build_pod(kit, body, accent)
+		"moth":
+			_build_moth(kit, body, accent)
+		"spark":
+			_build_spark(kit, body, accent)
 		_:
 			_build_bolt(kit, body, accent)
 	var mesh := kit.commit()
@@ -481,6 +556,100 @@ static func _build_pod(kit: DecoKit, body: Color, accent: Color) -> void:
 		var tip := Vector3(cos(a) * 0.26 * s, 0.74 * s, sin(a) * 0.26 * s)
 		kit.bar(Vector3(0.0, 0.40 * s, 0.0), tip, 0.022 * s, accent, 6)
 		kit.sphere(tip, 0.075 * s, accent.lightened(0.18), Vector3(1.0, 0.7, 1.0), 8)
+
+
+## Fen's: a glow moth - the light the pools lost, carried off on wings. A wide, chunky thorax between
+## a tiny head and two pairs of wings held OPEN WIDE (a moth spreads flat rather than folding like a
+## butterfly at rest).
+##
+## MEASURED THREE TIMES, all three in this file's own builder report - each round flown to a real
+## catch distance (~1.5-2 m, not just "spawned nearby") and shot through several spin phases before
+## judging it, because a spinning silhouette can look fine in one frame and wrong in the next:
+## 1. Narrow `accent`-coloured wings measured as a firefly dot - too small to read as anything.
+## 2. Widened wings, still `accent`, measured as a pale blob fusing into the halo's own glow (both
+##    near-white and additive). Zorp's river light avoids this with an equally pale `accent` dome
+##    only because a dome is a curved VOLUME that shades itself light-to-dark under the sun; a flat
+##    wing panel has no such gradient. Fix: `body` (the darker of the pair) carries the wing, the way
+##    bolt and pod already put their darker colour on the majority surface and save `accent` for a
+##    small trim.
+## 3. Wide `body`-toned wings ROOTED NEAR THE CENTRELINE still measured as ONE fused kite/leaf rather
+##    than two wings, because the left and right roots sat only ~0.08 s apart with a thin body between
+##    them - there was nothing to visually separate them. Fix, and what shipped: the thorax is wide
+##    (`body` sphere at X-scale 1.0, not 0.62) and each wing roots OUTSIDE the thorax's own edge, so a
+##    solid body mass sits between the wing bases in every spin phase, not just some of them.
+## 4. [2026-09-13, critic round 2] All three rounds above judged the SHAPE against a neutral or sky
+##    background. Measured on Fen itself, from above (the real gameplay camera angle): the shipped
+##    `body` sat too close to Fen's own palest ground tone to read as pale under Fen's warm sun, and
+##    rendered rust-brown instead - see the FLAVOURS entry's own comment for the numbers. That fix is
+##    COLOUR-ONLY, in FLAVOURS; nothing below this point (the shape this docstring documents) moved.
+## Built from explicit double-sided triangle() fans (same primitive planet_props.gd's Fen scrub
+## blades use) rather than a lathed/extruded panel, so there is no basis or winding to get wrong.
+static func _build_moth(kit: DecoKit, body: Color, accent: Color) -> void:
+	var s := BODY_SIZE_M
+	var wing := body.darkened(0.04)
+	var wing_dark := body.darkened(0.26)
+	# THORAX - wide on purpose (X-scale 1.0): this is the mass that keeps the two wings visually
+	# separate instead of fusing into one shape, in every spin phase, not just face-on.
+	kit.sphere(Vector3(0.0, -0.02 * s, 0.0), 0.155 * s, body, Vector3(1.0, 1.05, 0.72), 10)
+	kit.sphere(Vector3(0.0, 0.24 * s, 0.0), 0.085 * s, body.lightened(0.06), Vector3(1.0, 0.90, 1.0), 8)
+	kit.bar(Vector3(0.0, 0.29 * s, 0.02 * s), Vector3(0.09 * s, 0.46 * s, 0.08 * s), 0.010 * s, accent, 5)
+	kit.bar(Vector3(0.0, 0.29 * s, 0.02 * s), Vector3(-0.09 * s, 0.46 * s, 0.08 * s), 0.010 * s, accent, 5)
+	for side: float in [1.0, -1.0]:
+		# FOREWING - rooted OUTSIDE the thorax (0.16 s clears the 0.155 s-radius body), so there is
+		# always a visible gap of body-coloured mass between the two wing roots.
+		var root_hi := Vector3(side * 0.16 * s, 0.20 * s, 0.0)
+		var root_lo := Vector3(side * 0.15 * s, -0.04 * s, 0.0)
+		var tip := Vector3(side * 0.70 * s, 0.16 * s, -0.14 * s)
+		var tip_hi := Vector3(side * 0.50 * s, 0.42 * s, -0.20 * s)
+		var tip_lo := Vector3(side * 0.40 * s, -0.14 * s, -0.20 * s)
+		kit.triangle(root_hi, tip_hi, tip, wing)
+		kit.triangle(root_hi, tip, root_lo, wing)
+		kit.triangle(root_lo, tip, tip_lo, wing)
+		# A darker notch bitten out of the tip - a real moth's forewing tip or eyespot - so the wing is
+		# never one single flat swatch even before the halo touches it.
+		var notch_a := tip_hi.lerp(tip, 0.45)
+		var notch_b := tip_lo.lerp(tip, 0.45)
+		kit.triangle(notch_a, tip, notch_b, wing_dark)
+		# The one small BRIGHT mark on the wing - `accent`, used sparingly, the way bolt's nut and
+		# pod's tuft are the small light note on an otherwise darker shape.
+		var spot := root_hi.lerp(tip_hi, 0.42)
+		var spot2 := root_hi.lerp(tip, 0.30)
+		kit.triangle(root_hi, spot, spot2, accent)
+		# HINDWING - smaller, lower, tucked under the forewing rather than matching it - also rooted
+		# outside the thorax.
+		var hroot := Vector3(side * 0.15 * s, -0.02 * s, 0.01 * s)
+		var hroot_lo := Vector3(side * 0.14 * s, -0.16 * s, 0.01 * s)
+		var htip := Vector3(side * 0.44 * s, -0.06 * s, -0.08 * s)
+		kit.triangle(hroot, htip, hroot_lo, wing_dark)
+
+
+## Vela's: a warm spark - a small faceted ember, hex-cut like Bolt's hardware because Vela's own
+## world language is hard edges and flat panels, never soft blobs (planet_props.gd's _vela() header:
+## "SOFT IS FOR WEATHER, HARD IS FOR MACHINERY").
+##
+## REBUILT 2026-09-13 (critic round 2, BLOCKING; see the FLAVOURS entry's own comment for the colour
+## half of this fix). Two independent problems, one shape change each:
+## 1. SIZE. The radius was a third smaller than bolt's disc (0.34 s) or light's dome (0.40 s) -
+##    measured at 90 rendered body pixels at 22 m against 199-263 for the other four flavours. Both
+##    cones' `r_bottom` is now 0.44 s (was 0.24 s) and the total height 0.64 s (was 0.52 s) - big
+##    enough to read at the same weight as its siblings without stopping being "small". The two cones
+##    MUST keep an identical `r_bottom` - they meet at y=0, and mismatched radii show a lip there.
+## 2. COLOUR. `body` and `accent` were swapped in FLAVOURS (same two hexes, new roles), so what was a
+##    thin amber band on a dark majority is now an amber majority with a dark trim. The waist band
+##    (`accent`, now the dark ember) stays a THIN ring on purpose, the same 0.06 s it always was - a
+##    trim, not competing for area with the amber it sits on. The three motes now come off
+##    `body.lightened()` (amber, brightened) instead of `accent.lightened()`, which would now brighten
+##    the DARK ember into a dull brown - backwards for "three short motes thrown off it": they should
+##    be the single brightest thing on the object, hotter than the amber body itself.
+static func _build_spark(kit: DecoKit, body: Color, accent: Color) -> void:
+	var s := BODY_SIZE_M
+	kit.cone(Vector3(0.0, 0.0, 0.0), 0.44 * s, 0.0, 0.36 * s, body, Basis.IDENTITY, 6)
+	kit.cone(Vector3(0.0, 0.0, 0.0), 0.44 * s, 0.0, 0.28 * s, body.darkened(0.12), Basis(Vector3.RIGHT, PI), 6)
+	kit.cylinder(Vector3(0.0, -0.035 * s, 0.0), 0.48 * s, 0.48 * s, 0.070 * s, accent, Basis.IDENTITY, 6)
+	for i in 3:
+		var a := TAU * float(i) / 3.0 + 0.35
+		var dir := Vector3(cos(a), 0.30, sin(a)).normalized()
+		kit.bar(dir * 0.50 * s, dir * 0.80 * s, 0.032 * s, body.lightened(0.22), 5)
 
 
 ## The surface every runaway is drawn with - the game's own decoration material, one shared instance

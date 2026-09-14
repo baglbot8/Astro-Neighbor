@@ -2,7 +2,7 @@ extends RefCounted
 ## Bolt's project (BUILD_PLAN.md Phase 2 builder G). Schema: src/projects/project_system.gd header.
 ##
 ## REVISED 2026-09-12 (BUILDER G2): step 1 was a round trip - build the regulator from scrap at the
-## crash-site bench, then fly it back to Bolt. The user, playing on her phone: flying back and forth
+## crash-site bench, then fly it back to Bolt. The user, playing on their phone: flying back and forth
 ## "will get old fast and heats up the phone" (docs/CORE_LOOP.md "Mini-games instead of fetch trips").
 ## Step 1 is now a "minigame" step: CATCH the bolts his machines shook loose, played ON Bolt's world
 ## on the jetpack the game already has. No trip anywhere.

@@ -6,9 +6,13 @@ extends Node
 ##
 ##   var projects := ProjectSystem.get_or_create()
 ##   var handled: bool = await projects.handle_conversation(runner, npc, player)
+##   await projects.complete_live_link(runner, npc)   # ALWAYS, before the above - see below
 ##
 ## conversation.gd calls `handle_conversation` BEFORE its favor branches and skips them when it returns
-## true, so a random favor never competes with a project for the same talk.
+## true, so a random favor never competes with a project for the same talk. It calls
+## `complete_live_link` even earlier, UNCONDITIONALLY - regardless of a ready favour, a delivery gift
+## or anything else - so a LIGHT LINK (see below) always completes the moment you talk to the neighbour
+## it names, never waiting on whatever else that talk was about to do. See "conversation: light links".
 ##
 ## THE RULES IT ENFORCES
 ##   * A project STARTS the first time you talk to that neighbour while CampaignData.gates_on().
@@ -22,6 +26,10 @@ extends Node
 ##     item (the gift the bench needs to fit it).
 ##   * State is committed BEFORE the lines are spoken, so a talk cut short can never lose progress; a
 ##     project whose steps are all done but whose part was never handed over hands it over next talk.
+##   * A "talk" step can be a LIGHT LINK (its "npc" key) to another neighbour (CORE_LOOP "More
+##     mini-games, one per neighbour"): this project's own neighbour still ASKS it, but it is
+##     COMPLETED in a conversation with the NAMED one instead - see "conversation: light links" and
+##     the STEP SCHEMA's "talk" entry below.
 ##
 ## ONE EXCEPTION TO "returns true while a project is active": when a delivery gift addressed to this
 ## neighbour is in the bag, this runs its own lines and then returns FALSE, so conversation.gd's
@@ -96,16 +104,54 @@ extends Node
 ##       "done":     [...]   said on the talk that completes the step.
 ##       "tomorrow": [...]   said when you talk again the SAME game day after this step was completed
 ##                           (the next step is locked until tomorrow). Unused on the last step.
+##       "with":     [...]   "talk" STEP WITH "npc" SET ONLY (see the "talk" entry below): said by the
+##                           NAMED neighbour when the link completes, right after THAT talk's own
+##                           greeting - replacing "done", which a linked step never speaks. Lives
+##                           INSIDE "lines" exactly like the four keys above it, never as a step key
+##                           (unlike "hand_over" below). REQUIRED and non-empty whenever "npc" is set;
+##                           refused at load if it is empty, missing, or given as a step key instead.
 ##     }
 ##     "give": {"item_id": count}     (optional, any type) items handed over when the step is asked.
 ##                                    The bag's "Drop" button destroys items (inventory.gd), so never
 ##                                    make a LATER step need a given item unless the bench can also
 ##                                    build it; a dropped one would otherwise be gone for good. (The
 ##                                    part is safe: a neighbour re-gives a lost part, see "part_again".)
+##                                    See a "talk" step's "hand_over" for the equivalent at the moment
+##                                    a light-linked step FINISHES rather than when it is asked.
 ##     "friendship": 5                (optional) friendship added when the step completes; default
 ##                                    FRIENDSHIP_PER_STEP.
 ##
-##   "talk"     completes in the conversation that asks it: "ask" lines, then "done" lines.
+##   "talk"     Completes in the conversation that asks it: "ask" lines, then "done" lines - UNLESS
+##              it names another neighbour with the optional "npc": "<id>" key. That makes it a LIGHT
+##              LINK (CORE_LOOP "More mini-games, one per neighbour" - a quick, empty-handed trip:
+##              Grig needs a seed pouch from Zorp, Vela needs a page from Fen's logbook). With "npc" set:
+##                * This step's OWN neighbour still ASKS it exactly as usual ("ask" lines, then
+##                  "progress" lines while it waits, then "tomorrow" lines the same day it is done) -
+##                  but asking it never completes it; "done" is never spoken for a linked step.
+##                * It is completed instead in a conversation with the NAMED neighbour, who says the
+##                  step's "with" lines (a "lines" key, see above - NOT a step key) - see
+##                  `ProjectSystem.complete_live_link`, which fires this the FIRST time you talk to
+##                  them while the link is live, always, right after THAT talk's own greeting
+##                  (Conversation.run - see its header) and before anything of their own (their own
+##                  project step, a ready favour or a gift still happens right after, in the same talk).
+##                "hand_over": {"item_id": count}   (optional STEP key - unlike "with" above) items
+##                                       given the moment the link completes, by the NAMED neighbour -
+##                                       the "give" for when a step is FINISHED rather than ASKED
+##                                       ("give" keeps its own meaning: handed over when this step is
+##                                       asked, by the OWN neighbour, unchanged).
+##              VALIDATED AT LOAD: "npc" must be a real NpcData id, must not be this project's own
+##              "npc", and must live on a world in the same or an earlier CampaignData tier than this
+##              project's world (a link never sends the player somewhere still out of range); "lines"
+##              needs a non-empty "with" - refused if it is empty or missing, and refused if "with" is
+##              given as a step key instead of inside "lines" (the exact shape this schema mistakenly
+##              showed once: a def written that way loaded clean and the link completed with nothing
+##              said - both are now named, specific push_errors).
+##              THE "!": shown over the NAMED neighbour for as long as the link is live, and hidden
+##              over this step's own neighbour meanwhile - their "progress" lines should say where to
+##              go (`wants_marker`).
+##              THE DAY: completing the link counts as THIS PROJECT'S OWN neighbour's step for the day
+##              (`GameState.project_step_day[<this project's "npc">]`), exactly like any other step -
+##              it never spends the NAMED neighbour's own day lock.
 ##   "find"     "count": 3             how many markers to visit.
 ##              "planet": "bolt"       (optional) which world the markers are on; default the
 ##                                     neighbour's own planet (NpcData "planet").
@@ -140,7 +186,7 @@ extends Node
 ##              "count": 1             (optional) how many must stand inside the ring.
 ##   "minigame" A thing you PLAY on the neighbour's world, instead of another fetch trip
 ##              (docs/CORE_LOOP.md "Mini-games instead of fetch trips", decided 2026-09-12 after the
-##              user played on her phone). Built on the jetpack the game already has.
+##              user played on their phone). Built on the jetpack the game already has.
 ##              "game": "catch"        a kind in MinigameSystem.GAMES.
 ##              "count": 5             how many to collect; passed to the game as its "count".
 ##              "planet": "bolt"       (optional) which world it is played on; default the
@@ -336,6 +382,18 @@ static func _read_definition(script: Variant, path: String) -> Dictionary:
 	return d
 
 
+## Index into CampaignData.TIERS for `planet_id` (0 = earliest tier gated behind rocket parts), or -1
+## for "home" (not in any tier - always reachable, so always earliest). 99 for an id in no tier at all,
+## so an unresolvable planet fails a light link's "same or earlier tier" check rather than passing one.
+static func _tier_index(planet_id: String) -> int:
+	if planet_id == "home":
+		return -1
+	for idx in CampaignData.TIERS.size():
+		if (CampaignData.TIERS[idx]["planets"] as Array).has(planet_id):
+			return idx
+	return 99
+
+
 ## "" when the definition is usable, otherwise the first rule it breaks. Everything a player could get
 ## stuck on is checked here, at load, rather than discovered three game days into a project.
 static func _invalid_reason(d: Dictionary) -> String:
@@ -377,7 +435,25 @@ static func _invalid_reason(d: Dictionary) -> String:
 			return "step %d \"lines\" must be a Dictionary" % i
 		if s.has("give") and not (s["give"] is Dictionary):
 			return "step %d \"give\" must be a Dictionary of item id -> count" % i
+		if s.has("with"):
+			return "step %d \"with\" must be inside \"lines\" (\"lines\": {\"with\": [...]}), not a step key" % i
 		match t:
+			"talk":
+				if s.has("npc"):
+					var target := str(s["npc"])
+					if NpcData.get_data(target).is_empty():
+						return "step %d (talk) \"npc\" '%s' is not an NpcData id" % [i, target]
+					if target == str(d.get("npc", "")):
+						return "step %d (talk) \"npc\" must not be this project's own neighbour" % i
+					var owner_tier := _tier_index(str(NpcData.get_data(str(d.get("npc", ""))).get("planet", "")))
+					var target_tier := _tier_index(str(NpcData.get_data(target).get("planet", "")))
+					if target_tier > owner_tier:
+						return "step %d (talk) \"npc\" '%s' lives on a later CampaignData tier than this project's world" % [i, target]
+					if s.has("hand_over") and not (s["hand_over"] is Dictionary):
+						return "step %d (talk) \"hand_over\" must be a Dictionary of item id -> count" % i
+					var with_lines: Variant = (s.get("lines", {}) as Dictionary).get("with", [])
+					if not (with_lines is Array) or (with_lines as Array).is_empty():
+						return "step %d (talk) \"npc\" is set: \"lines\" needs a non-empty \"with\" (said by the NAMED neighbour when the link completes)" % i
 			"find":
 				if int(s.get("count", 0)) < 1:
 					return "step %d (find) needs \"count\" >= 1" % i
@@ -507,11 +583,50 @@ static func step_unlocked(npc_id: String) -> bool:
 	return GameState.day_count > int(GameState.project_step_day[npc_id])
 
 
+## Every mini-game the story has unlocked, for the Commons replay board (docs/CORE_LOOP.md "Replays
+## from the Commons", decided 2026-09-13). A game unlocks when the project has moved PAST its
+## "minigame" step. With the campaign gates off (the story is finished, or an old save that loads as
+## finished) every mini-game step in every definition counts, because there is no story left to lock
+## it. One entry per step: {"npc", "step", "game", "planet", "count", "config"} - the same values
+## `_start_minigame` hands to MinigameSystem.start(), minus the save-bound "owner" and "done", so a
+## replay host can start the very game the story step played. Read-only: it never writes state.
+static func played_minigames() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var story_over := not CampaignData.gates_on()
+	for d: Dictionary in all_definitions():
+		var npc := str(d["npc"])
+		var st := _state(npc)
+		var steps: Array = d["steps"]
+		for i in steps.size():
+			var step: Dictionary = steps[i]
+			if str(step["type"]) != "minigame":
+				continue
+			if not story_over:
+				if st.is_empty() or (not bool(st["done"]) and int(st["step"]) <= i):
+					continue
+			out.append({
+				"npc": npc,
+				"step": i,
+				"game": str(step.get("game", "")),
+				"planet": _step_planet(npc, step),
+				"count": maxi(1, int(step.get("count", 1))),
+				"config": (step.get("config", {}) as Dictionary).duplicate(true),
+			})
+	return out
+
+
 ## For the "!" over a neighbour (npc.gd reads FavorSystem today; see the builder report):
 ## -1 = no project opinion (fall back to favors), 0 = hide it, 1 = show it.
+## A LIGHT LINK naming `npc_id` (a "talk" step elsewhere whose "npc" is them) wins first and
+## unconditionally: shown for as long as that link is live, checked before this neighbour's own
+## project gets an opinion at all (`_live_links_targeting`). The link's own PROJECT OWNER shows
+## nothing over themselves meanwhile - the ordinary "asked, not yet met" case below already covers it,
+## since a live link's `_step_met` stays false until `_finish_link` runs.
 func wants_marker(npc_id: String) -> int:
 	if not CampaignData.gates_on():
 		return -1
+	if not _live_links_targeting(npc_id).is_empty():
+		return 1
 	var d := definition_for(npc_id)
 	if d.is_empty():
 		return -1
@@ -609,7 +724,7 @@ func handle_conversation(runner: DialogueRunner, npc: NPC, _player: Node3D) -> b
 	if i >= steps.size():
 		# Every step is done but the part was never handed over: the talk that finished the last
 		# step was cut short after its commit. Hand it over now.
-		await _hand_over_part(runner, npc, d)
+		await _hand_over_part(runner, npc, npc_id, d)
 		return _handled(npc_id)
 	if not step_unlocked(npc_id):
 		var tomorrow: Array = _lines(steps[i - 1], "tomorrow") if i > 0 else []
@@ -679,20 +794,23 @@ func _complete(runner: DialogueRunner, npc: NPC, d: Dictionary, i: int) -> void:
 	EventBus.toast_requested.emit("%s's project: %d of %d done" % [_npc_name(npc_id), i + 1, steps.size()],
 		str(d["part"]))
 	if i + 1 >= steps.size():
-		await _hand_over_part(runner, npc, d)
+		await _hand_over_part(runner, npc, npc_id, d)
 
 
-func _hand_over_part(runner: DialogueRunner, npc: NPC, d: Dictionary) -> void:
-	var npc_id := npc.npc_id
-	var st := _state(npc_id)
+## `actor` speaks the "part_lines" and plays the happy emote; `owner_id` is whose project state
+## advances. The normal (unlinked) flow always passes the same NPC for both (`handle_conversation`
+## and `_complete`) - but a light link's LAST step hands the part over through whichever neighbour the
+## player is actually talking to (`_finish_link`), while the state stays the project owner's.
+func _hand_over_part(runner: DialogueRunner, actor: NPC, owner_id: String, d: Dictionary) -> void:
+	var st := _state(owner_id)
 	var part_id := str(d["part"])
 	st["done"] = true
 	st["step"] = (d["steps"] as Array).size()
 	st["asked"] = false
 	GameState.add_item(part_id)
-	EventBus.project_completed.emit(npc_id, part_id)
-	await _say(runner, npc, d.get("part_lines", []))
-	npc.play_emote("happy")
+	EventBus.project_completed.emit(owner_id, part_id)
+	await _say(runner, actor, d.get("part_lines", []))
+	actor.play_emote("happy")
 	AudioManager.play_sfx("pickup_item")
 	EventBus.toast_requested.emit("You got the %s!" % part_name(part_id), part_id)
 
@@ -735,10 +853,107 @@ static func _lines(step: Dictionary, key: String) -> Array:
 	return out
 
 
+# ============================================================================= conversation: light links
+## A LIGHT LINK: a "talk" step with an "npc" key sends the player to ANOTHER neighbour once, quick and
+## empty-handed, for one short talk (CORE_LOOP "More mini-games, one per neighbour": Grig needs a seed
+## pouch from Zorp, Vela needs a page from Fen's logbook). This section is the half of it that runs in
+## the NAMED neighbour's own conversation, not the project's own neighbour's - see the STEP SCHEMA
+## header's "talk" entry for the full shape.
+##
+## ORDER - the simplest one that satisfies "never swallows their own project, favour hand-in or gift"
+## (the brief): `Conversation.run` calls `complete_live_link` UNCONDITIONALLY, before anything else -
+## even a favour of theirs that is ready to hand in - so a live link always completes in this exact
+## talk. `complete_live_link` only SAYS the link's lines and returns; it never tells `Conversation.run`
+## the talk is "handled", so whatever that neighbour would otherwise have said (their own project step,
+## a ready favour, a gift) still runs immediately after, in the SAME talk, exactly as if the link had
+## not happened.
+
+## Every live link that names `npc_id` as who finishes it: {"owner", "step", "def"} for each project
+## whose current step is an asked, not-yet-linked "talk" step naming `npc_id`. Empty almost always -
+## cheap to call on every talk and every marker poll (all_definitions() is a handful of dictionaries).
+func _live_links_targeting(npc_id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not CampaignData.gates_on():
+		return out
+	for d: Dictionary in all_definitions():
+		var owner := str(d["npc"])
+		var st := _state(owner)
+		if st.is_empty() or bool(st["done"]) or not bool(st["asked"]):
+			continue
+		var steps: Array = d["steps"]
+		var i := int(st["step"])
+		if i >= steps.size():
+			continue
+		var step: Dictionary = steps[i]
+		if str(step["type"]) != "talk" or str(step.get("npc", "")) != npc_id:
+			continue
+		out.append({"owner": owner, "step": i, "def": d})
+	return out
+
+
+## Called by conversation.gd on EVERY talk, with whoever the player is actually facing. Completes
+## every live link that names them, in order, before that neighbour's own conversation branch runs.
+## A no-op almost always (empty `_live_links_targeting`), so it costs nothing on an ordinary talk.
+func complete_live_link(runner: DialogueRunner, npc: NPC) -> void:
+	if runner == null or npc == null:
+		return
+	for link: Dictionary in _live_links_targeting(npc.npc_id):
+		await _finish_link(runner, npc, str(link["owner"]), link["def"] as Dictionary, int(link["step"]))
+
+
+## Completes link step `i` of `owner_id`'s project, spoken by `actor` (the NAMED neighbour physically
+## in front of the player - `owner_id`'s own NPC is not even in this scene). State first, exactly like
+## `_complete`: the step advances, the day is spent and "hand_over" items are in the bag BEFORE a
+## single line is spoken, so a talk cut short never loses progress. "with" lines replace "done" (never
+## spoken here - "done" is authored in the OWNER's voice); friendship and the day both still credit the
+## OWNER, never `actor` (the brief's day rule: a link never spends the named neighbour's own day).
+func _finish_link(runner: DialogueRunner, actor: NPC, owner_id: String, d: Dictionary, i: int) -> void:
+	var st := _state(owner_id)
+	var steps: Array = d["steps"]
+	var step: Dictionary = steps[i]
+	var found: Array = st["found"]
+	var mark := _link_mark(i)
+	if not found.has(mark):
+		found.append(mark)
+	(st["days"] as Array).append(GameState.day_count)
+	st["step"] = i + 1
+	st["asked"] = false
+	GameState.project_step_day[owner_id] = GameState.day_count
+	GameState.add_friendship(owner_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
+	var given: Dictionary = {}
+	var hand_over: Dictionary = step.get("hand_over", {})
+	for item_id: String in hand_over:
+		var n := int(hand_over[item_id])
+		if n > 0:
+			GameState.add_item(item_id, n)
+			given[item_id] = n
+	_clear_step_world(owner_id, i)
+	_met_cache.erase(owner_id)
+	EventBus.project_step_completed.emit(owner_id, i)
+	await _say(runner, actor, _lines(step, "with"))
+	for item_id: String in given:
+		AudioManager.play_sfx("pickup_item")
+		EventBus.toast_requested.emit("You got %s!" % _count_name(item_id, int(given[item_id])), item_id)
+	actor.play_emote("happy")
+	AudioManager.play_sfx("friendship_up", -4.0)
+	EventBus.toast_requested.emit("%s's project: %d of %d done" % [_npc_name(owner_id), i + 1, steps.size()],
+		str(d["part"]))
+	if i + 1 >= steps.size():
+		await _hand_over_part(runner, actor, owner_id, d)
+
+
+## The saved mark for a completed light-link step, in the same `found` array a find/minigame step's
+## marks live in ("s<i>_m<n>" / "s<i>_g<n>") - so a link, once completed, needs no new save field and
+## a save/reload mid-project can never re-ask it. Only ever read or written before the step advances
+## past `i`, so it can never collide with a later step reusing the same index differently.
+static func _link_mark(i: int) -> String:
+	return "s%d_link" % i
+
+
 # ============================================================================= step logic
 static func _step_met(npc_id: String, d: Dictionary, i: int) -> bool:
 	var step: Dictionary = (d["steps"] as Array)[i]
-	if str(step["type"]) == "talk":
+	if str(step["type"]) == "talk" and not step.has("npc"):
 		return true
 	var pr := _progress(npc_id, d, i)
 	return pr.x >= pr.y
@@ -750,6 +965,11 @@ static func _progress(npc_id: String, d: Dictionary, i: int) -> Vector2i:
 	var need := maxi(1, int(step.get("count", 1)))
 	match str(step["type"]):
 		"talk":
+			if step.has("npc"):
+				# A light link: met only once the NAMED neighbour's conversation has completed it
+				# (`_finish_link`), never by this project's own neighbour asking or re-asking it.
+				var st := _state(npc_id)
+				return Vector2i(1, 1) if (st.get("found", []) as Array).has(_link_mark(i)) else Vector2i(0, 1)
 			return Vector2i(1, 1)
 		"find":
 			var st := _state(npc_id)
@@ -1318,11 +1538,27 @@ func debug_report(tag: String = "") -> void:
 		var live := "-"
 		if not st.is_empty() and i < steps.size():
 			var pr := _progress(npc, d, i)
-			live = "%s %d/%d met=%s" % [str((steps[i] as Dictionary)["type"]), pr.x, pr.y, _step_met(npc, d, i)]
+			var step: Dictionary = steps[i] as Dictionary
+			live = "%s %d/%d met=%s" % [str(step["type"]), pr.x, pr.y, _step_met(npc, d, i)]
+			if str(step["type"]) == "talk" and step.has("npc"):
+				live += " link_to=%s" % str(step["npc"])
 		print("  %s state=%s live=[%s] unlocked=%s step_day=%s friendship=%d part_in_bag=%d fitted=%s markers_shown=%d marker=%d" % [
 			npc, JSON.stringify(st), live, step_unlocked(npc), str(GameState.project_step_day.get(npc, "-")),
 			int(GameState.npc_data(npc).get("friendship", 0)), GameState.item_count(str(d["part"])),
 			GameState.rocket_parts.has(str(d["part"])), marker_positions(npc).size(), wants_marker(npc)])
+
+
+## wants_marker() for any npc id, even one with no project of their own - a light link's TARGET,
+## typically, which `debug_report` above never prints because its loop is over project OWNERS only.
+## Prints only.
+func debug_marker(npc_id: String) -> void:
+	print("MARKER %s wants_marker=%d live_links=%s" % [npc_id, wants_marker(npc_id), JSON.stringify(_live_links_targeting(npc_id))])
+
+
+## played_minigames(), printed - for a critic checking exactly when a game unlocks for the Commons
+## replay board. Prints only.
+func debug_played_minigames() -> void:
+	print("PLAYED_MINIGAMES %s" % JSON.stringify(played_minigames()))
 
 
 ## How much of each place step's ring is legal to decorate, measured with the real placement rules

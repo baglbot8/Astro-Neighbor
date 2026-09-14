@@ -30,6 +30,9 @@ const BUILD_BENCH_SCENE := "res://src/projects/build_bench.tscn"
 const PART_CELEBRATION_SCENE := "res://src/campaign/part_celebration.tscn"
 ## Phase 2 builder E: loaded by path, not class_name, so this file parses without it.
 const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
+## Phase 3a builder BOARD (docs/CORE_LOOP.md "Replays from the Commons"): the Commons game board, and
+## on every world the host that starts a replay once the landing has settled. Same guard as above.
+const REPLAY_BOARD_PATH := "res://src/minigames/replay_board.gd"
 const NPC_DIR := "res://src/characters/npcs/"
 const BUILDING_DIR := "res://src/hub/buildings/"
 
@@ -56,6 +59,13 @@ func _ready() -> void:
 	_spawn_npcs()
 	_spawn_buildings()
 	_spawn_optional(ROCKET_PAD_SCENE, "Rocket")
+	# Project items (Bolt's regulator, Zorp's river lamp, ...) exist in the Catalog only once
+	# ProjectSystem registers them. DecorationManager._ready restores the saved decorations straight
+	# away and DROPS any item it cannot find, with no refund - so on the FIRST world load after the app
+	# starts, a placed project item vanished from the save for good, and an unfinished place step could
+	# never be met again. Found by the Phase 3b Grig critic, 2026-09-13 (docs/OPEN_ISSUES.md 54).
+	if ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+		load(PROJECT_SYSTEM_PATH).ensure_items_registered()
 	_spawn_optional(DECO_MANAGER_SCENE, "Decorations")
 	_spawn_optional(TRASH_SYSTEM_SCENE, "TrashField")
 	# Phase 2 builder E asked for this: the project system must exist on EVERY world from the landing.
@@ -69,6 +79,10 @@ func _ready() -> void:
 		_spawn_optional(PART_CELEBRATION_SCENE, "PartCelebration")
 	_spawn_optional(HUD_SCENE, "HUD")
 	_spawn_optional("res://src/onboarding/onboarding.tscn", "Onboarding")  # ADDED BY THE ONBOARDING BUILDER
+	# Phase 3a builder BOARD. Last, because it reads the pad's landing state, the placed decorations
+	# (the board stands clear of them) and puts its panel under the HUD.
+	if ResourceLoader.exists(REPLAY_BOARD_PATH):
+		load(REPLAY_BOARD_PATH).attach(self)
 
 	if planet_data.music_track != "":
 		AudioManager.play_music(planet_data.music_track)

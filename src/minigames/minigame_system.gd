@@ -2,7 +2,7 @@ class_name MinigameSystem
 extends Node
 ## MINI-GAMES: a short thing you PLAY on a neighbour's own world, instead of flying a fetch errand
 ## back and forth (docs/CORE_LOOP.md "Mini-games instead of fetch trips", decided 2026-09-12 after
-## the user played on her phone: fetch trips "will get old fast and heats up the phone").
+## the user played on their phone: fetch trips "will get old fast and heats up the phone").
 ##
 ## One instance per world, created lazily as a child of /root/World - the same pattern as
 ## FavorSystem and ProjectSystem:
@@ -90,6 +90,12 @@ const NODE_NAME := "MinigameSystem"
 const GAMES := {
 	"catch": "res://src/minigames/catch_game.gd",
 	"rings": "res://src/minigames/ring_game.gd",
+	# Phase 3, decided 2026-09-13 (docs/CORE_LOOP.md "More mini-games, one per neighbour"). Registered
+	# before their scripts exist on purpose: has_game() checks the file, so a build without one simply
+	# cannot start that kind.
+	"guide": "res://src/minigames/guide_game.gd",
+	"hunt": "res://src/minigames/hunt_game.gd",
+	"call": "res://src/minigames/call_game.gd",
 }
 
 ## The progress pill sits UNDER the HUD (hud.tscn is layer 10), so toasts, the dialogue box and every

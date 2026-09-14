@@ -1456,7 +1456,7 @@ worlds boot and `world.tscn` boots with zero errors.
 
 ## 47. [2026-09-12] The mini-game system: catch the runaways, and the ring run
 
-Built from CORE_LOOP's "Mini-games instead of fetch trips" (the user: fetch errands that send her flying back
+Built from CORE_LOOP's "Mini-games instead of fetch trips" (the user: fetch errands that send them flying back
 and forth "will get old fast and heats up the phone"). Two builders, each PASSED its own critic on round 1.
 
 **The system** (`src/minigames/minigame_system.gd`): `get_or_create()` like the favour and project systems,
@@ -1487,7 +1487,7 @@ seed-derived now and both land on the same coordinates.
 * A hoop near the top of the height range needs a full tank: a flyer that spent fuel manoeuvring circled for
   30 s before landing to refuel and passing it in one climb. No fail state, so it only costs time.
 * A mini-game started from the DEV MENU dies when you fly to another planet and nothing restarts it; only a
-  project-owned game resumes. Tell the user before she tries it mid-flight.
+  project-owned game resumes. Tell the user before they try it mid-flight.
 * Runaways have no collider and will clip a tall hub building (hub is not a catch world by design).
 * For one frame after spawn a runaway sits at the planet centre, inside the planet, before `_process` places it.
 * Only one game runs at a time by design: a second owner replaces the first. Phase 3 has one project per world,
@@ -1501,7 +1501,7 @@ seed-derived now and both land on the same coordinates.
 
 **Bolt's project** (`src/projects/data/bolt.gd`, PASSED round 1, Opus critic). The user: "swap Bolt's step for a
 mini-game". Step 2 used to be BUILD the Yard Regulator at the crash-site bench at home for 6 scrap and fly it back
-- the round trip she named. It is now a `minigame` step: catch 5 of Bolt's loose bolts on his own world. Step 3's
+- the round trip they named. It is now a `minigame` step: catch 5 of Bolt's loose bolts on his own world. Step 3's
 `place` gives the regulator (the schema's existing `give` key - `project_system.gd` needed no change). Measured:
 **2 flights instead of 4** (to Bolt, and home to fit), one step per in-game day, friendship 0 -> 6 -> 11 -> 16.
 The critic's own run caught 5 of 5 for real; the builder's "unbroken" run had caught 0 and completed through a
@@ -1536,7 +1536,7 @@ centred "the same way Fly's glyph + label stack is". The builder derived a bette
 star still sat -25.1 px above centre (-0.57 of the radius) against Fly's -2.4 px, because TouchButton centres a
 glyph only when the button HAS a glyph, and Emote used Glyph.NONE with an overlay. The critic re-measured exactly
 those numbers, confirmed the horizontal centring, and PASSED it. The user had asked for "perfectly in the
-center"; a star 25 px high reads as off-centre next to Fly on her screen. Rule: when a brief names a reference
+center"; a star 25 px high reads as off-centre next to Fly on their screen. Rule: when a brief names a reference
 ("like Fly's"), the critic's pass bar is that reference, numerically, on every axis - not "improved".
 
 ## 49. [2026-09-12] Phase 2 shipped (6ba51b6): the integration play-through, and what it found
@@ -1606,6 +1606,68 @@ center"; a star 25 px high reads as off-centre next to Fly on her screen. Rule: 
   bench (`build_bench.gd`'s placement) or keep a cutscene clearing free of props around it, then re-check the
   shipped solver, instead of a third camera round.
 
+## 51. [2026-09-13] Moth and spark looks: the looks PASSED, the step STOPPED on a duplicate table
+
+Built so Phase 3 has looks for Fen and Vela (`catch_game.gd`, `ring_game.gd`). `ring_game.gd` now reads
+`catch_game.gd`'s FLAVOURS instead of its own copy, so there is one look table.
+
+* **Round 1 FAILED on the looks.** Under their own worlds' light the moth rendered rust-brown on Fen (0% pale
+  pixels), and the spark was a dark brown gem with a thin amber rim on Vela (37-55% of its pixels darker than
+  V 0.30 at 14-22 m). Lesson: judge a colour under its own world's light, never as a hex value.
+* **Round 2 PASSED the looks and FAILED on structure.** The looks: a pale peach-gold moth and an amber ember spark
+  on both renderers, gates held, bolt/light/pod mesh arrays SHA-256 identical before and after, cost equal. The
+  structure: the builder added `PLANET_DEFAULT_FLAVOUR` (world -> look) to `catch_game.gd`, which nothing reads,
+  while `dev_menu.gd`'s `MINIGAME_FLAVOURS` holds the same map. Stopped after two fails, per the rule.
+* **The lead's resolution, once the Phase 3a board builder releases `dev_menu.gd`:** make `dev_menu.gd` read
+  `PLANET_DEFAULT_FLAVOUR` at runtime (a guarded `load`, no static preload), and fix that const's stale comment
+  (it says the dev menu lacks fen and vela; the lead had added both to `dev_menu.gd` during round 2).
+* Non-blocking, for a later polish pass: the moth hoop is nearly one tone (body #e6d4a8 against accent #ecddb4),
+  so its inner band and studs vanish; up close the spark reads as a squat saucer with dowels, and its #7a5a3e trim
+  renders near-black; on Compatibility the halos add near-neutral light, so the warmth comes only from the body;
+  the "max S 0.574" comment is stale (the rendered spark hoop measures S 0.62-0.66). Since 2026-09-13 Fen's story
+  game is "guide" and Vela's is "call", so these catch and ring looks show in the dev menu and later favours, not
+  in the story.
+* **Save-isolation slip, no harm this time.** The round-2 builder re-synced its scratch copy with
+  `rsync -a --delete`, which copied the REAL `project.godot` over the renamed one, and at 09:41 a check.sh run
+  wrote logs and `director_log.txt` into the real `app_userdata/Astro Neighbor/` folder. No save existed there
+  (moved aside 2026-09-11), so nothing was lost. Rule: after ANY sync into a scratch copy, re-apply the
+  `config/name` rename, and check it right before each run.
+
+## 52. [2026-09-13] Phase 3a: the three new mini-games failed twice on Sonnet, redone on Opus
+
+Three Sonnet builders wrote `guide_game.gd`, `hunt_game.gd` and `call_game.gd`; each FAILED its Opus critic twice,
+so per CLAUDE.md each step was redone on Opus with the round-2 critic's list. Round 2 had fixed most of round 1.
+What still blocked, and the lesson each carries:
+
+* **guide**: settled moths ended 0.08-0.10 m UNDER the ground (and `node.basis =` after `node.scale =` reset the
+  scale), and the home ring was a flat torus that buried itself across Grig's terrace risers. Round 1 had also let
+  the game play itself: idle drift carried 22 of 60 seeds' moths home with no input. Lesson: test a "guide" game
+  with ZERO input as a control.
+* **hunt**: the pulse ring hid under terraces (274 of 1356 walking beats showed no ring) and left the screen in
+  flight; the spring rendered S 0.02 near-white although authored blue (tonemapping), so it read as a clay bowl
+  holding a white disc; spots were kept 5 m from the pad centre, not from the arrival point 3.2 m beside it; and
+  past 8 m the pulse said nothing, which was most of every Grig start. Lesson: measure a colour as RENDERED under the
+  world's light; measure keep-offs from where the player really stands.
+* **call** (Simon says): round 1 read a real 0.10 s tap as Fly (the jump leaves the floor, then the held press
+  lights the thruster); round 2 fixed that (10/10 on touch and keyboard) but its call panel clipped its own text and
+  hid the astronaut in every call frame, the ring kept 3.5 m from the pad whose reach is 4.2 m (Use in the ring
+  opened the rocket picker), and the per-frame turn fought the dialogue runner. Also found: two Jump taps within
+  0.35 s read as Fly because the second press is in the air, in 28% of story patterns. Lead call for the Opus round:
+  a Jump needs the feet on the ground, and an air press while a Jump is expected is ignored, not wrong.
+
+**Outcome (same day).** All five Phase 3a pieces PASSED in the end: `hunt` and `call` on their second Opus round;
+`guide` after a fifth, narrow round (resting halos drew 1.45 m wide because catch's halo material billboards without
+`billboard_keep_scale`, so `scale` did nothing; and the finale popped out in one frame - now a 1 s hold and a 0.6 s
+sink); the light links on round 2; the board on a focused Opus round (a phone drag over a row did not scroll - the rows
+were PanelContainers with mouse_filter STOP - and an old save's decorations could push it onto the bench). The
+follow-up "no sliding to the pad" failed twice (the fade test measured distance after the picker card, while the
+astronaut coasts), and the lead's fix - the pad's own picker always walks, only `launch_to` may cut - went to a narrow
+critic. Non-blocking notes kept for polish: grass tufts poke through some hunt pools; the call card can hide up to 17 px
+of the helmet top after an Emote; a call game started in mid-air calls move 1 at once; the board jumps 3.26 m if a
+legal lamp sits at the nearest allowed spot; a drag that starts on a Play button does not scroll; Director timelines that
+call `launch_to` from the spawn now cut, so their timed captures land about 0.5 s early. Some agent run at 17:35 wrote
+logs into the real `app_userdata/Astro Neighbor/` folder again (no save there).
+
 ## 53. [2026-09-13] A freed find beacon flooded the log and switched the camera fade off
 
 Found in passing by the Phase 3a light-link critic. Fixed in `camera_rig.gd` `_update_occluder_fade` (not yet
@@ -1633,3 +1695,29 @@ every number below in its own copy.
   Forward+ drew a faint ghost (1 lead capture). This agrees with entry 50 ("The Compatibility renderer ignores
   transparency"). So `GeometryInstance3D.transparency`, which is the whole near-geometry fade, probably does
   nothing on the phone. Not checked on a real phone, not fixed here; a fix would have to fade inside the materials.
+
+## 54. [2026-09-13] Phase 3b worlds, and a shipped bug: placed project items vanished after a restart
+
+**The bug (shipped since Phase 2, 6ba51b6).** `world.gd` spawned `DecorationManager` before `ProjectSystem`.
+`DecorationManager._ready` restores the saved decorations at once and DROPS any item the Catalog does not know,
+with no refund (`restore()` calls `GameState.remove_placed_decoration`). Project items (Bolt's regulator and every
+Phase 3 item) join the Catalog only in `ProjectSystem._ready`. So on the FIRST world load after the app starts, a
+placed project item was deleted from the save for good, and a place step placed but not yet talked through could
+never be met again (the item had left the bag too). Later world loads in the same session were fine, which is why
+in-session tests missed it. The Grig critic found it with a real save round-trip in separate processes. Fix
+(lead): `world.gd` calls `ProjectSystem.ensure_items_registered()` right before spawning Decorations. Lesson: test
+persistence with a FRESH PROCESS that loads the save onto that world first.
+
+**Phase 3b, the first run with lean critics** (the user's option 1, CLAUDE.md "Keep critic phases fast"): builders
+saw the critic's checklist, efforts were set, round 2 re-checked only what failed. Zorp (the old way) took 60 min to
+build and 65 to check; Fen 42 + 29, Vela 64 + 22, Grig 34 + 27, then a 4 + 4 min round 2 that correctly failed
+again on the world.gd bug above (not Grig's file). Fen and Vela passed on round 1.
+
+Non-blocking, for a polish pass:
+* Fen's placed pool beacon (the shop's `beacon_tower` scene) renders violet-magenta under Fen's dusk light, and is
+  easy to miss in a wide shot.
+* Vela's relay dish is the shop's cream `satellite_dish` with an orange #d9822f mount. `icon_color` only tints the
+  bag icon, so the header's "kinship with the masts" claim is false, and the orange breaks the "only warm colour is
+  the lamps" rule. Correct the header; consider a recolour.
+* The guide game on Fen was never finished 5/5 by real touch in 3b: builder and critic both confirmed that real
+  touch moves the moths, then finished with a disclosed state write. The phone play-through is the first full run.

@@ -41,6 +41,14 @@ Workflow scripts for substantive work — on the cheapest model that fits (next 
   `docs/QUALITY_BAR.md`.
 - **Loop until PASS.** A FAIL goes back to the builder with the exact blocking list, then the critic
   re-reviews. Cap it at two rounds; if it still fails, stop and re-diagnose rather than loop again.
+- **Keep critic phases fast** (the user, 2026-09-13: "The critic phases always seem to take a while").
+  Measured that day over 14 builders and 14 critics: a critic took 54 min and ~160 tool calls on
+  average, 46% of it the model thinking between steps (every agent had inherited effort "max"), and 6
+  of 7 jobs needed a second round, which adds about 2 hours each. So: give the builder the critic's
+  exact checklist up front; set `effort` on every agent (builders and checklist critics "high" or
+  lower; "max" only for a hard judgement); a round-2 critic re-checks the failed items plus a short
+  regression, not the whole list; a critic re-runs a sample of the builder's evidence plus the risky
+  items, not everything.
 - **Unknown cause? Diagnose before building.** Read-only investigators first, then an adversarial
   cross-check that tries to refute them, then the fix.
 - **Finish with an integration check**: `tools/check.sh`, all seven worlds boot, a real play-through.
@@ -123,7 +131,8 @@ returns the conclusion, not the dump.
 - **Agent runs never use the user's real save folder.** Test in a scratch copy with `config/name`
   renamed (user:// follows the name) and hash the real save before and after. A run through the title
   with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this
-  way on 2026-09-11 (`docs/OPEN_ISSUES.md` 42).
+  way on 2026-09-11 (`docs/OPEN_ISSUES.md` 42). Any re-sync into the copy (`rsync --delete`) puts the real
+  name back: rename again after every sync (`docs/OPEN_ISSUES.md` 51).
 - Never run `tools/gen/audio/build_all.py` while other builders are working — it regenerates every
   asset.
 

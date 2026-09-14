@@ -130,11 +130,11 @@ and Grig each day (`data/*.tres` `collectible_count`); each favor pays 60 to 140
 
 ## Mini-games instead of fetch trips (decided 2026-09-12)
 
-The user, after playing on her phone: flying back and forth for fetch favours "will get old fast and heats up
+The user, after playing on their phone: flying back and forth for fetch favours "will get old fast and heats up
 the phone". So a neighbour's step is something you play ON their world, built on the jetpack the game already
 has (rises 5.6 m/s, ceiling 4.6 m, fuel refilled by landing; the worlds are 9.5-14.5 m across).
 
-**Two shapes, and which one a neighbour uses is part of their character.** She picked both (2026-09-12):
+**Two shapes, and which one a neighbour uses is part of their character.** They picked both (2026-09-12):
 
 1. **Catch the runaways.** Something of theirs comes loose and drifts at glide height - Bolt's bolts off his
    machines, Zorp's river lights, Grig's seed pods off the terraces. You jump, glide and catch N of them
@@ -148,6 +148,58 @@ trip.
 
 **Rejected for now:** updraft towers (vents that push you above the jetpack's 4.6 m ceiling). It would change a
 tuned number, and the two shapes above cover the need.
+
+## More mini-games, one per neighbour (decided 2026-09-13)
+
+Two shapes will feel repeated by the third world. The user: *"theres probably only so much those 2 mini
+games can do before they become redundant"*. Three more were proposed, and they picked all three:
+
+3. **Guide them home.** Things of the neighbour's drift AWAY from you when you come close. You steer them,
+   from the far side, into a home spot. The catch game's drifting bodies with the opposite rule.
+4. **Signal hunt.** Something is hidden. A pulse at your feet beats faster the closer you are. Find three.
+   Calm; walking is enough, flying also works.
+5. **Call and response (Simon says).** Stand in a ring near the neighbour. They call a pattern of moves, one
+   at a time; each move shows its button and plays its own note. You copy it with the real controls: **Use**,
+   **Jump** (tap Fly, or tap Space), **Fly** (hold it until the thruster lights) and **Emote**. The pattern
+   grows by one each round. A wrong move only plays the pattern again. No timer: a Fly answer floats you
+   down slowly, and the neighbour waits. The ring sits out of talk reach, so Use there never starts a talk.
+   **How it got here (same day):** the first pitch copied emotes with the Emote button, but that button
+   cannot pick an emote - it cycles wave, happy, dance (`player.gd` `EMOTE_CYCLE`). The user: *"we can make
+   the emote game more of a simon says? between Use, Jump, Fly and Emote?"* On both phone and keyboard,
+   Jump and Fly are one input told apart by a tap or a hold (`touch_controls.gd` Fly holds "boost" and
+   "jump"; `Player.BOOST_GROUND_DELAY` 0.18 s), so all four moves exist on both.
+
+**Each neighbour has a game of their own**, so no game repeats across the story:
+
+| neighbour | game | why it fits |
+|---|---|---|
+| Bolt | catch the runaways (his bolts) | shipped 2026-09-12 |
+| Zorp | ring run along the old river | he loves floating |
+| Fen | guide the glow moths home to the pools | the moths carried the pools' light away |
+| Grig | signal hunt: dowse for water under the chalk | his world is too dry, and he counts |
+| Vela | call and response (Simon says) | her world is frozen and SILENT; she listens to her array |
+
+**Occasional trips to another world, not every project.** The user: *"im fine with occasional steps going to
+other worlds but not every one"*. Such a step is a **light link**: quick and empty-handed. You fly there, have
+one short talk, and a friend hands you one thing. No collecting and no mini-game on the other world.
+Only two projects have one: **Grig** needs a seed pouch from Zorp (a flower that barely drinks), and **Vela**
+needs the old warmth readings torn from Fen's logbook. Zorp's and Fen's projects stay on their own worlds.
+
+## Replays from the Commons (decided 2026-09-13)
+
+The user: *"let people play those mini games if they want optionally so they're not just 1 time use and
+never seen again"*, and *"in the commons you can pick which game you want and it temporarily takes you to
+the world where the game was originally done"*.
+
+* A **game board** stands on the Commons. It lists every mini-game the story has unlocked. A game unlocks
+  when its project step is done (`ProjectSystem.played_minigames()`); once the story is over, all of them.
+* Pick one, and the rocket flies you to that game's world. The game starts when you land, with the same
+  look and size as the story step.
+* When it is done, you are offered a flight back to the Commons. Say no, and you stay on that world as
+  normal.
+* A replay pays a little stardust the first time each game is finished each game day; after that it is
+  for fun. The amount is a pacing number (Phase 6), not a promise.
+* A replay is never saved. Leave the world, and it ends; nothing is lost.
 
 ## Open questions
 
