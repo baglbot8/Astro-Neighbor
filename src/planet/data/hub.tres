@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 id = "hub"
-display_name = "Starport Plaza"
+display_name = "The Commons"
 radius = 21.0
 biome = "plaza"
 seed = 5

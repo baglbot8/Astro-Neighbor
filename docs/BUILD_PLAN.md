@@ -129,14 +129,23 @@ belongs to Phase 4 builder J.
 
 ## Phase 4: Neighbours visit your crash site
 
-**Play at the end:** between trips, a friend lands at your crash site and asks for something there.
-Mayor Orbit becomes Professor Comet in full, with no mayor role.
+**Play at the end:** land at home, and some days a friend is waiting there with a request you do on the spot.
+Professor Comet is a scientist with no mayor job. The hub is called the Commons. A neighbour's favours come back,
+now and then, once their part of the story is done.
+
+**Changed 2026-09-13** (CORE_LOOP "Visits and favours"): a visitor asks you to play their unlocked mini-game on
+your planet, or to place a gift they brought; a visit ends when you fly away, so their own world is never empty;
+favours are gated per neighbour by the story. The lead renamed Starport Plaza to "The Commons" before the builders
+started (hub.tres display_name and the two destination blurbs).
 
 | builder | model | owns | does |
 |---|---|---|---|
-| H: visitors | Sonnet | new `src/campaign/visitor_system.gd`, `src/world/world.gd` spawn hook | spawn a friend on home by a visit schedule; their home-planet spot stays empty while away |
-| I: Commons | Sonnet | `src/hub/buildings/town_hall.gd` | no mayor role (renaming moves elsewhere or goes); Professor Comet's lines and room become a scientist's, watching the sky |
-| J: favors | Sonnet | `src/favors/favor_system.gd` | favors rarely during the story; visit requests use its item-count plumbing; an unlocked mini-game can come back as a favour |
+| H: visitors | Opus (a new system across saves, dialogue, NPC spawning and mini-games) | new `src/campaign/visitor_system.gd` (and its data), the `src/world/world.gd` hook, `src/dialogue/conversation.gd`, `src/characters/npc.gd`, `src/ui/pause/dev_menu.gd` | a friend at your crash site on some game days; their request; their lines; save; dev rows |
+| I: the Professor | Sonnet | `src/hub/buildings/town_hall.gd`, `src/hub/buildings/player_home.gd`, the `mayor_orbit` entry of `src/characters/npc_data.gd` | no mayor duties: the Town Hall door becomes the Professor's sky talk; Planet stats only after the story; "Rename my planet" moves to the home mailbox |
+| J: favours | Sonnet | `src/favors/favor_system.gd` | favours gated per neighbour by the story and occasional after it; an unlocked mini-game can be a favour |
+
+Critics: Opus for H and J (save state, hosting a game), Sonnet for I, run the lean way (CLAUDE.md "Keep critic
+phases fast").
 
 ## Phase 5: The finale
 

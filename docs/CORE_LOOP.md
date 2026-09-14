@@ -201,6 +201,23 @@ the world where the game was originally done"*.
   for fun. The amount is a pacing number (Phase 6), not a promise.
 * A replay is never saved. Leave the world, and it ends; nothing is lost.
 
+## Visits and favours (decided 2026-09-13, for Phase 4)
+
+The user picked Phase 4 as proposed, with one change of their own.
+
+* **Friends visit your crash site.** Between trips, a friend is at your crash site when you land at home. They ask
+  for one of two things, and neither needs a flight: play their mini-game on your planet (only a game the story has
+  already unlocked), or place a gift they brought near your crash site. A visit ends when you fly away, so a
+  neighbour is always home when you visit their world.
+* **Favours follow the story, per neighbour.** The user: *"When you complete that neighbor's part of the story,
+  normal favors can occasionally appear for that neighbor."* So a neighbour offers no favours while their project
+  is unfinished. Once they have handed over their part, their ordinary favours come back, now and then, not every
+  talk. A neighbour's unlocked mini-game can also come back as one of those favours (decided 2026-09-12).
+  Neighbours with no project (the Commons crowd) keep their occasional favours, because they have no part of the
+  story to wait for - the lead's call; the user can overrule it.
+* **Professor Comet has no mayor job**, and **Starport Plaza is renamed the Commons** everywhere the player reads
+  it (both were already decided on 2026-09-10; this phase does them).
+
 ## Open questions
 
 - **What is in the post-story game** besides decorating and friendship? Not decided.

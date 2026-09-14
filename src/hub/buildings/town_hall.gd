@@ -1,13 +1,15 @@
 extends Building
-## Starport Town Hall — a cream drum under a big teal dome with a gold finial, a projecting front
-## bay with an arched wooden door, a clock tower face whose hands track GameState.time_of_day, a
-## waving star flag, two lantern posts and a bulletin board.
+## The Commons' Town Hall — a cream drum under a big teal dome with a gold finial, a projecting
+## front bay with an arched wooden door, a clock tower face whose hands track GameState.time_of_day,
+## a waving star flag, two lantern posts and a bulletin board.
 ##
-## Door -> Mayor Orbit: rename your planet, planet stats, or leave.
+## Door -> Professor Comet, a sky-watching scientist, NOT a mayor (docs/CORE_LOOP.md "Changed after
+## the build plan"; BUILD_PLAN Phase 4 builder I). While the story runs (CampaignData.gates_on()) he
+## has no duties here at all - just a short line about what his telescope shows tonight, then Leave.
+## Once the story is over, the door also offers "Planet stats" (PlanetScore), same as it always has.
+## "Rename my planet" no longer lives here - it moved to the home mailbox (player_home.gd).
 ## Bulletin board -> the daily bulletin (day count, a tip, decorations placed at home), then an
 ## offer to open the favours log right there.
-
-const RENAME_POPUP := "res://src/hub/rename_popup.tscn"
 
 const PLINTH_R := 3.40
 const PLINTH_TOP := 0.30
@@ -31,7 +33,7 @@ const FLAG_POLE_H := 5.1
 const BOARD_POS := Vector3(-3.32, 0.0, -2.14)
 const BOARD_YAW := 26.0
 const LANTERN := Vector3(2.06, 0.0, -3.62)
-const MAYOR_ACCENT := Color("#6fc3ff")
+const PROF_ACCENT := Color("#6fc3ff")
 
 const DOME_COLOR := Color("#3f9e9a")
 const DOME_SHADE := Color("#2b6a68")
@@ -39,7 +41,6 @@ const DOME_SHADE := Color("#2b6a68")
 var _hour_hand: Node3D
 var _minute_hand: Node3D
 var _board: Interactable
-var _rename_popup: Node
 
 
 func _init() -> void:
@@ -346,47 +347,99 @@ func _ready() -> void:
 ## Professor Comet and the id mayor_orbit stays. Read from NpcData so the pill always matches his
 ## name tag - this door (reach 3.0 m) sits 0.9 m from him and usually wins over his own TalkArea
 ## (2.6 m), so a hardcoded "Mayor Orbit" here was the name most players saw at the Commons.
-## The mayor ROLE (rename, stats) is BUILD_PLAN Phase 4 builder I's.
 func _prof_name() -> String:
 	return str(NpcData.get_data("mayor_orbit").get("display_name", "Professor Comet"))
 
 
+## The hub's own display name (hub.tres, via Hud's static helper), so nothing here hardcodes the
+## retired "Starport" name (CORE_LOOP.md "Changed after the build plan": renamed the Commons
+## everywhere the player reads it).
+func _commons_name() -> String:
+	return Hud.planet_display_name("hub")
+
+
+## While the story runs (CampaignData.gates_on()) the Professor has no mayor duties at all - just
+## his own sky talk, then Leave (BUILD_PLAN Phase 4 builder I; docs/CORE_LOOP.md "no mayor role").
+## Once the story is over the door goes back to today's "Planet stats" panel. Renaming your planet
+## no longer happens here at all - it moved to the home mailbox (player_home.gd).
 func _on_door(player: Node3D) -> void:
 	if not begin_flow(player):
 		return
-	await say(_prof_name(),[
-		"Ah! Our newest neighbour. Come in, come in.",
-		"The Starport is yours to shape, you know.",
-	], "elder", MAYOR_ACCENT)
-	while true:
-		var choice: int = await ask("How can I help?", ["Rename my planet", "Planet stats", "Leave"])
-		if choice == 0:
-			await _rename_flow()
-		elif choice == 1:
-			await _stats_flow()
-		else:
-			break
-	await say(_prof_name(),["Mind the step on your way out!"], "elder", MAYOR_ACCENT)
+	if CampaignData.gates_on():
+		await say(_prof_name(), [
+			"Oh! Come in, out of the starlight.",
+			"I was just charting tonight's sky.",
+		], "elder", PROF_ACCENT)
+		while true:
+			var choice: int = await ask("How can I help?", ["What's overhead?", "Leave"])
+			if choice == 0:
+				await _sky_flow()
+			else:
+				break
+	else:
+		await say(_prof_name(), [
+			"Ah, hello! Come in, come in.",
+			"Quiet sky tonight. Good for looking back.",
+		], "elder", PROF_ACCENT)
+		while true:
+			var choice: int = await ask("How can I help?", ["Planet stats", "Leave"])
+			if choice == 0:
+				await _stats_flow()
+			else:
+				break
+	await say(_prof_name(), ["Mind the step on your way out!"], "elder", PROF_ACCENT)
 	AudioManager.play_sfx("door_close", -8.0)
 	end_flow()
 
 
-func _rename_flow() -> void:
-	var popup := _get_rename_popup()
-	if popup == null:
-		await say(_prof_name(),["The paperwork seems to have wandered off. Try again later!"], "elder", MAYOR_ACCENT)
-		return
-	var new_name: String = await popup.ask(GameState.home_planet_name)
-	if new_name == "" or new_name == GameState.home_planet_name:
-		await say(_prof_name(),["Keeping the old name? A classic choice."], "elder", MAYOR_ACCENT)
-		return
-	GameState.home_planet_name = new_name
-	toast("Your planet is now %s!" % new_name, "stardust")
-	AudioManager.play_sfx("quest_complete", -4.0)
-	await say(_prof_name(),[
-		"Stamped, sealed and filed.",
-		"Welcome home to %s." % new_name,
-	], "elder", MAYOR_ACCENT)
+## What his telescope shows tonight: how many rocket parts are fitted, which worlds just swam into
+## range (only announced the visit their tier first opens - `_worlds_just_opened`), and one running
+## line about the something-big he quietly tracks. That line never names it and never spoils
+## CORE_LOOP.md "The call" - checked by the critic at 0, 2 and 4 parts fitted.
+func _sky_flow() -> void:
+	var have := GameState.rocket_part_count()
+	var total: int = CampaignData.PARTS.size()
+	var lines: Array[String] = ["%d of %d parts fitted. We're flying further now." % [have, total]]
+	var opened := _worlds_just_opened(have)
+	if not opened.is_empty():
+		lines.append("%s just swam into my scope!" % _list_names(opened))
+	lines.append(_watch_line(have))
+	await say(_prof_name(), lines, "elder", PROF_ACCENT)
+
+
+## Planet ids whose CampaignData tier opens at EXACTLY `have` parts - "just" opened, not merely "in
+## range" (a planet stays in range at every later count too). Tier 1 (0 parts) is the starting
+## range, not a reveal, so 0 parts never returns anything.
+func _worlds_just_opened(have: int) -> Array[String]:
+	var out: Array[String] = []
+	if have <= 0:
+		return out
+	for tier in CampaignData.TIERS:
+		if int(tier["parts"]) == have:
+			for planet_id: String in (tier["planets"] as Array):
+				out.append(planet_id)
+	return out
+
+
+func _list_names(planet_ids: Array[String]) -> String:
+	var names: Array[String] = []
+	for id in planet_ids:
+		names.append(str(NpcData.get_data(id).get("display_name", id.capitalize())))
+	if names.size() <= 1:
+		return names[0] if not names.is_empty() else ""
+	if names.size() == 2:
+		return "%s and %s" % [names[0], names[1]]
+	return "%s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+
+
+## One line about the thing he is watching. Tone only shifts with `have`, never the fact - it stays
+## unnamed at every count so the finale (docs/CORE_LOOP.md "The call") is never spoiled.
+func _watch_line(have: int) -> String:
+	if have >= 4:
+		return "Something big is close now. I'm not looking away."
+	if have >= 1:
+		return "Still tracking something big, out past the ring."
+	return "There's something big out there. I keep an eye on it."
 
 
 func _stats_flow() -> void:
@@ -402,9 +455,9 @@ func _stats_flow() -> void:
 		[PlanetScore.star_glyphs(int(rating["stars"])), int(rating["score"])])
 	var trash_count := int(rating["trash_count"])
 	if trash_count > 0:
-		lines.append("There's %d piece%s of space junk lying around. Might want to clean that up!" %
+		lines.append("%d piece%s of space junk lying around. Worth a sweep!" %
 			[trash_count, "" if trash_count == 1 else "s"])
-	await say(_prof_name(),lines, "elder", MAYOR_ACCENT)
+	await say(_prof_name(),lines, "elder", PROF_ACCENT)
 
 
 ## The Mayor reads out the same neighbours PlanetScore actually averages, so the readout can never
@@ -447,7 +500,7 @@ func _on_board(player: Node3D) -> void:
 		"Tip: the rocket pad will take you anywhere. Even home.",
 	]
 	await say("Bulletin Board", [
-		"~ STARPORT DAILY, day %d ~" % GameState.day_count,
+		"~ %s Daily, day %d ~" % [_commons_name(), GameState.day_count],
 		tips[GameState.day_count % tips.size()],
 		"Decorations placed at home so far: %d." % placed,
 	], "astro", Color("#c88a3f"))
@@ -458,17 +511,3 @@ func _on_board(player: Node3D) -> void:
 	end_flow()
 	if choice == 0 and is_inside_tree():
 		JournalPanel.open_over(self)
-
-
-func _get_rename_popup() -> Node:
-	if _rename_popup != null and is_instance_valid(_rename_popup):
-		return _rename_popup
-	if not ResourceLoader.exists(RENAME_POPUP):
-		return null
-	var hud := get_node_or_null("/root/World/HUD")
-	_rename_popup = load(RENAME_POPUP).instantiate()
-	if hud:
-		hud.add_child(_rename_popup)
-	else:
-		get_tree().root.add_child(_rename_popup)
-	return _rename_popup

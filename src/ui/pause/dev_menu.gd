@@ -81,6 +81,8 @@ const MINIGAME_DEV_COUNTS := {"catch": 5, "rings": 5, "guide": 5, "hunt": 3, "ca
 const MINIGAME_HOMES := {"catch": "bolt", "rings": "zorp", "guide": "fen", "hunt": "grig", "call": "vela"}
 ## Phase 3a builder BOARD. Guarded like everything else here.
 const REPLAY_BOARD_PATH := "res://src/minigames/replay_board.gd"
+## Phase 4 builder H: friends visiting your crash site. By path only, so this file parses without it.
+const VISITOR_SYSTEM_PATH := "res://src/campaign/visitor_system.gd"
 
 var is_open := false
 
@@ -369,6 +371,18 @@ func _rebuild_rows() -> void:
 		_add_note("On: every game with a script is on the board, locked or not.")
 	else:
 		_add_note("Game board: not in this build yet.")
+
+	_add_section("Visitors at your crash site — today only")
+	if ResourceLoader.exists(VISITOR_SYSTEM_PATH):
+		for p: Dictionary in CampaignData.PARTS:
+			var visit_npc := str(p.get("npc", ""))
+			if visit_npc != "":
+				_add_action_row("Visitor today: %s" % _npc_name(visit_npc),
+					func() -> void: _force_visitor(visit_npc), "Go")
+		_add_action_row("Clear today's visit", _clear_visitor, "Clear")
+		_add_note("Tap a visitor again to switch their game to a gift.")
+	else:
+		_add_note("Visitors: not in this build yet.")
 
 	_add_section("More")
 	_add_note("More rows land here as new systems ship.")
@@ -660,6 +674,23 @@ func _set_board_show_all(on: bool) -> void:
 		return
 	load(REPLAY_BOARD_PATH).call("set_dev_show_all", on)
 	EventBus.toast_requested.emit("Board lists all games: %s" % ("on" if on else "off"), "star")
+
+
+# ============================================================================= actions: visitors
+## "Visitor today: <Name>" (src/campaign/visitor_system.gd `dev_force_visit`): today's visit becomes
+## theirs, at once when standing on home. The menu stays open so the switch to a gift is one more tap.
+func _force_visitor(npc_id: String) -> void:
+	if not ResourceLoader.exists(VISITOR_SYSTEM_PATH):
+		EventBus.toast_requested.emit("Visitors: not in this build.", "warn")
+		return
+	EventBus.toast_requested.emit(str(load(VISITOR_SYSTEM_PATH).call("dev_force_visit", npc_id)), "heart")
+
+
+func _clear_visitor() -> void:
+	if not ResourceLoader.exists(VISITOR_SYSTEM_PATH):
+		EventBus.toast_requested.emit("Visitors: not in this build.", "warn")
+		return
+	EventBus.toast_requested.emit(str(load(VISITOR_SYSTEM_PATH).call("dev_clear_today")), "check")
 
 
 # ============================================================================= actions: projects

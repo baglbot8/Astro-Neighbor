@@ -68,7 +68,7 @@ const BLURB := {
 	"home": "Home sweet orbit.",
 	"zorp": "Zorp's violet world. Glowing rivers!",
 	"bolt": "Bolt's chrome world. Mind the gears.",
-	"hub": "Starport Plaza. Shops & town hall.",
+	"hub": "The Commons. Shops, friends, the Professor.",
 	"fen": "Fen's long dusk. Mirror pools, huge sun.",
 	"grig": "Grig's chalk steps. All the way up.",
 	"vela": "Vela's long array. Cold, quiet, listening.",

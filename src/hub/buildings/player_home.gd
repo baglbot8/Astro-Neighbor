@@ -4,7 +4,11 @@ extends Building
 ## solar panel, a doormat and a mailbox with a flag.
 ##
 ## Door -> "Home sweet home!" and an offer to save the game.
-## Mailbox -> a letter from Mayor Orbit on day one, then "No new mail".
+## Mailbox -> a letter from Professor Comet on day one (else "No new mail"), then "Rename my
+## planet" (BUILD_PLAN Phase 4 builder I) - moved here from the Town Hall, which no longer has any
+## mayor duties (docs/CORE_LOOP.md "no mayor role").
+
+const RENAME_POPUP := "res://src/hub/rename_popup.tscn"
 
 const DRUM_R := 2.32
 const DRUM_TOP := 0.86
@@ -25,6 +29,8 @@ var _flag: Node3D
 var _beacon: MeshInstance3D
 var _mailbox: Interactable
 var _accent := Color("#ff7a59")
+var _sign_label: Label3D
+var _rename_popup: Node
 
 
 func _init() -> void:
@@ -135,9 +141,10 @@ func _build_front(kit: DecoKit, wood: DecoKit, metal: DecoKit, deco: DecoKit) ->
 			metal.rbox(Vector3(px, PORT_Y, pz) + yaw * Vector3(0.0, 0.0, -0.10), Vector3(PORT_R * 2.0, 0.045, 0.045), 0.014,
 					CREAM_DEEP, yaw * Basis(Vector3.FORWARD, PI * 0.5 * float(k)), 0)
 
-	# hanging sign with the planet's name
+	# hanging sign with the planet's name - kept live so a rename at the mailbox (this same visit,
+	# no reload) shows up on the sign right away instead of waiting for the next planet load.
 	var plate := build_hanging_sign(kit, Vector3(0.0, PORCH_Y + 3.02, -1.60), 1.76, 0.52, CREAM_LIT, WOOD, 0.62, 0.20, wood, metal)
-	add_label(GameState.home_planet_name, plate + Vector3(0.0, 0.0, -0.14), 0.21)
+	_sign_label = add_label(GameState.home_planet_name, plate + Vector3(0.0, 0.0, -0.14), 0.21)
 	set_meta("sign_plate", plate)
 
 
@@ -289,4 +296,53 @@ func _on_mail(player: Node3D) -> void:
 		_refresh_flag()
 	else:
 		await say("Mailbox", ["No new mail. The flag is down."], "astro", HOME_ACCENT)
+	# "Rename my planet" moved here from the Town Hall (BUILD_PLAN Phase 4 builder I): the mayor's
+	# door duties are gone, and the mailbox is the one place on your own planet you already read
+	# your planet's name off, on the hanging sign right above it.
+	while true:
+		var choice: int = await ask("Anything else?", ["Rename my planet", "Leave"])
+		if choice == 0:
+			await _rename_flow()
+		else:
+			break
 	end_flow()
+
+
+## Same rename popup and flow the Town Hall used to run, moved to the mailbox. `_sign_label` lets
+## the hanging sign pick up the new name immediately, in this same visit, with no planet reload.
+func _rename_flow() -> void:
+	var popup := _get_rename_popup()
+	if popup == null:
+		await say("Mailbox", ["The rename form seems to be missing. Try again later!"], "astro", HOME_ACCENT)
+		return
+	var new_name: String = await popup.ask(GameState.home_planet_name)
+	if new_name == "" or new_name == GameState.home_planet_name:
+		await say("Mailbox", ["Keeping the old name, then."], "astro", HOME_ACCENT)
+		return
+	_apply_rename(new_name)
+	await say("Mailbox", ["Renamed! Welcome home to %s." % new_name], "astro", HOME_ACCENT)
+
+
+## Everything a rename actually changes, split out from the popup/dialogue steps above so it can be
+## called (and verified) on its own: the save data, the toast + sfx, and the sign mesh in this same
+## visit. `_sign_label` may be null if this is ever called before `_build()` has run.
+func _apply_rename(new_name: String) -> void:
+	GameState.home_planet_name = new_name
+	if _sign_label:
+		_sign_label.text = new_name
+	toast("Your planet is now %s!" % new_name, "stardust")
+	AudioManager.play_sfx("quest_complete", -4.0)
+
+
+func _get_rename_popup() -> Node:
+	if _rename_popup != null and is_instance_valid(_rename_popup):
+		return _rename_popup
+	if not ResourceLoader.exists(RENAME_POPUP):
+		return null
+	var hud := get_node_or_null("/root/World/HUD")
+	_rename_popup = load(RENAME_POPUP).instantiate()
+	if hud:
+		hud.add_child(_rename_popup)
+	else:
+		get_tree().root.add_child(_rename_popup)
+	return _rename_popup

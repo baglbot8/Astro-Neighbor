@@ -14,6 +14,12 @@ extends RefCounted
 ##   20 % chance of +1 friendship on any talk.
 ##
 ## A plain talk is two boxes (greeting + small talk); only favours go longer, per docs/STYLE_GUIDE.md.
+##
+## A VISITOR is the one exception to all of the above (Phase 4, src/campaign/visitor_system.gd): a
+## neighbour standing on the player's home world for today's visit. Every talk with them goes to the
+## visit (its ask, progress, done and goodbye lines) through the NPC's `visit_host` - no introduction,
+## no greeting, no light link, no project, no favour, no small talk and no random friendship. On their
+## own world the same neighbour is not a visitor and talks exactly as before.
 
 const FRIENDSHIP_CHANCE := 0.20
 const TIME_LINE_CHANCE := 0.25
@@ -43,6 +49,12 @@ static func run(npc: NPC, player: Node3D) -> void:
 	rng.randomize()
 
 	runner.begin(npc, player)
+
+	# ---- a visitor at your crash site talks about the visit and nothing else -----------------
+	if npc.is_visitor() and npc.visit_host.has_method("handle_conversation"):
+		await npc.visit_host.handle_conversation(runner, npc)
+		runner.finish()
+		return
 
 	# ---- introduction / greeting -----------------------------------------------------------
 	var met_flag := "met_%s" % npc_id

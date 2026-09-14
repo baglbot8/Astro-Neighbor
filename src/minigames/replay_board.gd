@@ -59,7 +59,7 @@ extends Node
 ## First success of each board entry on each game day pays REPLAY_STARDUST and toasts
 ## "Nice! +10 stardust"; later ones that day toast "Nice!". The day is remembered per entry in
 ## GameState.flags["replay_paid_day:<key>"] (saved, on purpose: a reload must not pay twice). Then
-## ConfirmPopup asks "Nice! +10 stardust." / "Fly back to Starport Plaza?" (`fly_back_text`) - Yes
+## ConfirmPopup asks "Nice! +10 stardust." / "Fly back to The Commons?" (`fly_back_text`) - Yes
 ## flies there with `launch_to("hub")`, Stay leaves an ordinary world with nothing running.
 ##   * THE REWARD IS IN THE QUESTION (fix round 1). The popup is a full-screen modal, so the HUD
 ##     slides every live toast away when it opens (hud.gd `_apply_toast_spot`, TOAST_HIDE_FAST): the
@@ -67,7 +67,7 @@ extends Node
 ##     it again, so the reward is on screen until the player answers.
 ##   * THE COMMONS BY ITS SHOWN NAME. The player never reads "the Commons": the HUD, the arrival
 ##     banner and the rocket's picker all name the hub by its PlanetData display_name (hub.tres,
-##     "Starport Plaza"), read here through Hud.planet_display_name, so a rename changes this too.
+##     "The Commons"), read here through Hud.planet_display_name, so a rename changes this too.
 ##
 ## ============================================================================== DEPENDENCIES
 ## ProjectSystem and MinigameSystem are reached by PATH only (docs/OPEN_ISSUES.md 46 and 49-50: a file
@@ -587,7 +587,7 @@ func _offer_fly_back() -> void:
 	popup.ask(fly_back_text(_reward), "Yes", "Stay")
 
 
-## "Nice! +10 stardust." then "Fly back to Starport Plaza?" on a line of its own (see "THE REWARD IS
+## "Nice! +10 stardust." then "Fly back to The Commons?" on a line of its own (see "THE REWARD IS
 ## IN THE QUESTION"). Each line stays within LINE_MAX.
 static func fly_back_text(reward: String) -> String:
 	var ask := TEXT_FLY_BACK % Hud.planet_display_name(HUB_ID)

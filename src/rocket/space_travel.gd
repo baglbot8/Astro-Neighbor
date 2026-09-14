@@ -90,7 +90,7 @@ const LAYOUT := {
 	"bolt": {"radius": 1.9, "orbit": 36.5, "angle_deg": 214.0, "y": 1.5,
 		"desc": "Bolt's chrome world. Mind the gears."},
 	"hub": {"radius": 3.2, "orbit": 47.0, "angle_deg": 318.0, "y": -0.9,
-		"desc": "Starport Plaza. Shops & town hall."},
+		"desc": "The Commons. Shops, friends, the Professor."},
 	# Orbit 24 sits between home's 20 and Zorp's 28.5; angle 71 between 24 and 118. Radius 2.0 puts
 	# Fen between home and the two small neighbours, which is honest — it is a 13 m world.
 	"fen": {"radius": 2.0, "orbit": 24.0, "angle_deg": 71.0, "y": 1.9,

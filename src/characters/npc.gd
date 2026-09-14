@@ -11,6 +11,11 @@ extends PlanetBody
 ##
 ## Public API: `start_conversation(player)`, `wander_enabled(b)`, `face_player()`, `play_emote(n)`.
 ## A small bobbing "!" floats overhead whenever this neighbour has something to ask or to receive.
+##
+## A VISITOR (src/campaign/visitor_system.gd, Phase 4 builder H) is this same neighbour scene added to the
+## home world with `visit_host`, `visit_home` and `visit_wander_m` set before it enters the tree: it
+## stands at the home spot it was given (never its own world's NpcData home_dir), wanders only
+## `visit_wander_m`, lets the host veto every wander target (`wander_ok`), and takes its "!" from the host.
 
 @export var npc_id: String = ""
 @export var display_name: String = ""
@@ -47,6 +52,12 @@ const BODY_RADIUS := 0.34
 enum State { IDLE, WANDER, TALKING }
 
 var home_dir: Vector3 = Vector3.UP
+
+## Set only on a VISITOR, by visitor_system.gd, before the node enters the tree (see the header). Typed
+## as plain Node/values so this file never names the visitor system's script.
+var visit_host: Node = null
+var visit_home: Vector3 = Vector3.ZERO
+var visit_wander_m: float = 0.0
 
 var _model: CharacterModel
 var _interactable: Interactable
@@ -108,6 +119,8 @@ func _apply_data() -> void:
 	voice_profile = str(d.get("voice_profile", voice_profile))
 	accent_color = Color(str(d.get("accent", accent_color.to_html())))
 	wander_radius_m = float(d.get("wander_radius_m", wander_radius_m))
+	if visit_wander_m > 0.0:
+		wander_radius_m = visit_wander_m
 
 
 func _ensure_model() -> void:
@@ -172,6 +185,11 @@ func _ensure_interactable() -> void:
 
 # ============================================================================= public API
 ## Starts (or re-focuses) a conversation with the player. Safe to call while one is already running.
+## True while this neighbour is visiting another world (visitor_system.gd) and its host is still up.
+func is_visitor() -> bool:
+	return visit_host != null and is_instance_valid(visit_host)
+
+
 func start_conversation(player: Player) -> void:
 	if _conversation_running:
 		return
@@ -369,6 +387,10 @@ func resolve_home_dir() -> Vector3:
 ## Home spot: the NPC's own `home_dir`, or — for hub shopkeepers — a point a few metres in front of
 ## their building, stepped toward the plaza spawn and nudged sideways so twins don't overlap.
 func _resolve_home_dir() -> Vector3:
+	if visit_home != Vector3.ZERO:
+		# A visitor stands where its host put it, on this world; NpcData's home_dir is their own world's.
+		_away_bias_ang = NAN
+		return visit_home.normalized()
 	var d := NpcData.get_data(npc_id)
 	var hd: Variant = d.get("home_dir", Vector3.UP)
 	var v: Vector3 = hd if hd is Vector3 else Vector3.UP
@@ -495,6 +517,10 @@ func _path_blocked(from_dir: Vector3, to_dir: Vector3, relaxed: bool = false) ->
 ## can't just be dropped).
 func _spot_blocked(d: Vector3, relaxed: bool = false) -> bool:
 	if planet.is_underwater(d):
+		return true
+	# A visitor's host has the final say in BOTH passes: the pad, the stepping stones, the bench, the
+	# mailbox and the player's decorations are hard rules for it, not comfort buffers.
+	if is_visitor() and visit_host.has_method("wander_ok") and not bool(visit_host.call("wander_ok", d)):
 		return true
 	var wr := planet.water_radius()
 	if wr > 0.0 and planet.height_at(d) < wr + 0.25:
@@ -732,6 +758,11 @@ var _projects_script: Script = null
 ## Shows the "!" when this neighbour has a favour to offer, one ready to hand in, or a gift to receive.
 func _refresh_marker() -> void:
 	if _marker == null:
+		return
+	if is_visitor():
+		# A visitor's "!" is about the visit only - never their project, a link or a favour.
+		_marker.visible = not _talking and visit_host.has_method("wants_marker") \
+			and int(visit_host.call("wants_marker", npc_id)) == 1
 		return
 	var favors := _favor_system()
 	if favors == null or _talking:

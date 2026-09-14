@@ -1787,3 +1787,26 @@ would freeze once per shader kind, about 0.6-1.2 s in total on this Mac; the pho
 * **Run `--import` in a fresh scratch copy before anything else.** The project's `.godot/global_script_class_cache.cfg`
   is stale (no MinigameSystem or DevMenu), so without it town_hall.gd, project_system.gd and npc.gd fail to parse and
   the hub is not the real hub. The first repro ran that way; its conclusion held, and its captures were re-taken.
+
+## 56. [2026-09-13] Phase 4: visitors, the Professor without mayor duties, favours that follow the story
+
+All three builders PASSED their critics on round 1, the second phase run the lean way (CLAUDE.md "Keep critic phases
+fast"): the whole phase took 55 min of wall clock - H (visitors, Opus) 45 min to build and 10 to check, I (the
+Professor, Sonnet) 24 + 7, J (favours, Sonnet) 25 + 12. Phase 3's jobs had taken 1-2 hours each, most with a round 2.
+The integration run (Sonnet, 60 min) passed all eight items with Phase 3 in the same build.
+
+* **Visitors** (`src/campaign/visitor_system.gd`, `visitor_lines.gd`): one visit on about every other game day,
+  seeded by the day, never the same neighbour twice running, only neighbours whose project has started; a gift to
+  place, or their unlocked game on home under a "visit:" owner; +3 friendship and +15 stardust on hand-in (Phase 6
+  numbers); one `visit_today` flag; flying away ends the visit. Notes: a visitor can look small near the horizon;
+  guide and hunt keep their own layout rules on home, so their spots can be 13 m or more from the visitor; the spot
+  search costs 23-50 ms once per home load on the Mac (slower on a phone).
+* **The Professor** (`town_hall.gd`, `player_home.gd`): the door gives "What's overhead?" and Leave during the
+  story, Planet stats after it; "Rename my planet" is on the home mailbox. The old stats flow still says up to 6-8
+  lines in one list (older than this phase).
+* **Favours** (`favor_system.gd`): a project neighbour offers nothing until their part is handed over; then an
+  eligible neighbour offers on 11 of 40 simulated days, never two running (FAVOR_CHANCE 0.5 with the no-repeat
+  rule); a "play" favour yields to a board replay and comes back after it. Play favours have no lines of their own
+  yet: every neighbour says the generic "Fancy another round of <game>?" until someone writes them in npc_data.gd.
+* **Harness note (not a game bug):** an automated chain of flights must wait on the rocket pad's `_busy`, not on
+  the `rocket_arriving` flag, which goes false a beat before the arrival tail ends; `launch_to` refuses while busy.
