@@ -13,6 +13,7 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 global uniform float astro_night;
 
 #include "res://src/shaders/surface_detail.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 // --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS, INLINED -----------------------------------------
 // THE CANONICAL COPY AND THE FULL WRITE-UP LIVE AT THE TOP OF src/shaders/planet_common.gdshaderinc:
@@ -170,6 +171,7 @@ uniform bool use_texture = false;
 uniform vec2 uv_scale = vec2(1.0);
 
 void fragment() {
+	CAM_FADE_DISCARD
 	// DO NOT REWRITE THE NEXT LINE. MaterialLib.toon_vertex_color (src/materials/material_lib.gd:165)
 	// does a literal string replace of it with `vec3 base = albedo.rgb * COLOR.rgb;` to build the
 	// vertex-coloured variant that every SurfaceTool-built prop uses. Change its text and every

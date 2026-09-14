@@ -1,0 +1,124 @@
+[
+ {
+  "t": 0.4,
+  "log": "cam_fade_hub_brush: C4 hold camera_right 5 s by the clothes and deco shop doors (as player_fade_orbit.json), count swap/restore cycles, then check nothing is left dithered. camera_right is Input.action_press (no InputEvent)."
+ },
+ {
+  "t": 0.4,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/integ_probe.tscn",
+    "IntegProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.3,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/cam_fade_probe.tscn",
+    "CamFadeProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_named",
+   "args": [
+    "interactables",
+    "clothes_store/Door",
+    3.2
+   ]
+  }
+ },
+ {
+  "t": 1.9,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "watch_cycles",
+   "args": [
+    true
+   ]
+  }
+ },
+ {
+  "t": 2.0,
+  "press": "camera_right"
+ },
+ {
+  "t": 3.5,
+  "capture": "brush_a"
+ },
+ {
+  "t": 7.0,
+  "release": "camera_right"
+ },
+ {
+  "t": 7.2,
+  "call": {
+   "node": "/root/World/IntegProbe",
+   "method": "goto_named",
+   "args": [
+    "interactables",
+    "deco_store/Door",
+    2.4
+   ]
+  }
+ },
+ {
+  "t": 8.0,
+  "press": "camera_left"
+ },
+ {
+  "t": 10.0,
+  "capture": "brush_b"
+ },
+ {
+  "t": 13.0,
+  "release": "camera_left"
+ },
+ {
+  "t": 14.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "c4_end"
+   ]
+  }
+ },
+ {
+  "t": 14.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "scan_dithered",
+   "args": [
+    "c4_end"
+   ]
+  }
+ },
+ {
+  "t": 14.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "watch_cycles",
+   "args": [
+    false
+   ]
+  }
+ },
+ {
+  "t": 14.55,
+  "capture": "brush_end"
+ },
+ {
+  "t": 15.0,
+  "quit": true
+ }
+]

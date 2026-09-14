@@ -1,0 +1,6 @@
+[
+  {"t": 0.2, "log": "cam_fade_hitch: E2 first-fade hitch. Hub Lamp, scaling_3d_scale 2.0, 240 baseline frames with the lamp excluded from the sight-line query, then the next 30 frames once it fades. Run WITHOUT --fixed-fps and with --disable-vsync."},
+  {"t": 0.2, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/cam_fade_bench_probe.tscn", "CamFadeBenchProbe"]}},
+  {"t": 1.0, "call": {"node": "/root/World/CamFadeBenchProbe", "method": "hitch_test", "args": ["Lamp"]}},
+  {"t": 60.0, "quit": true}
+]

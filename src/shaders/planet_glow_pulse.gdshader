@@ -3,6 +3,7 @@
 shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 // WEB PARITY (planet_common lines 84-104). Compatibility skips the CPU-side sRGB->linear on
 // `source_color` uniforms and instead applies srgb_to_linear() to whatever fragment() writes to
@@ -50,6 +51,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	float phase = pc_hash31(floor(v_world_origin * 3.0)) * 6.28318;
 	float s = sin(TIME * pulse_speed + phase);
 	float p = 1.0;

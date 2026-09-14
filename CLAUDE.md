@@ -95,6 +95,8 @@ returns the conclusion, not the dump.
 - **Check the phone runs the current build** before trusting a phone report:
   `curl -s https://baglbot8.github.io/Astro-Neighbor/ | grep astro-build` must show the latest commit.
   A cached service worker once froze the phone on a two-day-old build.
+- **"No difference" is only as good as the spread.** Say the smallest effect the runs could have shown.
+  A 3-run A/B with a 2-8 ms spread read a real +1.1 ms shader cost as free (`docs/OPEN_ISSUES.md` 55).
 - When something goes wrong in a non-obvious way, **write the lesson into `docs/OPEN_ISSUES.md`**.
 
 ## Tooling traps
@@ -133,6 +135,9 @@ returns the conclusion, not the dump.
   with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this
   way on 2026-09-11 (`docs/OPEN_ISSUES.md` 42). Any re-sync into the copy (`rsync --delete`) puts the real
   name back: rename again after every sync (`docs/OPEN_ISSUES.md` 51).
+- **In a fresh scratch copy, run `godot --headless --path <copy> --import` before any other run.** The
+  class cache in `.godot/` is stale; without it town_hall.gd, project_system.gd and npc.gd fail to parse
+  and the hub is not the real hub (2026-09-13, `docs/OPEN_ISSUES.md` 55).
 - Never run `tools/gen/audio/build_all.py` while other builders are working — it regenerates every
   asset.
 

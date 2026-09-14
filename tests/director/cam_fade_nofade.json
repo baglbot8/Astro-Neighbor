@@ -1,0 +1,49 @@
+[
+ {
+  "t": 0.3,
+  "log": "cam_fade_nofade: E1 two captures at spawn with no prop in the sight line (check CAMFADE [] in the log), for before/after and run-to-run comparison."
+ },
+ {
+  "t": 0.3,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/cam_fade_probe.tscn",
+    "CamFadeProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "e1"
+   ]
+  }
+ },
+ {
+  "t": 1.6,
+  "capture": "nofade_a"
+ },
+ {
+  "t": 2.2,
+  "capture": "nofade_b"
+ },
+ {
+  "t": 2.3,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "e1_end"
+   ]
+  }
+ },
+ {
+  "t": 2.6,
+  "quit": true
+ }
+]

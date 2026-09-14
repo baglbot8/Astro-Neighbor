@@ -83,6 +83,7 @@ global uniform float astro_compat;
 
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 // ------------------------------------------------------------------ band 1: fine surface detail
 // 0 none, 1 cloth, 2 metal, 3 wood, 4 rock, 5 foliage, 6 rubber - same numbering as toon_soft.
@@ -153,6 +154,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	ALBEDO = pc_in(albedo.rgb) * COLOR.rgb;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;

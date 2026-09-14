@@ -12,6 +12,7 @@
 // day without any per-frame GDScript.
 shader_type spatial;
 render_mode blend_add, depth_draw_never, cull_back, unshaded, shadows_disabled;
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 global uniform float astro_night;
 
@@ -25,6 +26,7 @@ uniform float radial_falloff : hint_range(0.5, 6.0) = 1.5;
 uniform float day_floor : hint_range(0.0, 1.0) = 0.0;
 
 void fragment() {
+	CAM_FADE_DISCARD
 	float along = clamp(UV.y, 0.0, 1.0);
 	float len_fade = pow(1.0 - along, length_falloff);
 	float ndv = abs(dot(normalize(NORMAL), normalize(VIEW)));

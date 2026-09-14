@@ -1,0 +1,121 @@
+[
+ {
+  "t": 0.3,
+  "log": "cam_fade_bolt_beacon: B3 a project find beacon (run with --campaign on a fresh scratch save), then C2 ProjectMarkers.clear_markers while it is faded."
+ },
+ {
+  "t": 0.3,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/cam_fade_probe.tscn",
+    "CamFadeProbe"
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "start_project_step0",
+   "args": [
+    "bolt"
+   ]
+  }
+ },
+ {
+  "t": 1.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "stage_marker",
+   "args": []
+  }
+ },
+ {
+  "t": 2.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "on"
+   ]
+  }
+ },
+ {
+  "t": 2.55,
+  "capture": "bolt_beacon_on"
+ },
+ {
+  "t": 2.6,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 2.7,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "off"
+   ]
+  }
+ },
+ {
+  "t": 2.75,
+  "capture": "bolt_beacon_off"
+ },
+ {
+  "t": 2.8,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": false
+  }
+ },
+ {
+  "t": 3.3,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "on2"
+   ]
+  }
+ },
+ {
+  "t": 3.35,
+  "capture": "bolt_beacon_on2"
+ },
+ {
+  "t": 3.4,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "clear_markers",
+   "args": [
+    "c2_beacon"
+   ]
+  }
+ },
+ {
+  "t": 4.0,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "c2_beacon_after_0.6s"
+   ]
+  }
+ },
+ {
+  "t": 4.05,
+  "capture": "bolt_beacon_cleared"
+ },
+ {
+  "t": 4.4,
+  "quit": true
+ }
+]

@@ -119,6 +119,8 @@ const AVOID_MASK := 1 | (1 << 6)
 ## where this started: a topiary is two or three leaf tiers plus a pot, and 20 % opacity per layer
 ## stacks to nearly half coverage over the astronaut behind it. 0.90 measured clean through the
 ## worst case in the plaza (see the before/after pair in the report) and still leaves a visible ghost.
+## Under Compatibility the same number is the share of the prop's pixels the dither removes (14 of
+## every 16), and a screen door does not stack: every tier removes the same screen pixels.
 const FADE_TO := 0.90
 ## Fade in fast enough that the player is never hidden for long, out slowly so a prop the camera
 ## brushes past does not strobe.
@@ -278,7 +280,9 @@ var _control_basis_off := false
 var _smoothed_pos: Vector3 = Vector3.ZERO
 var _smoothed_quat: Quaternion = Quaternion.IDENTITY
 ## instance id -> {"meshes": Array[GeometryInstance3D], "t": float, "want": float}. `t` is the
-## current fade, `want` what the last probe asked for.
+## current fade, `want` what the last probe asked for. Under Compatibility an entry that has started to
+## fade also carries "swaps" (one record per material slot given a dithering copy), "solid" (geometry
+## with nothing to dither), "solid_kinds" (debug) and "value" (the cam_fade last written).
 var _faded: Dictionary = {}
 var _probe_timer: float = 0.0
 ## The swept sight-line volume and its query, built once and re-aimed per probe rather than
@@ -293,9 +297,19 @@ var _lift: float = 0.0
 ## astronaut happened to be visible.
 var _fade_debug := false
 var _fade_debug_last := ""
-## `--fade-off` keeps the whole probe running but stops applying the transparency, so the same
-## timeline can be captured with and without the fix for a before/after pair.
+## `--fade-off` keeps the whole probe running but stops applying the fade (the transparency, or under
+## Compatibility the dither's `cam_fade`), so the same timeline can be captured with and without the
+## fix for a before/after pair.
 var _fade_off := false
+## True under the Compatibility renderer (the web build the phone runs), read once in `_ready`. That
+## renderer never reads GeometryInstance3D.transparency - measured: hub Lamp / Topiary and home
+## PuffTree / Rock all drew SOLID with the fade "on", the astronaut fully hidden - so there the fade
+## is the `cam_fade` screen-door dither of src/shaders/cam_fade.gdshaderinc, written on the faded
+## prop's OWN material copies (see `_swap_in_fade_copies`). Forward+ keeps `transparency`.
+var _dither_fade := false
+## Shader instance id -> bool, "does this shader declare cam_fade". Cached because the answer never
+## changes for a Shader and the uniform list is built fresh on every call.
+var _fade_hookable: Dictionary = {}
 ## `--fade-thin` shrinks the sight-line probe back to the infinitely thin centre-line ray it used to
 ## be (see SIGHT_RADIUS). Same purpose as `--fade-off`: it is what lets the "a lamp pole beside the
 ## centre line never faded" before/after pair be re-captured from one timeline at any time, instead
@@ -368,6 +382,7 @@ func _ready() -> void:
 	EventBus.player_spawned.connect(_on_player_spawned)
 	_fade_debug = argv.has("--fade-debug")
 	_fade_off = argv.has("--fade-off")
+	_dither_fade = Platform.is_compatibility_renderer()
 	_orbit_grace_off = argv.has("--no-orbit-grace")
 	_control_basis_off = argv.has("--no-control-basis")
 	_mouse_test = argv.has("--mouse-look-test")
@@ -393,6 +408,10 @@ func _exit_tree() -> void:
 	if _grab_cursor and _mouse_look:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_mouse_look = false
+	# A prop that outlives this rig must not keep a dithered material copy nobody will ever restore.
+	for id: int in _faded:
+		_restore_fade_originals(_faded[id] as Dictionary)
+	_faded.clear()
 
 
 func _on_player_spawned(p: Node3D) -> void:
@@ -1355,15 +1374,27 @@ func _update_occluder_fade(delta: float, cam_pos: Vector3) -> void:
 		e["t"] = t
 		var alive := false
 		var meshes: Array = e["meshes"]
+		var value := 0.0 if _fade_off else t * FADE_TO
 		# Variant, not GeometryInstance3D: a typed loop variable errors on a freed mesh before
 		# is_instance_valid() can skip it, and the error stops this function every frame.
 		for g: Variant in meshes:
 			if is_instance_valid(g):
-				(g as GeometryInstance3D).transparency = 0.0 if _fade_off else t * FADE_TO
+				if not _dither_fade:
+					(g as GeometryInstance3D).transparency = value
 				alive = true
+		if _dither_fade and alive:
+			# Copies are made once, on the first frame this prop starts to fade (t, not `value`, so a
+			# `--fade-off` control run swaps too and differs from the "on" run only by the uniform), and
+			# the uniform is only written when it changes - a prop held at 0.90 costs nothing per frame.
+			if t > 0.0 and not e.has("swaps"):
+				_swap_in_fade_copies(e)
+			if e.has("swaps") and value != float(e["value"]):
+				e["value"] = value
+				_write_cam_fade(e, value)
 		if not alive or (t <= 0.0 and want <= 0.0):
 			done.append(id)
 	for id: int in done:
+		_restore_fade_originals(_faded[id] as Dictionary)
 		_faded.erase(id)
 	if _fade_debug:
 		var names: Array[String] = []
@@ -1372,12 +1403,17 @@ func _update_occluder_fade(delta: float, cam_pos: Vector3) -> void:
 			if float(e["t"]) > 0.01:
 				var meshes: Array = e["meshes"]
 				if not meshes.is_empty() and is_instance_valid(meshes[0]):
-					names.append("%s@%.2f" % [(meshes[0] as Node).get_parent().name, float(e["t"])])
+					var label := "%s@%.2f" % [(meshes[0] as Node).get_parent().name, float(e["t"])]
+					if e.has("swaps"):
+						label += " swaps=%d solid=%d" % [_live_swaps(e), int(e["solid"])]
+						if not (e["solid_kinds"] as Dictionary).is_empty():
+							label += str(e["solid_kinds"])
+					names.append(label)
 		names.sort()
 		var line := ", ".join(names)
 		if line != _fade_debug_last:
 			_fade_debug_last = line
-			print("CAMFADE [%s]" % line)
+			print("CAMFADE [%s] mode=%s" % [line, "dither" if _dither_fade else "transparency"])
 
 
 ## One probe cycle: a SIGHT_RADIUS capsule swept from the lens to each of SIGHT_HEIGHTS on the
@@ -1456,6 +1492,176 @@ func _collect_geometry(n: Node) -> Array[GeometryInstance3D]:
 	for c: Node in n.get_children():
 		out.append_array(_collect_geometry(c))
 	return out
+
+
+# ------------------------------------------------------------------ near-geometry fade: the dither
+## Which material slot a swap record lives in.
+enum { _SLOT_OVERRIDE, _SLOT_SURFACE, _SLOT_OVERLAY }
+
+
+## Compatibility only. Gives every GeometryInstance3D of a prop that has just started to fade its OWN
+## copy of each material that can dither, in the slot the original occupied, and records how to put
+## the original back.
+##
+## WHY COPIES. MaterialLib caches and shares one material between many props, buildings and
+## characters, so writing `cam_fade` on the material a lamp post uses would ghost every lamp post on
+## the planet (and the shops sharing its paint). And not an `instance uniform`: in Compatibility each
+## instance that declares one takes 16 slots of a global buffer that WebGL2 on Apple sizes at 1024
+## slots - about 63 instances for the scene, against 385 toon_soft instances on the hub alone.
+##
+## Slot precedence follows the engine's: a MeshInstance3D's material_override hides its surfaces, so
+## only it is copied; otherwise each surface's override, or the mesh's own material written into the
+## override slot (restored to null). A MultiMeshInstance3D has no per-surface override, so its mesh
+## material is only taken over when there is exactly one surface to take. A StandardMaterial3D that
+## already alpha-blends fades by its albedo alpha instead (see `_is_alpha_blended`). GPUParticles3D,
+## Label3D, Sprite3D, CSG and opaque StandardMaterial3D geometry have nothing to fade and stay solid;
+## they are counted in `solid` so `--fade-debug` says so.
+func _swap_in_fade_copies(e: Dictionary) -> void:
+	var swaps: Array = []
+	var solid := 0
+	var solid_kinds: Dictionary = {}
+	for g: Variant in (e["meshes"] as Array):
+		if not is_instance_valid(g):
+			continue
+		var gi := g as GeometryInstance3D
+		var before := swaps.size()
+		var is_mesh := gi is MeshInstance3D
+		if (is_mesh or gi is MultiMeshInstance3D) and gi.material_override != null:
+			_swap_slot(swaps, gi, _SLOT_OVERRIDE, 0, gi.material_override, gi.material_override)
+		elif is_mesh:
+			var mi := gi as MeshInstance3D
+			if mi.mesh != null:
+				for i in range(mi.mesh.get_surface_count()):
+					var so := mi.get_surface_override_material(i)
+					_swap_slot(swaps, gi, _SLOT_SURFACE, i, so if so != null else mi.mesh.surface_get_material(i), so)
+		elif gi is MultiMeshInstance3D:
+			var mm := (gi as MultiMeshInstance3D).multimesh
+			if mm != null and mm.mesh != null and mm.mesh.get_surface_count() == 1:
+				_swap_slot(swaps, gi, _SLOT_OVERRIDE, 0, mm.mesh.surface_get_material(0), null)
+		if (is_mesh or gi is MultiMeshInstance3D) and gi.material_overlay != null:
+			_swap_slot(swaps, gi, _SLOT_OVERLAY, 0, gi.material_overlay, gi.material_overlay)
+		if swaps.size() == before:
+			solid += 1
+			if _fade_debug:
+				solid_kinds[gi.get_class()] = int(solid_kinds.get(gi.get_class(), 0)) + 1
+	e["swaps"] = swaps
+	e["solid"] = solid
+	e["solid_kinds"] = solid_kinds
+	# Below any real fade value, so the first frame after the swap always writes the uniform.
+	e["value"] = -1.0
+
+
+## Copies `src` into one slot of `gi` if it can dither. `restore` is what the slot held before: the
+## original override, or null when the copy stands in for a mesh material.
+func _swap_slot(swaps: Array, gi: GeometryInstance3D, slot: int, surf: int, src: Material, restore: Material) -> void:
+	# `alpha` is the original albedo alpha for a blended StandardMaterial3D copy, and -1.0 for a
+	# ShaderMaterial copy driven by the `cam_fade` uniform.
+	var alpha := -1.0
+	if _is_alpha_blended(src):
+		alpha = (src as BaseMaterial3D).albedo_color.a
+	elif not _is_fade_hookable(src):
+		return
+	var copy := src.duplicate() as Material
+	_set_slot(gi, slot, surf, copy)
+	swaps.append({"g": gi, "slot": slot, "surf": surf, "orig": src, "restore": restore, "copy": copy, "alpha": alpha, "live": true})
+
+
+## A StandardMaterial3D that already alpha-blends: MaterialLib.glass() (the rocket's porthole and door
+## window), project zone rings, glow quads. It has no shader to hook, but its blend does work under
+## Compatibility, so the fade scales its albedo alpha. Left solid, the rocket porthole glass (alpha
+## 0.46) drew a pale disc over the astronaut's helmet whenever the rocket at the landing spot ghosted.
+## Alpha scissor and alpha hash are not blends (hash draws solid in Compatibility), so they stay solid.
+func _is_alpha_blended(m: Material) -> bool:
+	if not (m is BaseMaterial3D):
+		return false
+	var mode := (m as BaseMaterial3D).transparency
+	return mode == BaseMaterial3D.TRANSPARENCY_ALPHA or mode == BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+
+
+## A ShaderMaterial whose shader declares `cam_fade` (src/shaders/cam_fade.gdshaderinc).
+func _is_fade_hookable(m: Material) -> bool:
+	if not (m is ShaderMaterial) or (m as ShaderMaterial).shader == null:
+		return false
+	var sh := (m as ShaderMaterial).shader
+	var sid := sh.get_instance_id()
+	if not _fade_hookable.has(sid):
+		var found := false
+		for u: Dictionary in sh.get_shader_uniform_list():
+			if str(u.get("name", "")) == "cam_fade":
+				found = true
+				break
+		_fade_hookable[sid] = found
+	return bool(_fade_hookable[sid])
+
+
+func _get_slot(gi: GeometryInstance3D, slot: int, surf: int) -> Material:
+	match slot:
+		_SLOT_SURFACE:
+			var mi := gi as MeshInstance3D
+			if mi.mesh == null or surf >= mi.get_surface_override_material_count():
+				return null
+			return mi.get_surface_override_material(surf)
+		_SLOT_OVERLAY:
+			return gi.material_overlay
+	return gi.material_override
+
+
+func _set_slot(gi: GeometryInstance3D, slot: int, surf: int, m: Material) -> void:
+	match slot:
+		_SLOT_SURFACE:
+			(gi as MeshInstance3D).set_surface_override_material(surf, m)
+		_SLOT_OVERLAY:
+			gi.material_overlay = m
+		_:
+			gi.material_override = m
+
+
+## True while the swap's slot still holds OUR copy. Game code swaps materials on its own props
+## (placement_controller.gd's ghost override on a decoration, minigame highlight overrides): once it
+## has, that slot is theirs - the fade stops writing to it and the restore leaves it alone.
+func _slot_holds_copy(sw: Dictionary) -> bool:
+	var g: Variant = sw["g"]
+	if not is_instance_valid(g):
+		return false
+	return _get_slot(g as GeometryInstance3D, int(sw["slot"]), int(sw["surf"])) == sw["copy"]
+
+
+func _write_cam_fade(e: Dictionary, value: float) -> void:
+	for sw: Dictionary in (e["swaps"] as Array):
+		if not bool(sw["live"]):
+			continue
+		if not _slot_holds_copy(sw):
+			sw["live"] = false
+			continue
+		var alpha := float(sw["alpha"])
+		if alpha >= 0.0:
+			# The same share as the dither removes: at FADE_TO the glass keeps a tenth of its alpha.
+			var bm := sw["copy"] as BaseMaterial3D
+			var c := bm.albedo_color
+			c.a = alpha * (1.0 - value)
+			bm.albedo_color = c
+		else:
+			(sw["copy"] as ShaderMaterial).set_shader_parameter(&"cam_fade", value)
+
+
+## Puts every original back, but only into a slot that still holds our copy (see `_slot_holds_copy`),
+## and drops the copies. Safe on an entry that never swapped and on freed geometry.
+func _restore_fade_originals(e: Dictionary) -> void:
+	if not e.has("swaps"):
+		return
+	for sw: Dictionary in (e["swaps"] as Array):
+		if bool(sw["live"]) and _slot_holds_copy(sw):
+			_set_slot(sw["g"] as GeometryInstance3D, int(sw["slot"]), int(sw["surf"]), sw["restore"] as Material)
+	e.erase("swaps")
+
+
+## Swaps whose slot still holds our copy, for `--fade-debug` and the test probe.
+func _live_swaps(e: Dictionary) -> int:
+	var n := 0
+	for sw: Dictionary in (e["swaps"] as Array):
+		if bool(sw["live"]) and _slot_holds_copy(sw):
+			n += 1
+	return n
 
 
 ## Spring arm. If terrain or a building sits between the pivot and the camera, first try to climb

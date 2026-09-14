@@ -23,6 +23,7 @@
 // additive-bright plume against a starfield blooms into a red disc twice the size of the rocket.
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 // Ramp stops, throat -> tip.
 uniform vec4 core_color : source_color = vec4(0.78, 0.90, 1.00, 1.0);
@@ -74,6 +75,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	float t = band(axial);
 	vec3 c;
 	if (t < stop_core) {

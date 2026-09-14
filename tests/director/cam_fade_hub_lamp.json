@@ -1,0 +1,189 @@
+[
+ {
+  "t": 0.3,
+  "log": "cam_fade_hub_lamp: stage the occluder, capture on / off / on2 in one run, then take it off the probe layer and check every swapped slot is restored (C1). Run with --fade-debug; see cam_fade_probe.gd. C1 frame check: after the restore, the prop is let back onto the probe with --fade-off set, so fresh copies at cam_fade 0 draw in 'off_again', 0.35 s after 'restored' from the same camera."
+ },
+ {
+  "t": 0.3,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/cam_fade_probe.tscn",
+    "CamFadeProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "list_occluders",
+   "args": []
+  }
+ },
+ {
+  "t": 0.7,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "count_shaders",
+   "args": []
+  }
+ },
+ {
+  "t": 0.9,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "stage",
+   "args": [
+    "Lamp",
+    -1,
+    8.6
+   ]
+  }
+ },
+ {
+  "t": 1.9,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "on"
+   ]
+  }
+ },
+ {
+  "t": 1.95,
+  "capture": "hub_lamp_on"
+ },
+ {
+  "t": 2.0,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 2.1,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "off"
+   ]
+  }
+ },
+ {
+  "t": 2.15,
+  "capture": "hub_lamp_off"
+ },
+ {
+  "t": 2.2,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": false
+  }
+ },
+ {
+  "t": 2.7,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "on2"
+   ]
+  }
+ },
+ {
+  "t": 2.75,
+  "capture": "hub_lamp_on2"
+ },
+ {
+  "t": 2.8,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "remember_swaps",
+   "args": [
+    "on2"
+   ]
+  }
+ },
+ {
+  "t": 2.85,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "drop_from_probe",
+   "args": []
+  }
+ },
+ {
+  "t": 3.4,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "after_drop_0.55s"
+   ]
+  }
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "check_restore",
+   "args": [
+    "restored"
+   ]
+  }
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "restored"
+   ]
+  }
+ },
+ {
+  "t": 3.65,
+  "capture": "hub_lamp_restored"
+ },
+ {
+  "t": 3.75,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 3.8,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "undrop",
+   "args": []
+  }
+ },
+ {
+  "t": 4.15,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "off_again"
+   ]
+  }
+ },
+ {
+  "t": 4.2,
+  "capture": "hub_lamp_off_again"
+ },
+ {
+  "t": 4.5,
+  "quit": true
+ }
+]

@@ -23,6 +23,7 @@ shader_type spatial;
 // expect the answer to be a renderer-level change to how the additive pass composites — not a
 // constant in this file. THE IRON RULE STILL HOLDS: if it needs a gain to pass, it has failed.
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 uniform vec4 tint : source_color = vec4(1.0, 0.95, 0.6, 1.0);
 uniform float intensity : hint_range(0.0, 10.0) = 2.0;
@@ -49,6 +50,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	vec2 p = (UV - 0.5) * 2.0;
 	float d = length(p);
 	float glow = smoothstep(1.0, softness, d);

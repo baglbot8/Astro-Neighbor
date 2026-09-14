@@ -1,0 +1,9 @@
+[
+  {"t": 0.2, "log": "cam_fade_bench: E2 frame cost. Hub, Lamp spot, 300 warm-up + 900 measured frames at the game's 3D scale then at 2.0 (GPU-bound). Run WITHOUT --fixed-fps and with --disable-vsync (engine flag)."},
+  {"t": 0.2, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://tests/director/cam_fade_bench_probe.tscn", "CamFadeBenchProbe"]}},
+  {"t": 1.0, "call": {"node": "/root/World/CamFadeBenchProbe", "method": "stage", "args": ["Lamp"]}},
+  {"t": 1.3, "capture": "framing_check"},
+  {"t": 1.5, "call": {"node": "/root/World/CamFadeBenchProbe", "method": "start_bench", "args": []}},
+  {"t": 240.0, "log": "cam_fade_bench: safety timeout reached, bench did not self-quit"},
+  {"t": 240.5, "quit": true}
+]

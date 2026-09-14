@@ -19,6 +19,7 @@
 shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 global uniform float astro_night;
 // WEB PARITY. The full write-up, the probe numbers and the conversion recipe are at the top of the
@@ -95,6 +96,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	vec3 n = NORMAL;
 	if (faceted) {
 		vec3 g = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));

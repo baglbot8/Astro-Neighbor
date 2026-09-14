@@ -75,6 +75,7 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 global uniform float astro_compat;
 
 uniform vec4 shallow_color : source_color = vec4(0.31, 0.76, 0.97, 1.0);
@@ -112,6 +113,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	vec3 wp = v_world_pos;
 	vec3 dir = normalize(wp);
 	vec3 t = normalize(cross(dir, abs(dir.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));

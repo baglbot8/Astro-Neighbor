@@ -22,6 +22,7 @@ shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 // WEB PARITY. Under the Compatibility (WebGL2) renderer the web export is forced onto,
 // `astro_compat` is 1.0; it is 0.0 on desktop, so every wrap below is the exact identity on
@@ -191,6 +192,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	// pc_albedo_floor keeps every channel above PC_ALBEDO_FLOOR so pc_light_term's divide stays sane.
 	vec3 base = pc_in(albedo.rgb) * v_col;
 	float rough = 0.97;

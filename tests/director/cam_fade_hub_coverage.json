@@ -1,0 +1,341 @@
+[
+ {
+  "t": 0.3,
+  "log": "cam_fade_hub_coverage: B3 placed DecoItem and rocket on the pad, C3 game code swaps a faded slot, C2 a faded prop freed while a pinned second prop fades. Compatibility. Staging, the pin and the slot swap are SYNTHESISED."
+ },
+ {
+  "t": 0.3,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://tests/director/cam_fade_probe.tscn",
+    "CamFadeProbe"
+   ]
+  }
+ },
+ {
+  "t": 0.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "place_test_decos",
+   "args": []
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "list_occluders",
+   "args": []
+  }
+ },
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "stage",
+   "args": [
+    "/root/World/Decorations",
+    -1,
+    8.6
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "deco_on"
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "list_solid",
+   "args": [
+    "deco"
+   ]
+  }
+ },
+ {
+  "t": 2.25,
+  "capture": "deco_on"
+ },
+ {
+  "t": 2.3,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 2.4,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "deco_off"
+   ]
+  }
+ },
+ {
+  "t": 2.45,
+  "capture": "deco_off"
+ },
+ {
+  "t": 2.5,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": false
+  }
+ },
+ {
+  "t": 3.0,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "deco_on2"
+   ]
+  }
+ },
+ {
+  "t": 3.05,
+  "capture": "deco_on2"
+ },
+ {
+  "t": 3.1,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "remember_swaps",
+   "args": [
+    "c3"
+   ]
+  }
+ },
+ {
+  "t": 3.15,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "game_takes_slot",
+   "args": [
+    "c3"
+   ]
+  }
+ },
+ {
+  "t": 3.2,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 3.3,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": false
+  }
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "game_slot_state",
+   "args": [
+    "c3_mid"
+   ]
+  }
+ },
+ {
+  "t": 3.65,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "drop_from_probe",
+   "args": []
+  }
+ },
+ {
+  "t": 4.3,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "check_restore",
+   "args": [
+    "c3_restored"
+   ]
+  }
+ },
+ {
+  "t": 4.3,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "game_slot_state",
+   "args": [
+    "c3_after"
+   ]
+  }
+ },
+ {
+  "t": 4.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "stage",
+   "args": [
+    "/root/World/Rocket",
+    -1,
+    8.6
+   ]
+  }
+ },
+ {
+  "t": 5.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "rocket_on"
+   ]
+  }
+ },
+ {
+  "t": 5.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "list_solid",
+   "args": [
+    "rocket"
+   ]
+  }
+ },
+ {
+  "t": 5.55,
+  "capture": "rocket_on"
+ },
+ {
+  "t": 5.6,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": true
+  }
+ },
+ {
+  "t": 5.7,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "rocket_off"
+   ]
+  }
+ },
+ {
+  "t": 5.75,
+  "capture": "rocket_off"
+ },
+ {
+  "t": 5.8,
+  "set": {
+   "node": "/root/World/CameraRig",
+   "property": "_fade_off",
+   "value": false
+  }
+ },
+ {
+  "t": 6.3,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "rocket_on2"
+   ]
+  }
+ },
+ {
+  "t": 6.35,
+  "capture": "rocket_on2"
+ },
+ {
+  "t": 6.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "stage",
+   "args": [
+    "Topiary",
+    -1,
+    8.6
+   ]
+  }
+ },
+ {
+  "t": 6.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "pin_prop",
+   "args": [
+    "Lamp"
+   ]
+  }
+ },
+ {
+  "t": 7.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "c2_pre"
+   ]
+  }
+ },
+ {
+  "t": 7.5,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "report",
+   "args": [
+    "c2_pre"
+   ]
+  }
+ },
+ {
+  "t": 7.55,
+  "capture": "c2_pre"
+ },
+ {
+  "t": 7.6,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "free_staged",
+   "args": [
+    "c2"
+   ]
+  }
+ },
+ {
+  "t": 8.2,
+  "call": {
+   "node": "/root/World/CamFadeProbe",
+   "method": "faded_summary",
+   "args": [
+    "c2_after_0.6s"
+   ]
+  }
+ },
+ {
+  "t": 8.25,
+  "capture": "c2_after"
+ },
+ {
+  "t": 8.6,
+  "quit": true
+ }
+]

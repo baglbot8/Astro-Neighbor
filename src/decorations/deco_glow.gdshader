@@ -50,6 +50,7 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx,
 // on the emissive itself, not on the frame. See planet_glow_pulse for the measurement of that
 // ceiling. It is an engine limit of the Compatibility target, not something to tune out.
 #include "res://src/shaders/planet_common.gdshaderinc"
+#include "res://src/shaders/cam_fade.gdshaderinc"
 global uniform float astro_compat;
 
 global uniform float astro_night;
@@ -88,6 +89,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	float p = 1.0;
 	if (pulse_speed > 0.001) {
 		float s = sin(TIME * pulse_speed + phase);

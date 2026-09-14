@@ -55,6 +55,7 @@
 // there would survive `mix(x, NaN, 0.0)` and blank the astronaut's shadow. The branch cannot.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+#include "res://src/shaders/cam_fade.gdshaderinc"
 
 uniform vec4 color : source_color = vec4(0.12, 0.09, 0.28, 0.5);
 uniform float softness : hint_range(0.05, 1.0) = 0.55;
@@ -71,6 +72,7 @@ void vertex() {
 }
 
 void fragment() {
+	CAM_FADE_DISCARD
 	float soft = v_soft;
 	vec2 d = UV - vec2(0.5);
 	float r = length(d) * 2.0;

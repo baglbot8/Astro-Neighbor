@@ -1695,6 +1695,7 @@ every number below in its own copy.
   Forward+ drew a faint ghost (1 lead capture). This agrees with entry 50 ("The Compatibility renderer ignores
   transparency"). So `GeometryInstance3D.transparency`, which is the whole near-geometry fade, probably does
   nothing on the phone. Not checked on a real phone, not fixed here; a fix would have to fade inside the materials.
+  **Fixed in entry 55**: a screen-door dither inside the materials, Compatibility only.
 
 ## 54. [2026-09-13] Phase 3b worlds, and a shipped bug: placed project items vanished after a restart
 
@@ -1721,3 +1722,68 @@ Non-blocking, for a polish pass:
   the lamps" rule. Correct the header; consider a recolour.
 * The guide game on Fen was never finished 5/5 by real touch in 3b: builder and critic both confirmed that real
   touch moves the moths, then finished with a disclosed state write. The phone play-through is the first full run.
+
+## 55. [2026-09-13] The camera fade now works on the phone: a screen-door dither under Compatibility
+
+Closes the OPEN bullet of entry 53. Not checked on a real phone.
+
+**Confirmed first, in the real game.** world.tscn at 2556x1179 with `--ui=mobile`, `--fade-off` as the same-run
+control: Compatibility drew hub Lamp, hub Topiary, home PuffTree and home Rock SOLID at transparency 0.900 (on-vs-off
+at or below the noise floor; the astronaut fully hidden behind the topiary and the tree). Forward+ drew the ghost
+(on-vs-off mean abs RGB 12.1 / 9.5 / 3.2 / 7.4, 2-5x noise). The cause is in the engine: Godot 4.7.1's drivers/gles3
+never reads the `force_alpha` that `set_transparency` writes; Forward+ multiplies it into the instance alpha.
+
+**The fix.**
+* `src/shaders/cam_fade.gdshaderinc`: a `cam_fade` uniform and `CAM_FADE_DISCARD`, a 4x4 Bayer screen-door discard
+  guarded by `!IN_SHADOW_PASS` and `PROJECTION_MATRIX[3][3] == 0.0`, compiled only when
+  `CURRENT_RENDERER == RENDERER_COMPATIBILITY`. Eleven shaders include it and start `fragment()` with the macro:
+  toon_soft (MaterialLib's toon_vertex_color, rocket_finish and rocket_glint rewrites inherit it), planet_foliage,
+  crystal, planet_glow_pulse, hub_surface, deco_glow, rocket_flame, water, light_beam, blob_shadow, star.
+* `camera_rig.gd`, Compatibility only: when a prop starts to fade, each of its meshes gets its OWN copy of each
+  hookable material, in the same slot, and `cam_fade` is written on the copies. An already alpha-blended
+  StandardMaterial3D (MaterialLib.glass: the rocket porthole and door window) fades by its albedo alpha instead;
+  left solid, the porthole drew a pale disc over the helmet whenever the rocket at the landing spot ghosted. The
+  originals go back when the prop has faded in again, only into slots that still hold the copy. The sight-line
+  probe, FADE_TO and the rates are unchanged; Forward+ still sets `transparency`.
+* Measured under Compatibility: on-vs-off in the prop box, topiary 9.9 against 2.2-2.5 noise (4x), rock 8.7-9.0
+  against 2.7-3.0 (3.3x); the astronaut reads clearly through a fine dotted ghost; the prop's shadow stays whole;
+  restore puts the original objects back (instance ids); a prop freed mid-fade gives 0 errors; a material swapped
+  in by game code mid-fade is not overwritten; brushing past gave 7 swaps and 7 restores; a 26 s hub walk
+  (synthesised input) faded Fountain, Bench, Topiary, Lamp and PuffTree with 0 errors and nothing left dithered.
+  Forward+ unchanged: transparency 0.90, no swaps, on-vs-off in the pre-change band.
+* Still solid under Compatibility: GPUParticles3D (rocket smoke, tree particles), Label3D, opaque
+  StandardMaterial3D, and props whose shader is not one of the eleven (flag_wave, plaza_tiles...). A beacon lamp
+  whose material `ProjectMarkers.set_found` replaces mid-fade stays solid for the rest of that fade. While a prop
+  is faded, game writes to its ORIGINAL materials (rocket blink and flicker, a repaint) show only after it fades in.
+* The Compatibility ghost keeps 2 pixels in 16; at thumbnail size it is fainter than Forward+'s alpha ghost,
+  because the 0.75 bilinear upscale blends the kept dots.
+
+**Cost, measured** (hub, Compatibility, GPU-bound at `scaling_3d_scale` 2.0, this Mac's M5): the discard line costs
+about +1.1 ms a frame (~4%) even with nothing fading (median 28.37 -> 29.40 ms, the same in every A/B pair; the critic
+re-measured +0.6 to +1.7 ms). The include and uniform without the discard cost nothing; hooking only toon_soft and
+planet_foliage cost +0.5 ms. At the game's 0.75 scale this Mac is pinned at the 16.65 ms compositor cap, so it does
+not show there. The desktop Forward+ build does not compile the discard (cam_fade 0.9 removes 0.0000 pixels there).
+The iPhone is unmeasured.
+
+**The alternative was measured and rejected.** Keeping the shaders discard-free and giving only the fading copies a
+separate dither Shader means the renderer draws a Shader it has never drawn at the first fade. First draw of a new
+Shader object under Compatibility on the M5, one dropped frame each: planet_foliage ~90 ms, rocket_finish ~120 ms,
+hub_surface 210-350 ms, toon_vertex_color 180-410 ms, toon_soft 175-480 ms. The same code in a NEW Shader object
+stalls again (~105 ms); the SAME object on another mesh does not (~12 ms); no disk cache was written. A hub visit
+would freeze once per shader kind, about 0.6-1.2 s in total on this Mac; the phone compiles more slowly.
+
+**Lessons:**
+* **A null result is only as good as the effect it could see.** The first A/B of the discard (3 runs, 2-8 ms
+  spread) read +0.06 ms, and the lead designed on "no cost"; the builder's tighter A/B (about 0.2 ms spread)
+  measured +1.1 ms. With "no difference", report the smallest difference the runs could have shown.
+* **Instance uniforms do not scale under Compatibility.** Every GeometryInstance whose material declares any
+  instance uniform takes 16 slots of the global shader uniform buffer, whose size is GL_MAX_UNIFORM_BLOCK_SIZE / 16
+  bytes. WebGL2 on Apple (ANGLE Metal, measured in a browser on this Mac) reports 16384 bytes: about 63 instances
+  for a whole scene. Desktop Compatibility here caps at 256, so a desktop test passes where the phone fails, and
+  every instance past the cap logs an error every frame.
+* **IN_SHADOW_PASS does not keep a dithered prop's shadow whole in Forward+ (4.7.1); `PROJECTION_MATRIX[3][3] == 0.0`
+  does, in both renderers.** A material that writes ALPHA casts no shadow in either renderer, and a
+  StandardMaterial3D alpha hash draws solid under Compatibility.
+* **Run `--import` in a fresh scratch copy before anything else.** The project's `.godot/global_script_class_cache.cfg`
+  is stale (no MinigameSystem or DevMenu), so without it town_hall.gd, project_system.gd and npc.gd fail to parse and
+  the hub is not the real hub. The first repro ran that way; its conclusion held, and its captures were re-taken.
