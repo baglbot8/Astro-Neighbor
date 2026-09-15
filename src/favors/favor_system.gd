@@ -375,6 +375,58 @@ func debug_complete_active(npc_id: String) -> void:
 		complete(favor)
 
 
+## DEV HOOK (Phase 5, HOOKS - docs/PHASE5_SPEC.md, no Director required, unlike the debug_* pair above
+## which stays Director-gated for the old npc_favor_save / crit_fav_save timelines): builds and accepts
+## an offer of exactly `kind` ("fetch" | "bring" | "deliver" | "play") for `npc_id`, replacing whatever
+## favour they already had active so every kind can be tested on demand. Reuses `_forced_template` /
+## `make_offer` under the hood (toggled and restored, so it never leaks into a later random offer) -
+## the same mechanism the Director-only hook already trusts. Returns a status string; "" is never
+## returned, so the dev menu always has something to show.
+func dev_offer_and_accept(npc_id: String, kind: String) -> String:
+	if NpcData.get_data(npc_id).is_empty():
+		return "%s is not a neighbour" % npc_id
+	if not ["fetch", "bring", "deliver", "play"].has(kind):
+		return "unknown favour kind '%s'" % kind
+	var existing := active_favor_for(npc_id)
+	if not existing.is_empty():
+		drop(str(existing.get("id", "")))
+	var saved := _forced_template
+	_forced_template = kind
+	var offer := make_offer(npc_id)
+	_forced_template = saved
+	if offer.is_empty() or str(offer.get("type", "")) != kind:
+		return "%s has no '%s' favour available right now (e.g. no valid delivery target)" % [_npc_name(npc_id), kind]
+	accept(offer)
+	return "%s: new %s favour accepted" % [_npc_name(npc_id), kind]
+
+
+## DEV HOOK (Phase 5, HOOKS, no Director required): fills in exactly what `is_ready_to_turn_in` needs
+## for `npc_id`'s active favour - the missing collect items, or a play favour's progress to its full
+## count - then pays it out through the real `complete()`, exactly as a hand-in talk would. Never
+## invents anything `complete()` itself does not already check, so this never desyncs from a normal
+## playthrough's own reward roll, trust bonus or signature-gift logic.
+func dev_complete_active(npc_id: String) -> String:
+	var favor := active_favor_for(npc_id)
+	if favor.is_empty():
+		return "%s has no active favour" % _npc_name(npc_id)
+	var kind := str(favor.get("type", ""))
+	match kind:
+		"play":
+			favor["progress"] = int(favor.get("count", 1))
+			GameState.favors[str(favor["id"])] = favor
+		"deliver":
+			if not GameState.has_item(str(favor.get("target_item", ""))):
+				GameState.add_item(str(favor.get("target_item", "")))
+		_:
+			var item_id := str(favor.get("target_item", ""))
+			var need := int(favor.get("count", 1)) - GameState.item_count(item_id)
+			if need > 0:
+				GameState.add_item(item_id, need)
+	var result := complete(favor)
+	var extra := (", +%s" % str(result.get("item_name", ""))) if str(result.get("item_name", "")) != "" else ""
+	return "%s: favour paid out (+%d stardust%s)" % [_npc_name(npc_id), int(result.get("stardust", 0)), extra]
+
+
 ## Player said no: the NPC will not ask again today.
 func decline(npc_id: String) -> void:
 	GameState.npc_data(npc_id)["last_favor_day"] = GameState.day_count

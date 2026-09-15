@@ -218,6 +218,41 @@ The user picked Phase 4 as proposed, with one change of their own.
 * **Professor Comet has no mayor job**, and **Starport Plaza is renamed the Commons** everywhere the player reads
   it (both were already decided on 2026-09-10; this phase does them).
 
+## Skips, faster flights and two new looks (asked 2026-09-14)
+
+The user: *"Can we add a speed up or skip option for traveling between planets? after the first time it plays?
+because it starts getting a bit tedious especially during fetch quests."* / *"For all skips / speed ups can you have a
+pop up that confirms if they want to skip? I accidentally skipped the intro before."* / *"update zorp's look to just
+have his whole bottom of his face be a beard of tentacles (mouth not visible) with thicker tentacles than what he has
+today. I also want to update professor comet to look more like a professor vs a mayor (e.g. with the cane)"*
+
+* **Every skip asks first.** One shared pop-up ("Keep watching" focused, taps ignored for a moment, the tap that opened
+  it can never confirm it) on the crash intro, the radio call, the part celebration, flights, and the finale's
+  send-off.
+* **Flights after your first one** show a "Skip" button behind that pop-up. The first flight ever always plays in
+  full. Changed the same day - the user: *"It feels like we dont need to have both the speed up and skip. People will
+  probably just use skip. In which case we dont necessarily need to build the triple speed option."* So there is no
+  speed-up and no "Short flights" setting.
+* **Zorp** gets a beard of thick tentacles across his whole lower face; his mouth is never visible, and speech and
+  feeling move to the tentacles and eyes. **Professor Comet** loses the mayoral top hat and reads as a sky-watching
+  scientist, with his cane clearly visible. Changed the same day - the user: *"he looks more like a graduate than a
+  professor. Can you make him look more like a professor / scientist like the pokemon professors"*: the lab-coat
+  scientist archetype (a long coat over his clothes, the kindly-elder read), in this cast's own shapes, never a copy
+  of a particular character. Both builders render two variants; the user sees the winner and the
+  runner-up before it ships.
+
+## Mobile data (decided 2026-09-14)
+
+The user: *"I'm conscious of the amount of data this will take when players are not on wifi."* Measured on the live site
+that day: about 24 MB on a first open (engine 10.25 MB and game data 13.9 MB over the wire) and again after EVERY update,
+because GitHub Pages changes every file's ETag on each deploy; opening the game again with no update costs almost
+nothing, and play itself uses no network. The user chose two cuts: **smaller music** (mono at a lower sample rate,
+loops still seamless; about 7 MB saved) and **an engine cache** (a strictly versioned service worker that keeps only
+the engine, keyed by its hash, with a kill switch; updates then cost about 7 MB instead of 24). A slimmer custom engine
+build (about 10 -> 6 MB, big tool downloads and hours of building) is held back.
+
+Also that day: the user picked **Zorp's variant A** (4 long, fat curls in one row), with its phone-camera gap closed.
+
 ## Open questions
 
 - **What is in the post-story game** besides decorating and friendship? Not decided.

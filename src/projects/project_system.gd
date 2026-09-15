@@ -1524,6 +1524,261 @@ static func _article(word: String) -> String:
 	return "an" if word != "" and "aeiou".contains(word.substr(0, 1).to_lower()) else "a"
 
 
+# ============================================================================= dev hooks (Phase 5, HOOKS)
+## Public, work with no Director running, and every one returns a short status string (the dev menu
+## shows it on its result line). None of these speak dialogue or play sfx - they are for testing a
+## step's live state, not for replaying the neighbour's lines.
+
+## Jumps `npc_id`'s project straight to step `i`, restarting the project fresh first so the result is
+## always the same regardless of whatever state it was in before. Every step BEFORE `i` is completed
+## silently (its "give" items, and a light link's "hand_over" items, land in the bag exactly as a real
+## playthrough would - the fix for the Grig soft-lock: step 2 needs grig_dry_garden, which step 1 only
+## ever hands over on completion). Step `i` itself is then ASKED (its own "give" items handed over, its
+## markers / ring / mini-game shown), and the day lock is cleared so it can be finished right away
+## without waiting for tomorrow. Clamped into range; returns why when the neighbour has no project.
+func dev_set_step(npc_id: String, i: int) -> String:
+	var d := definition_for(npc_id)
+	if d.is_empty():
+		return "%s has no project" % npc_id
+	var steps: Array = d["steps"]
+	if steps.is_empty():
+		return "%s's project has no steps" % npc_id
+	var target := clampi(i, 0, steps.size() - 1)
+	_start(npc_id)
+	var st := _state(npc_id)
+	var given_all: Dictionary = {}
+	for j in target:
+		var given := _dev_complete_step_silent(npc_id, d, j, st)
+		for item_id: String in given:
+			given_all[item_id] = int(given_all.get(item_id, 0)) + int(given[item_id])
+	GameState.project_step_day.erase(npc_id)
+	st["asked"] = false
+	st["step"] = target
+	var asked_given := _ask(npc_id, d, target)
+	for item_id: String in asked_given:
+		given_all[item_id] = int(given_all.get(item_id, 0)) + int(asked_given[item_id])
+	_refresh_world()
+	var msg := "%s: set to step %d/%d" % [_npc_name(npc_id), target + 1, steps.size()]
+	if not given_all.is_empty():
+		var parts: Array[String] = []
+		for item_id: String in given_all:
+			parts.append(_count_name(item_id, int(given_all[item_id])))
+		msg += " (gave %s)" % ", ".join(parts)
+	return msg
+
+
+## The state-only half of finishing step `j` for a neighbour being fast-forwarded past it by
+## `dev_set_step` / `dev_finish` - never spoken, never toasted. Mirrors `_complete` / `_finish_link`
+## closely enough that a step skipped this way looks exactly as done to every later check
+## (`_progress`, `_step_met`, a place step's "marker:" spot) as one finished by talking it through:
+##   * "give" items land in the bag (a step can list "give" regardless of type).
+##   * "talk" with "npc" set (a light link): writes the `_link_mark` `_progress` checks, and hands
+##     over its "hand_over" items - the exact thing the audit's soft-lock finding needed.
+##   * "find" / "minigame": every mark is written as found. A find step tries a REAL marker position
+##     first (only possible when this system is already set up on that step's own planet); off that
+##     planet it falls back to the neighbour's `home_dir`, which is only ever read by a later step's
+##     own "marker:" spot resolution, never shown to the player, and is overwritten with the real
+##     position the moment that step is properly asked on its own world.
+##   * "build" / "collect" with `"take": false` (the item stays in the bag for a later place step):
+##     the item is given, since nothing else in a skipped run would have put it there.
+##   * "collect" / "build" (take true, the default) and "place": nothing to fabricate - a step already
+##     behind the current one is never re-checked by `_progress`.
+## Returns the items handed over ({id: count}), for the caller's status string.
+func _dev_complete_step_silent(npc_id: String, d: Dictionary, j: int, st: Dictionary) -> Dictionary:
+	var step: Dictionary = (d["steps"] as Array)[j]
+	var given: Dictionary = {}
+	var give: Dictionary = step.get("give", {})
+	for item_id: String in give:
+		var n := int(give[item_id])
+		if n > 0:
+			GameState.add_item(item_id, n)
+			given[item_id] = int(given.get(item_id, 0)) + n
+	match str(step["type"]):
+		"talk":
+			if step.has("npc"):
+				var found: Array = st["found"]
+				var mark := _link_mark(j)
+				if not found.has(mark):
+					found.append(mark)
+				var hand_over: Dictionary = step.get("hand_over", {})
+				for item_id: String in hand_over:
+					var n := int(hand_over[item_id])
+					if n > 0:
+						GameState.add_item(item_id, n)
+						given[item_id] = int(given.get(item_id, 0)) + n
+		"find":
+			_dev_mark_all_found(npc_id, d, step, j, st, func(n: int) -> String: return "s%d_m%d" % [j, n])
+		"minigame":
+			_dev_mark_all_found(npc_id, d, step, j, st, func(n: int) -> String: return _minigame_mark(j, n))
+		"collect", "build":
+			if not bool(step.get("take", true)):
+				var item_id := str(step["item"])
+				var n := maxi(1, int(step.get("count", 1)))
+				GameState.add_item(item_id, n)
+				given[item_id] = int(given.get(item_id, 0)) + n
+	(st["days"] as Array).append(GameState.day_count)
+	GameState.add_friendship(npc_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
+	GameState.project_step_day[npc_id] = GameState.day_count
+	EventBus.project_step_completed.emit(npc_id, j)
+	return given
+
+
+## Writes every "s<j>_m<n>" / "s<j>_g<n>" mark as found (`mark_fn` picks the shape), and - for a find
+## step only, since a mini-game needs no world position - ensures `st["markers"]` has a direction for
+## each one, so a later "place" step's "marker:s<j>_m<n>" spot always resolves. Real ground directions
+## only when this system is already set up on the step's own planet (`_ensure_marker_dirs` needs a
+## live `_planet` there); otherwise a placeholder off `NpcData.home_dir` that a proper visit later
+## overwrites the moment `_show_step_world` runs that find step for real.
+func _dev_mark_all_found(npc_id: String, _d: Dictionary, step: Dictionary, j: int, st: Dictionary, mark_fn: Callable) -> void:
+	var count := maxi(1, int(step.get("count", 1)))
+	var found: Array = st["found"]
+	var is_find := str(step["type"]) == "find"
+	if is_find and _planet != null and _step_planet(npc_id, step) == GameState.current_planet_id:
+		for mid: String in _ensure_marker_dirs(npc_id, step, j, st):
+			if not found.has(mid):
+				found.append(mid)
+		return
+	var markers: Dictionary = st.get("markers", {})
+	var dirs: Array = step.get("dirs", [])
+	var fallback: Variant = NpcData.get_data(npc_id).get("home_dir", Vector3.UP)
+	var fallback_dir: Vector3 = (fallback as Vector3).normalized() if fallback is Vector3 else Vector3.UP
+	for n in count:
+		var mid: String = mark_fn.call(n)
+		if not found.has(mid):
+			found.append(mid)
+		if is_find and not markers.has(mid):
+			var v := fallback_dir
+			if n < dirs.size():
+				var raw: Variant = dirs[n]
+				v = (raw as Vector3).normalized() if raw is Vector3 else _vec(raw as Array)
+			markers[mid] = [v.x, v.y, v.z]
+	if is_find:
+		st["markers"] = markers
+
+
+## Meets the CURRENT live step's objective for `npc_id` without completing it - the neighbour still
+## has to be talked to. A "place" step is met by actually placing the decoration near its spot (never
+## a fabricated progress number: `_progress`'s "place" case reads real world / saved positions, so
+## faking it would leave the dev menu saying "met" while the neighbour's own re-derived check
+## disagreed) - which needs the step's own planet loaded, with a DecorationManager and a bag item to
+## place; failing any of those, the status string says so instead of silently doing nothing. Every
+## other type is met by giving or marking exactly enough to satisfy `_progress`.
+func dev_meet_step(npc_id: String) -> String:
+	var d := definition_for(npc_id)
+	if d.is_empty():
+		return "%s has no project" % npc_id
+	var st := _state(npc_id)
+	if st.is_empty():
+		return "%s has not started a project" % npc_id
+	if bool(st["done"]):
+		return "%s's project is already finished" % npc_id
+	var steps: Array = d["steps"]
+	var i := int(st["step"])
+	if i >= steps.size():
+		return "%s: every step is done, waiting on the part hand-over" % _npc_name(npc_id)
+	if not bool(st["asked"]):
+		return "%s has not asked this step yet" % npc_id
+	var step: Dictionary = steps[i]
+	var msg := ""
+	match str(step["type"]):
+		"talk":
+			msg = ("talk to %s to finish this" % _npc_name(str(step["npc"]))) if step.has("npc") \
+				else "already met (a plain talk step finishes on ask)"
+		"find", "minigame":
+			var mark_fn := (func(n: int) -> String: return "s%d_m%d" % [i, n]) if str(step["type"]) == "find" \
+				else (func(n: int) -> String: return _minigame_mark(i, n))
+			_dev_mark_all_found(npc_id, d, step, i, st, mark_fn)
+			msg = "ready to hand in"
+		"collect", "build":
+			var item_id := str(step["item"])
+			var need := maxi(1, int(step.get("count", 1)))
+			var have := _have(item_id)
+			if have < need:
+				if item_id == SCRAP_ID:
+					GameState.add_scrap(need - have)
+				else:
+					GameState.add_item(item_id, need - have)
+			msg = "ready to hand in"
+		"place":
+			msg = _dev_place_step_item(npc_id, d, step, i, st)
+	_met_cache[npc_id] = _step_met(npc_id, d, i)
+	if _markers != null and str(step["type"]) == "place":
+		_markers.set_zone_met("%s:s%d_zone" % [npc_id, i], _step_met(npc_id, d, i))
+	return "%s: %s" % [_npc_name(npc_id), msg]
+
+
+## Places `step`'s item for real, at its spot, so `_progress`'s live `_count_placed_near` check agrees
+## with the dev menu. Needs the step's own planet loaded (the spot's ground point is planet-local) and
+## the item in the bag - `dev_set_step`/a real "ask" both put it there via "give"/"hand_over"; if it is
+## missing, one is added first, exactly like a normal give, so this step alone is never the blocker.
+func _dev_place_step_item(npc_id: String, d: Dictionary, step: Dictionary, i: int, st: Dictionary) -> String:
+	if _step_planet(npc_id, step) != GameState.current_planet_id:
+		return "go to %s first, then meet this step" % _step_planet(npc_id, step)
+	if _planet == null:
+		return "no planet loaded here"
+	var deco: DecorationManager = get_tree().root.get_node_or_null("World/Decorations") as DecorationManager
+	if deco == null:
+		return "no DecorationManager on this world"
+	var spot := _spot_dir(npc_id, d, step, st)
+	if spot == Vector3.ZERO:
+		return "the spot is not resolvable yet (a find step's marker was never set)"
+	var item_id := str(step["item"])
+	if _have(item_id) < 1:
+		GameState.add_item(item_id, 1)
+	if deco.place(item_id, spot) == "":
+		return "the spot is blocked; nothing placed"
+	GameState.remove_item(item_id)
+	return "placed %s" % _item_name(item_id, 1)
+
+
+## Instantly finishes the whole project: every step silently completed (see
+## `_dev_complete_step_silent`), then the part handed over exactly as `_hand_over_part` would, minus
+## the lines. Safe to call on a project that has not started yet.
+func dev_finish(npc_id: String) -> String:
+	var d := definition_for(npc_id)
+	if d.is_empty():
+		return "%s has no project" % npc_id
+	var st := _state(npc_id)
+	if st.is_empty() or bool(st.get("done", false)):
+		_start(npc_id)
+	st = _state(npc_id)
+	if bool(st["done"]):
+		return "%s's project is already finished" % npc_id
+	var steps: Array = d["steps"]
+	# Whatever step is currently live (asked or not, met or not) is finished along with every step
+	# after it - `_dev_complete_step_silent` does not care whether it was ever asked.
+	var start_i := int(st["step"])
+	for j in range(start_i, steps.size()):
+		_dev_complete_step_silent(npc_id, d, j, st)
+	st["step"] = steps.size()
+	st["asked"] = false
+	st["done"] = true
+	GameState.project_step_day.erase(npc_id)
+	var part_id := str(d["part"])
+	GameState.add_item(part_id)
+	EventBus.project_completed.emit(npc_id, part_id)
+	_met_cache.erase(npc_id)
+	_refresh_world()
+	return "%s: project finished, %s in your bag" % [_npc_name(npc_id), part_name(part_id)]
+
+
+## Clears `npc_id`'s project back to never-started: no saved progress, no day lock, no markers, ring
+## or mini-game left standing. Leaves the bag alone (a part or project item already collected stays
+## collected) - a project restarted this way asks its intro again on the next talk.
+func dev_reset(npc_id: String) -> String:
+	if definition_for(npc_id).is_empty():
+		return "%s has no project" % npc_id
+	GameState.projects.erase(npc_id)
+	GameState.project_step_day.erase(npc_id)
+	_met_cache.erase(npc_id)
+	var ms := MinigameSystem.find()
+	if ms != null:
+		for i in 8:
+			ms.stop_owner(_minigame_owner(npc_id, i), "dev reset")
+	_refresh_world()
+	return "%s: project reset" % _npc_name(npc_id)
+
+
 # ============================================================================= QA helpers
 ## One line per project: what a critic or a Director timeline needs to see. Prints only.
 ##   {"t": 5, "call": {"node": "/root/World/ProjectSystem", "method": "debug_report", "args": ["after"]}}

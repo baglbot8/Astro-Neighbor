@@ -115,35 +115,35 @@ func _build_visual() -> void:
 	_visual.add_child(mi)
 	_visual.position.y = _base_y
 
-	# Sparkle trail
-	var p := GPUParticles3D.new()
+	# Sparkle trail — built directly as CPUParticles3D (heat item 1, docs/OPEN_ISSUES.md 57): the
+	# GPUParticles3D version of this exact 12-particle system cost zorp 1.71, bolt 1.40, hub 0.64 ms
+	# (a quarter of zorp's frame) for a fixed per-system overhead under Compatibility; a CPU copy with
+	# identical settings measured free (floor ~0.1 ms). Spores, ashfall and chalk dust stay GPU - they
+	# use curl/turbulence noise CPUParticles3D cannot do. Same visual settings as the old GPU version.
+	var p := CPUParticles3D.new()
 	p.name = "Sparkles"
 	p.amount = 12
 	p.lifetime = 1.5
 	p.local_coords = true
 	p.position = Vector3(0.0, 0.3 + _base_y, 0.0)
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.35
-	pm.direction = Vector3(0.0, 1.0, 0.0)
-	pm.spread = 30.0
-	pm.initial_velocity_min = 0.15
-	pm.initial_velocity_max = 0.4
-	pm.gravity = Vector3(0.0, 0.25, 0.0)
-	pm.scale_min = 0.5
-	pm.scale_max = 1.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.35
+	p.direction = Vector3(0.0, 1.0, 0.0)
+	p.spread = 30.0
+	p.initial_velocity_min = 0.15
+	p.initial_velocity_max = 0.4
+	p.gravity = Vector3(0.0, 0.25, 0.0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.0
 	var g := Gradient.new()
 	g.set_color(0, Color(sparkle_col.r, sparkle_col.g, sparkle_col.b, 0.0))
 	g.add_point(0.25, sparkle_col)
 	g.set_color(g.get_point_count() - 1, Color(sparkle_col.r, sparkle_col.g, sparkle_col.b, 0.0))
-	var gt := GradientTexture1D.new()
-	gt.gradient = g
-	pm.color_ramp = gt
-	p.process_material = pm
+	p.color_ramp = g
 	var q := QuadMesh.new()
 	q.size = Vector2(0.085, 0.085)
 	q.material = PlanetPropMeshes.sparkle_material(Color.WHITE)
-	p.draw_pass_1 = q
+	p.mesh = q
 	add_child(p)
 
 	# Soft glow disc on the ground

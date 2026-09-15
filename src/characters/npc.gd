@@ -16,6 +16,15 @@ extends PlanetBody
 ## home world with `visit_host`, `visit_home` and `visit_wander_m` set before it enters the tree: it
 ## stands at the home spot it was given (never its own world's NpcData home_dir), wanders only
 ## `visit_wander_m`, lets the host veto every wander target (`wander_ok`), and takes its "!" from the host.
+##
+## Heat item 6 (docs/OPEN_ISSUES.md 57): a settled idle neighbour skips `move_and_slide` most ticks --
+## see `_slide_due()`. `--npc-slide-always` (CLI) forces a real slide every tick, for the item-44 soak's
+## "skip off" arm.
+##
+## K2 staging API, inert until called: `hold_facing(point)` / `release_facing()` make an idle or talking
+## neighbour face a fixed world point instead of the player; `stroll_to(dir)` / `is_strolling()` walk the
+## neighbour (walk anim, no wander checks) to the surface direction `dir`, the same absolute-direction
+## convention as `home_dir` / the wander target.
 
 @export var npc_id: String = ""
 @export var display_name: String = ""
@@ -48,8 +57,19 @@ const MARKER_STEM_Y := 0.105
 const MARKER_DOT_Y := -0.085
 const BODY_HEIGHT := 1.4
 const BODY_RADIUS := 0.34
+## Tangent speed below which an idle neighbour counts as "settled" for `_slide_due()`.
+const IDLE_SLIDE_SPEED_EPS := 0.01
+## A forced slide lands every 15-30 ticks (re-rolled per neighbour after every real slide, not a fixed
+## phase), so idle neighbours never all pay it on the same frame.
+const FORCED_SLIDE_MIN_TICKS := 15
+const FORCED_SLIDE_MAX_TICKS := 30
+## `stroll_to`'s arrival tolerance. Tighter than wander's ARRIVE_M (0.45 m, fine for ambient wandering)
+## because a scripted stroll (K2's "crowd steps back 1 m") is graded to within 0.1 m: this stops moving
+## once within 0.06 m, and a single physics tick's travel at `walk_speed` can't push the final rest
+## distance over 0.1 m (see `_tick_stroll`).
+const STROLL_ARRIVE_M := 0.06
 
-enum State { IDLE, WANDER, TALKING }
+enum State { IDLE, WANDER, TALKING, STROLL }
 
 var home_dir: Vector3 = Vector3.UP
 
@@ -92,6 +112,20 @@ var _own_building_checked := false
 ## npc_data.gd), which keeps sampling the full circle exactly as before this fix.
 var _away_bias_ang: float = NAN
 
+## Heat item 6: idle-skip bookkeeping. `_last_slide_position` starts at Vector3.INF so the very first
+## tick after `_ready` always slides (nothing has ever matched "unchanged since the last slide" yet).
+var _last_slide_position: Vector3 = Vector3.INF
+var _idle_ticks_since_slide: int = 0
+var _next_forced_slide: int = FORCED_SLIDE_MIN_TICKS
+## `--npc-slide-always`: forces a real `move_and_slide` every tick, skip disabled. Read once in
+## `_ready` (per-instance cache, same pattern as `touch_controls.gd`'s `_adopt_off`).
+var _slide_always := false
+
+## K2 staging: set only by `hold_facing` / `stroll_to`; both are no-ops until a caller uses them.
+var _hold_facing_active := false
+var _hold_facing_point: Vector3 = Vector3.ZERO
+var _stroll_target_dir: Vector3 = Vector3.UP
+
 
 func _ready() -> void:
 	super._ready()
@@ -105,6 +139,8 @@ func _ready() -> void:
 	_ensure_interactable()
 	_build_marker()
 	_state_timer = _rng.randf_range(IDLE_MIN, IDLE_MAX)
+	_slide_always = OS.get_cmdline_user_args().has("--npc-slide-always")
+	_next_forced_slide = _rng.randi_range(FORCED_SLIDE_MIN_TICKS, FORCED_SLIDE_MAX_TICKS)
 
 
 ## Fills the exported fields from NpcData when the scene left them blank.
@@ -285,6 +321,38 @@ func set_last_small_talk(line: String) -> void:
 	_last_small_talk = line
 
 
+# ============================================================================= K2 staging API
+## Makes an idle or talking neighbour face `point` (a world position) instead of the player, every
+## tick, until `release_facing()`. Purely about facing -- it does not touch wandering or `wander_on`;
+## K2's meeting calls `wander_enabled(false)` separately to hold the crowd still. A no-op on look until
+## called: with no caller, `_hold_facing_active` stays false and every existing look-at path (idle's
+## look-at-the-player-when-near, talking's face-the-player fallback) is unchanged.
+func hold_facing(point: Vector3) -> void:
+	_hold_facing_active = true
+	_hold_facing_point = point
+
+
+## Returns to the normal player-facing behaviour.
+func release_facing() -> void:
+	_hold_facing_active = false
+
+
+## K2 staging: walks to the surface direction `dir` (same absolute-direction convention as `home_dir`
+## and the wander target -- NOT a relative offset) with the walk animation, ignoring every wander rule.
+## No-op before this neighbour's own first physics frame has placed it (`_placed`) or without a planet.
+func stroll_to(dir: Vector3) -> void:
+	if not _placed or planet == null:
+		return
+	_stroll_target_dir = dir.normalized()
+	_state = State.STROLL
+	_state_timer = WANDER_TIMEOUT
+
+
+## True while a `stroll_to` walk is still under way.
+func is_strolling() -> bool:
+	return _state == State.STROLL
+
+
 # ============================================================================= loop
 func _physics_process(delta: float) -> void:
 	if planet == null:
@@ -305,12 +373,53 @@ func _physics_process(delta: float) -> void:
 			_tick_talking(delta)
 		State.WANDER:
 			_tick_wander(delta)
+		State.STROLL:
+			_tick_stroll(delta)
 		_:
 			_tick_idle(delta)
 
 	apply_planet_gravity(delta)
-	move_and_slide()
+	if _slide_due():
+		move_and_slide()
+		_last_slide_position = global_position
+		_idle_ticks_since_slide = 0
+		_next_forced_slide = _rng.randi_range(FORCED_SLIDE_MIN_TICKS, FORCED_SLIDE_MAX_TICKS)
+	else:
+		_idle_ticks_since_slide += 1
 	_update_marker(delta)
+
+
+## cpu-1 safe form (heat item 6, docs/OPEN_ISSUES.md 57): skip `move_and_slide` for a settled idle
+## neighbour -- measured ~60% of an NPC's physics-script cost on the Commons (-0.11 to -0.14 ms/tick,
+## heat_ranked.md item 6). Every one of these must hold, so this can never trap a neighbour on top of
+## item 44's own-building fix or hide a bug from a caller that moves an NPC directly:
+##   - idle only (not talking, wandering or strolling) -- those states must keep sliding every tick;
+##   - already on the floor (the cached result of the LAST real slide -- see the note below);
+##   - essentially still (tangent speed under IDLE_SLIDE_SPEED_EPS);
+##   - untouched since the last real slide: while skipping, nothing but this function writes
+##     global_position, so an exact mismatch can only mean an outside caller moved this NPC (dev_teleport,
+##     K2 staging, a minigame) between ticks, and that must re-settle physics on the very next tick, not
+##     wait for the timer.
+## `is_on_floor()` here is intentionally stale while skipping: it reflects the last tick a real slide ran,
+## which is also true of a NON-skipping NPC (gravity always reads the PREVIOUS tick's floor result before
+## this tick's own slide). Skipping does not change that contract, only how many ticks it can go stale.
+## A forced slide every FORCED_SLIDE_MIN_TICKS-MAX_TICKS ticks still re-checks the floor even if nothing
+## ever moves this NPC, so a settled neighbour can never silently drift out of physics forever; the
+## interval is re-rolled after every real slide (forced or not) so neighbours stay staggered instead of
+## drifting into lockstep. `--npc-slide-always` (`_slide_always`) disables the skip outright, for the
+## item-44 soak's "skip off" arm.
+func _slide_due() -> bool:
+	if _slide_always:
+		return true
+	if _state != State.IDLE:
+		return true
+	if not is_on_floor():
+		return true
+	if get_tangent_velocity().length() >= IDLE_SLIDE_SPEED_EPS:
+		return true
+	if global_position != _last_slide_position:
+		return true
+	return _idle_ticks_since_slide + 1 >= _next_forced_slide
 
 
 func _process(delta: float) -> void:
@@ -326,6 +435,9 @@ func _process(delta: float) -> void:
 func _tick_talking(delta: float) -> void:
 	set_tangent_velocity(Vector3.ZERO)
 	_speed_factor = 0.0
+	if _hold_facing_active:
+		face_direction(_hold_facing_point - global_position, FACE_TURN_SPEED, delta)
+		return
 	if _has_face_target:
 		face_direction(_face_target - global_position, FACE_TURN_SPEED, delta)
 		return
@@ -337,9 +449,12 @@ func _tick_talking(delta: float) -> void:
 func _tick_idle(delta: float) -> void:
 	set_tangent_velocity(get_tangent_velocity().move_toward(Vector3.ZERO, walk_speed * 6.0 * delta))
 	_speed_factor = get_tangent_velocity().length() / walk_speed
-	var p := _player()
-	if p != null and global_position.distance_to(p.global_position) < LOOK_AT_PLAYER_M:
-		face_direction(p.global_position - global_position, TURN_SPEED * 0.6, delta)
+	if _hold_facing_active:
+		face_direction(_hold_facing_point - global_position, TURN_SPEED * 0.6, delta)
+	else:
+		var p := _player()
+		if p != null and global_position.distance_to(p.global_position) < LOOK_AT_PLAYER_M:
+			face_direction(p.global_position - global_position, TURN_SPEED * 0.6, delta)
 	_state_timer -= delta
 	if _state_timer <= 0.0 and _wander_on and _emote == "":
 		_target_dir = _pick_wander_target()
@@ -353,6 +468,31 @@ func _tick_wander(delta: float) -> void:
 	var to := target - global_position
 	var tangent := to - up * to.dot(up)
 	if tangent.length() < ARRIVE_M or _state_timer <= 0.0:
+		_state = State.IDLE
+		_state_timer = _rng.randf_range(IDLE_MIN, IDLE_MAX)
+		set_tangent_velocity(Vector3.ZERO)
+		_speed_factor = 0.0
+		return
+	var dir := tangent.normalized()
+	set_tangent_velocity(dir * walk_speed)
+	face_direction(dir, TURN_SPEED, delta)
+	_speed_factor = 1.0
+
+
+## K2 staging (`stroll_to`): walks straight to the surface direction `_stroll_target_dir` with the walk
+## animation, on NO wander rule -- no `_spot_blocked`/`_path_blocked`, no `wander_ok` host veto. The
+## caller (K2's meeting choreography) is trusted to pass a safe direction, the same way a Director probe
+## trusts its own coordinates. Arrival tolerance is STROLL_ARRIVE_M (0.06 m), tighter than wander's
+## ARRIVE_M, because the stopping check runs BEFORE that tick's move: once within STROLL_ARRIVE_M the NPC
+## freezes without moving further, so the final rest distance is always < STROLL_ARRIVE_M, comfortably
+## under K2's 0.1 m grading tolerance. WANDER_TIMEOUT is reused as a safety net so an unreachable target
+## still gives up and returns to idle rather than strolling forever.
+func _tick_stroll(delta: float) -> void:
+	_state_timer -= delta
+	var target := planet.surface_point(_stroll_target_dir)
+	var to := target - global_position
+	var tangent := to - up * to.dot(up)
+	if tangent.length() < STROLL_ARRIVE_M or _state_timer <= 0.0:
 		_state = State.IDLE
 		_state_timer = _rng.randf_range(IDLE_MIN, IDLE_MAX)
 		set_tangent_velocity(Vector3.ZERO)

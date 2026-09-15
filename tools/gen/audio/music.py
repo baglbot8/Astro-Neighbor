@@ -1225,9 +1225,13 @@ if __name__ == "__main__":
     else:
         jobs = [(os.path.join(here, "..", "..", "..", "assets", "audio", "music", "title.wav"),
                  TRACKS["title"], TITLE_LOOP_BEGIN)]
+    # Shipped music is mono 33.075 kHz since 2026-09-14 (mobile data): write_music() downmixes, resamples
+    # the loop as a periodic signal and writes the smpl chunk -- see music_compact.py. The seam and peak
+    # printed below are the 44.1 kHz master's; music_compact.py's own CLI prints the written file's.
+    import music_compact as MC
     for path, fn, loop_begin in jobs:
         x, L, bpm = fn()
-        size = S.write_wav(path, x, loop=True, loop_begin=loop_begin)
+        size = MC.write_music(path, x, loop_begin=loop_begin)
         seam = S.loop_seam_error(x, loop_begin=loop_begin)
         print("%-18s %6.2f s  %6.2f bpm  peak %6.2f dBFS  %7.1f KB  seam %.4f (p99.9 step %.4f)  loop_begin %d" % (
             os.path.basename(path), L / float(S.SR), bpm, S.to_db(S.peak(x)), size / 1024.0,

@@ -97,7 +97,17 @@ const HOME_DATA_PATH := "res://src/planet/data/home.tres"
 ## "~41k" is the VERTEX count, 10 * 4^n + 2 = 40,962 at level 6 — not triangles.) Facet size matters
 ## more than the raw count when a world is terraced: edge length is about 1.0515 * radius / 2^n, and
 ## a riser needs >= 4 vertices across it or the baked bank colour renders as a dashed stipple.
-@export var mesh_subdivisions: int = 6
+## Heat item 3 (gpu-1 Fix A, docs/OPEN_ISSUES.md 57): grass_planet.gdshader and plaza_tiles.gdshader
+## now evaluate their low-frequency ground fbm (patch/macro/macro_sun/weathering, wavelengths
+## >= 2.2 m) in vertex() and interpolate, which was measured visually identical ONLY because vertex
+## spacing at subdivision 6 (1.0515 * radius / 64 = 0.16-0.35 m) is far finer than those wavelengths.
+## Asserted here (debug builds only) so a future drop below 6 fails loudly instead of shipping a
+## faceted, moire-prone ground silently. Do not lower it without re-measuring both shaders' vertex-vs-
+## fragment diff at the new level.
+@export var mesh_subdivisions: int = 6 :
+	set(value):
+		assert(value >= 6, "PlanetData.mesh_subdivisions (%d) must be >= 6 - grass_planet/plaza_tiles compute macro ground fbm per-vertex now (heat item 3) and need <= 0.35 m vertex spacing to stay visually identical to per-fragment." % value)
+		mesh_subdivisions = value
 
 @export_group("Colors")
 ## Keep base albedos MUTED (HSV S 0.40-0.52, V 0.62-0.75). Light makes things bright, not albedo.

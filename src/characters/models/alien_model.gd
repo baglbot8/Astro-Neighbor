@@ -1,6 +1,27 @@
 class_name AlienModel
 extends ChibiModel
-## Zorp — the lavender alien neighbour, and the one with FACE TENTACLES.
+## Zorp — the lavender alien neighbour, and the one with a BEARD OF TENTACLES.
+##
+## R6 (2026-09-14, A BEARD OF TENTACLES). The user: "just have his whole bottom of his face be a beard
+## of tentacles (mouth not visible) with thicker tentacles than what he has today". Three changes:
+##   1. THE MOUTH IS GONE, in every state. `"mouth": false` means no mouth node is built, so talk,
+##      happy, surprised and every emote have nothing to open. R5's thin ink line, its winding fix
+##      and the open-mouth sizes are deleted with it.
+##   2. R5's six thin cheek tentacles became FOUR LONG, FAT, CURLED TENTACLES in one row across the
+##      whole lower face — 57-62 mm base radius against R5's 26-30 mm, 34-37 mm at the tip against
+##      9-11 mm. Speech and emotion moved into the beard and the eyes (`_animate_extras`).
+##   3. The "^ ^" happy eyes, which had never rendered on Zorp, now do (`_wound_outward`): with no
+##      mouth the eyes carry more of the face.
+## R6.1 (2026-09-14, THE USER PICKED "A"). R6 first shipped eight short curls in two rows ("B"); the
+## user looked at both on one sheet and said "I like Zorp A". A had one recorded flaw, fixed here
+## without changing its shape — see "THE CHIN" in the beard block.
+## R6.2 (2026-09-14, THE CHIN HOLDS THROUGH THE HAPPY EMOTE). A critic's dense phone captures found
+## the collar still showing under the beard in every happy frame: the hop tips the head back 9 deg,
+## the chin swung back behind the collar with it, and its narrow bottom left the scarf showing
+## beside it. The chin now hangs in the TORSO's frame (the exact inverse of the head's rotation) and
+## is a little wider and deeper — see "THE CHIN".
+## Everything else below is R5 and earlier and still true, except where it talks about the mouth line
+## and the six cheek tentacles, which R6 replaced.
 ##
 ## R5 (LESS CREEPY, AND THE TENTACLES FINALLY GET BUILT). The user looked at the R4 Zorp and said
 ## his eyes and lips "look too strange... can we make them less creepy", asked for tall black
@@ -52,8 +73,8 @@ extends ChibiModel
 ## and glow ring — he is the only neighbour who floats and that is half his identity. He also keeps
 ## his legs and a real walk cycle; the hover is a hover, not a substitute for a lower body. The
 ## think-droop and the talk-perk the antenna used to carry did NOT die with it: `_animate_extras`
-## drives the same EXTRA_A channel into the tentacles, so "think" still slackens something and
-## "talk" still lifts it.
+## drives the same EXTRA_A channel into the beard, so "think" still slackens something and "talk"
+## still moves it.
 ##
 ## R2.6 (PASTEL AND MATTE). Every albedo below was re-picked against the CURRENT game — the dark
 ## thin-atmosphere sky and the repainted pastel ground — not the old white-void showcase. The rule
@@ -73,32 +94,6 @@ const SKIN_DARK := Color("#7c6aa6")
 ## the shine that made the R4 lip read as lipstick, and it would do the same to an eye.
 const EYE := Color("#221c2e")
 const BLUSH := Color("#b3868f")      ## passed but switched off — see `_add_face`'s transparency trap
-## THE INK THE CLOSED MOUTH LINE IS DRAWN IN, and R5.1 moved it 75 % of the way from the old plum
-## #472440 to the eye's own #221c2e. It is a CONTRAST change, and it is the SECOND of the two
-## things wrong with the mouth — the first, and much larger, one is the winding bug written up on
-## `_wound_outward`. This one was found first and measured on its own, and the measurement is kept
-## because it is why the colour stays where it is now that the geometry draws properly:
-##
-##   Measured at --gameplay off the capture: skin renders at luma 126-175 and the #472440 line
-##   rendered at 60-88, so every partially-covered pixel blended back toward the skin and only the
-##   rare fully-covered one stayed dark enough to read as ink. The eye, drawn in #221c2e, rendered
-##   at luma 4-33 in the same frames and never breaks up. Swapping the colour ALONE, geometry
-##   untouched, roughly doubled the number of the arc's columns carrying a well-inked pixel — a
-##   real gain, and nowhere near enough on its own, which is what sent the search at the geometry.
-##
-##   #2b1e32 is lerp(#472440, #221c2e, 0.75): R 71->43, G 36->30, B 64->50. Albedo luma drops
-##   45.4 -> 34.2, which is within 4 of the eye's 30.5, so the line sits in the same ink family as
-##   the eyes. The remaining 4 points are deliberate: the mouth should read a hair softer than the
-##   eyes rather than compete with them, and the residual red channel keeps a trace of warmth so
-##   the face is not drawn in one flat value. Hue is still plum (it is a mouth); it has only lost
-##   the top-end value that was letting the lit skin swallow it. Going the last 25 % to #221c2e was
-##   not built: nothing at play distance can resolve a 4-luma difference, and spending it buys a
-##   mouth drawn in exactly the eye ink, which is a hierarchy this face does not want.
-const MOUTH := Color("#2b1e32")
-## The open mouth's interior is UNTOUCHED. It is only ever seen behind the open ellipse when Zorp
-## talks, at which point the closed line has already faded out (SMILE_HIDE_AT), so it is not part
-## of the contrast problem and darkening it would only mute the talking mouth.
-const MOUTH_INNER := Color("#6e3049")
 const SCARF_A := Color("#c4858f")
 const SCARF_B := Color("#e8ddc9")
 const SHIRT := Color("#84bdb5")      ## a proper tee — every AC villager wears clothes
@@ -170,160 +165,6 @@ const EYE_INSET := 0.006
 const HAPPY_FIT := 0.72
 const ROUND_FIT := Vector2(0.79, 0.81)
 
-# ----------------------------------------------------------------------------------------- mouth
-## R5 — JUST THE LINE. The R4 lip (a 33 mm `taper_tube` band standing 21 mm proud with a 9.6 mm dark
-## seam laid on its crest, plus the `_arc_band` helper that built both) is deleted outright. What is
-## left is the cast's own `_smile_arc` on the bare shell, at a thinner tube than the default.
-##
-## THE MOUTH NODE IS NOT RE-ORIENTED ANY MORE, and the old -18 override was dead weight even before
-## this pass. Deleting `_build_lip` hands the mouth back to `_add_mouth`, which seats it at the cast
-## MOUTH_PITCH of -20 with an effective inset of 0.002 (0.004 - _muzzle_lift 0 - 0.002). Solved on
-## Zorp's shell that is y = -0.0969, which is 43.1 % of the way from the head's centre to its chin —
-## proportionally LOWER than the same pitch gives a default chibi head (37.4 %), because Zorp's head
-## is flat and 450 mm tall rather than 652. So -20 already lands where the local override was
-## reaching for, and there is now one fewer number here that can drift away from the cast.
-##
-## R5.1 — THE LINE WENT DOWN, NOT UP, AND THE REAL BUG WAS NEVER THE THICKNESS. Read
-## `_wound_outward` before touching this number; the short version is that `arc_tube` is wound
-## inside-out against a `cull_back` shader, so what rendered was the tube's FAR wall — two hairline
-## rims with lit skin between them — and RAISING the radius only pushed the two rims further apart.
-## That is the whole "4-5 disconnected dark pixels, a dashed smudge" report: two ~1 px rims landing
-## on the same pixel row or on neighbouring ones depending on where the head's bob put them.
-##
-## WITH THE WINDING FIXED THE TUBE DRAWS SOLID, so the number that used to buy nothing now buys the
-## full band, and 0.0125 became a heavy bar. Rendered and read at --dist=1.4 and at --gameplay:
-##   0.0125  25 mm  the previous value; now a confident bar, on the edge of reading as a lip
-##   0.0110  22 mm  KEPT. 3.4 % of head width, 2.3 px at --gameplay (0.103 px/mm, solved off the
-##                  eyes: 68 mm of eye measures 7 px and 116 mm measures 12 px in the same frame).
-##                  Continuous in all four sampled frames and unmistakably a drawn line.
-##   0.0095  19 mm  also continuous, but at 2.0 px it is one antialiasing step from breaking again
-##                  and it buys nothing that 0.0110 does not.
-## So this is now THINNER than the 25 mm the file shipped and less than half the cast's 28 mm, and
-## it reads far heavier than either did — which is the answer to "just leave the line". Do NOT push
-## it back up to compensate for anything, and do NOT bring back a coloured band: the band is what
-## read as lipstick. Width is UNCHANGED from the cast: ring 0.102 swept +/-34 deg = 114 mm = 17.8 %
-## of head width, inside the mandated 16-25 %.
-##
-## WHY z = -0.004 AND NOT THE CAST -0.002. The mouth node is 2 mm inside the shell, so at -0.002 the
-## tube's CENTRELINE lands exactly on the surface and the near wall is half-buried. -0.004 puts it
-## proud — solved on the shell at three points along the arc (theta 270 / 285 / 304) the centreline
-## clears the surface by 2.7 / 2.5 / 2.4 mm, so every part of the 22 mm silhouette is in front of
-## the face and nothing dives in at the corners. The shell recedes only 0.35 mm over the arc's
-## 57 mm half-width, i.e. the face is effectively flat across the mouth.
-##
-## Clearance to the new taller eyes, checked because both moved this pass: the eye bottom sits at
-## y = -0.0477 and the arc's corners (its highest points) at -0.0801, so 32 mm of clear face between
-## them — and they are 54 mm apart horizontally in any case.
-const MOUTH_TUBE_A := 0.0110
-const MOUTH_LINE_Z := -0.004         ## negative is proud: `_orient_on_head` puts -Z along the normal
-
-# ------------------------------------------------------------------------------------- tentacles
-## SIX FACE TENTACLES, three a side, hanging down the lower cheek and past the jaw. This is the
-## trait the user asked for two rounds ago; the antenna it replaces was Pip's as well as Zorp's.
-##
-## [yaw_deg, pitch_deg, splay_deg, front_deg, drop, base_r, tip_r], mirrored to both sides.
-##   yaw/pitch    WHERE the strand is planted, solved on the head shell the same way the eyes are,
-##                so the seats travel with `head_semi` / `head_n`.
-##   splay/front  WHICH WAY it hangs — see `_hang_basis`. These exist because of a rebuild.
-##   drop         its length. base_r/tip_r its thickness at each end.
-##
-## THE FIRST BUILD OF THIS WAS RENDERED AND THROWN AWAY, and both of its faults are worth writing
-## down because they are not visible in source. It seated the strands under the jaw (pitch -30 to
-## -18) at 135-185 mm and let `_orient_on_head`'s own basis aim them. On screen they were SHORT DARK
-## DRIPS clinging to the jawline — they read as melted wax, not as limbs. Two separate causes:
-##
-##   1. NOT ENOUGH FREE LENGTH BELOW THE CHIN. Zorp's chin is at torso y 0.6713 and his head
-##      overhangs, so a strand seated at y 0.74-0.80 spends most of itself hidden against the head.
-##      Measured on that build, the length hanging in open air below the chin was 116 / 67 / 9 mm —
-##      the third strand literally ended ABOVE the chin line and was never visible at all. It is
-##      free length, not total length, that decides whether this reads. Now 191 / 150 / 65 mm.
-##   2. THE SEAT'S OWN BASIS AIMS THEM WRONG. `_orient_on_head` ends in
-##      `Basis.looking_at(outward, UP)`, whose local -Y at a DOWNWARD-facing seat tilts back under
-##      the head — so the strands converged toward the midline as they fell and hung over the chest
-##      like a bib. Solved: from a seat at yaw 38 pitch -26, the tip landed at x 0.159 against a
-##      0.202 seat, i.e. 43 mm INBOARD of where it started.
-##
-## So the seat's basis is REPLACED (see `_build_tentacles`); `_orient_on_head` is used for the
-## POSITION only. That is not the forbidden move — the rule is never to write `.rotation` on a node
-## it has posed, because euler assignment rebuilds the basis and loses the outward AIM. Here the aim
-## is exactly what is being replaced on purpose, and `position` is a separate field that survives.
-##
-## SEATS AND PATHS, solved on the shell against the final curl and then confirmed in the render
-## (right side, torso space, mirrored to the left; "free" is the length hanging below the chin at
-## torso y 0.6713, which is the only length that reads):
-##   T0 yaw 36 pitch -21 -> seat (0.174, 0.785, -0.231), tip (0.238, 0.480, -0.302), 191 mm free
-##   T1 yaw 54 pitch -18 -> seat (0.256, 0.794, -0.185), tip (0.324, 0.521, -0.227), 150 mm free
-##   T2 yaw 72 pitch -15 -> seat (0.295, 0.812, -0.099), tip (0.352, 0.606, -0.119),  65 mm free
-## Sampling the shell's implicit sum every 4 % of each path: the strand is BURIED for its first
-## 12 / 12 / 21 % and outside the head for all of the rest, which is what makes the base emerge from
-## the skin instead of resting on it.
-##
-## THE THREE GUARDS AGAINST A BEARD, which is the failure mode for anything hanging off a face —
-## too many, too thin, too even:
-##   COUNT.   Three a side, not five. The ask was three.
-##   SPACING. 94 mm and 96 mm between seats against a 60 mm base diameter, so there is ~35 mm of
-##            bare skin between neighbours and the eye counts three limbs rather than a fringe.
-##   LENGTH.  Graded 320 / 285 / 215 mm. An even trio reads as a comb. The taper is 2.7 : 1
-##            (30 mm base radius to 11 mm tip on T0) — a limb, not a rope. The bases went UP from
-##            the thrown-away build's 25 mm: at the 7.4 m camera's 0.116 px/mm a 50 mm strand is
-##            5.8 px and read as a string.
-## If a render still says beard, the answer is FEWER AND THICKER. Do not add a fourth.
-##
-## CLEARANCE, solved against the arm as a capsule of r 0.055 from the shoulder at
-## (0.212, 0.505, -0.012) over ARM_LEN 0.175 plus the 76 mm mitten, swept through the real pose
-## envelope and INCLUDING the head rotation each of those poses applies (which is what actually
-## brings a strand toward a raised arm). Tightest gap per strand, T0 / T1 / T2:
-##   rest and walk   +200 / +164 / +132 mm          wave  +85 mm at worst, on T2
-##   happy / dance   +110 /  +39 /  -28 mm
-## Nothing touches the torso bean (closest approach 3.8x its own radius) or the scarf collar.
-##
-## THE -28 mm IS REAL AND IT IS A DELIBERATE TRADE. In `happy` and `dance` BOTH arms go to roll 2.72
-## and sweep up alongside the head, and the back strand grazes the raised upper arm. Two things were
-## tried and rejected: shortening T2 does not help at all, because the contact is up near its SEAT
-## and not at its tip; and pulling T2 forward to yaw 62-66, which does clear it, closes the T1-T2
-## seat gap from 96 mm to 47-69 mm and merges those two strands into exactly the fringe this block
-## exists to prevent. Rendered `dance` at 3.2 m and at gameplay: the strands pass in FRONT of the
-## raised arms and no interpenetration is visible, because they sit ~100 mm forward of the shoulder
-## in z. Left as is, and called out in the report rather than hidden.
-const TENT_SEATS := [
-	[36.0, -21.0, 7.0, 48.0, 0.320, 0.030, 0.011],
-	[54.0, -18.0, 6.0, 32.0, 0.285, 0.028, 0.010],
-	[72.0, -15.0, 6.0, 20.0, 0.215, 0.026, 0.009],
-]
-## 16 mm into the shell, so each strand emerges FROM the skin rather than balancing on it. The base
-## is 60 mm thick, so this buries about half a radius.
-const TENT_INSET := 0.016
-## Three nested joints. TENT_LEAN is the angle each joint sits at relative to its parent, TENT_CURL
-## is the bend WITHIN one joint's tube, and the two are different tools:
-##   * the leans are what `_animate_extras` swings, so they have to stay small enough that adding
-##     0.03-0.09 rad of sway to them still looks like a limb bending and not a hinge popping;
-##   * the curl is static geometry and is what stops each 107 mm section from being a straight rod.
-## Joints 1 and 2 sit at the same angle as the curl on purpose: that is the tangent the previous
-## tube ENDS at, so the strand is continuous in direction as well as in position, and the joints
-## disappear. The first render of this had curl 0 and read as six jointed spider legs.
-##
-## Total bend from seat to tip is 0.06 + 3 x 0.08 = 0.30 rad, i.e. the tip hangs 17 deg off vertical
-## and the strand's average direction over its length is 0.18 rad. The seat table's paths were
-## re-solved against exactly this before it was written down — an earlier draft of the solver added
-## the lean AND the curl at every joint and reported a 26 deg tip, which is the wrong number and
-## would have flared the trio like a squid.
-const TENT_JOINTS := 3
-const TENT_LEAN := [0.06, 0.08, 0.08]
-const TENT_CURL := 0.08
-## Tube resolution. SIDES is the number that matters and it is the main reason these are built here
-## instead of through `_add_tendril_ring`: the helper hard-codes `taper_tube(..., 4, 5)`, and after
-## DETAIL 0.60 that 5 resolves to FOUR sides — a square rod. On the 22 mm barbel the helper was
-## written for nobody sees it; on a 60 mm tentacle at portrait distance it is unmistakable, and the
-## first render of this came back as six lavender chair legs with visible flat faces. 10 resolves to
-## 6 sides, round enough to hold a highlight, and costs 288 triangles across all six strands (48 per
-## joint against 32). Measured after: 5720 of 6000.
-##
-## SEGS 5 IS THE SAME 3 LENGTH SEGMENTS the helper gets from 4 — `_segs(4, 3)` and `_segs(5, 3)` are
-## both 3 at DETAIL 0.60. It is written as 5 so that raising DETAIL for a beauty shot buys the curl
-## some resolution before it buys the tube more sides, which is the order that helps here.
-const TENT_SEGS := 5
-const TENT_SIDES := 10
-
 # ------------------------------------------------------------------------------------------ skin
 ## R4 SKIN — "Some should have smooth skin, but have big spots."
 ##
@@ -366,14 +207,20 @@ const SURF_LIMB := {"surface": "skin", "surface_scale": 2.90, "surface_strength"
 	"surface_spot": 1.15, "surface_scales": 0.0, "surface_spot_radius": 0.74,
 	"surface_near": 7.0, "surface_far": 20.0}
 
-## Every tentacle JOINT pivot, flat, in build order. `_build_tentacles` clears it — see the note
-## there; `ChibiModel.rebuild()` has no idea this array exists.
+## Every beard JOINT pivot, flat, in build order, and its animation constants (BP_STRIDE per joint,
+## same order). `_build_tentacles` clears both; `ChibiModel.rebuild()` has no idea they exist.
 var _tentacles: Array[Node3D] = []
+var _beard_params := PackedFloat32Array()
+## The chin's pivot, at the head's origin. `_animate_extras` gives it the inverse of the head's basis
+## every frame, so the chin keeps the torso's orientation (see THE CHIN). Rebuilt with the beard.
+var _chin_pivot: Node3D
 var _glow_ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
 var _bob: float = 0.0
 ## A SEPARATE clock from `_bob`, and this is not tidiness — see `_animate_extras`.
 var _sway: float = 0.0
+var _ripple: float = 0.0             ## the talk ripple and the happy wag
+var _quiver: float = 0.0             ## the surprised shiver
 
 
 func _init() -> void:
@@ -389,10 +236,6 @@ func _init() -> void:
 	eye_w = EYE_W
 	eye_h = EYE_H
 	eye_d = EYE_D
-	# A SMALL mouth. The wide grin is gone, so the open-mouth ellipse that drives talking shrinks
-	# with it — 80 mm across at full open on a 640 mm head, against the 274 mm the grin needed.
-	mouth_w = 0.044
-	mouth_h = 0.030
 	# R3.2 — HIS OWN HEAD, low and flat. Until now every organic neighbour shared ONE cached head
 	# mesh, which is exactly why the user said it "still looks like it's just a reused head".
 	#
@@ -434,13 +277,13 @@ func _build_geometry() -> void:
 	# be one; the brows are the hard vocabulary Zorp is the control for. All three are BOOLEAN
 	# switches — you cannot turn a face part off by passing it a transparent colour, because
 	# `toon_soft` is opaque and an alpha-0 blush renders as two BLACK ovals on the cheeks. Three
-	# files have hit that trap.
-	_add_face(EYE, MOUTH, BLUSH, {
-		"nose": false, "blush": false, "brows": false, "mouth_inner": MOUTH_INNER,
+	# files have hit that trap. And since R6, NO MOUTH: the beard covers the whole lower face, so no
+	# mouth node is built at all (the mouth colour argument is unused) and no state can show one.
+	_add_face(EYE, EYE, BLUSH, {
+		"nose": false, "blush": false, "brows": false, "mouth": false,
 		"eyes": [_eye_spec(-1.0), _eye_spec(1.0)],
 	})
 	_fit_eyes()
-	_thin_mouth()
 	_build_scarf()
 	_build_tentacles()
 	_build_glow_ring()
@@ -488,6 +331,10 @@ func _fit_eyes() -> void:
 			glint.scale = GLINT_R
 		# X and Y only. Z is these nodes' standoff plus their own depth — see ROUND_FIT's note.
 		_eye_happy[i].scale = Vector3(HAPPY_FIT, HAPPY_FIT, 1.0)
+		# see `_wound_outward`: without this his happy eyes do not render at all
+		var arc := _eye_happy[i].get_node_or_null("Arc") as MeshInstance3D
+		if arc != null and arc.mesh is ArrayMesh:
+			arc.mesh = _wound_outward(arc.mesh as ArrayMesh)
 		_eye_round[i].scale = Vector3(ROUND_FIT.x, ROUND_FIT.y, 1.0)
 		_glint_the_round_eye(_eye_round[i])
 
@@ -555,80 +402,302 @@ func _glint_the_round_eye(round_eye: Node3D) -> void:
 	dot.scale = radii / rs
 
 
-# ================================================================================ the closed smile
-## Swaps the cast's default smile arc for a THINNER one at the same width and a little further
-## proud of the shell — see the mouth block for both numbers. Nothing else about the mouth changes:
-## `_mouth_open` (the ellipse plus interior plus tongue that drives talking) stays exactly where
-## `_add_mouth` put it, so the talk / happy / surprised blend still runs untouched.
+# ------------------------------------------------------------------------------------- the beard
+## R6 — THE TENTACLE BEARD. Chubby strands mirrored in pairs across the whole lower face, seated where
+## the mouth used to be and hanging over the chin. There is no mouth under them: `_add_face` is called
+## with `"mouth": false`, so no mouth node is ever built and no state can show one. Speech and emotion
+## live in `_animate_extras`.
 ##
-## THE RESULT MUST BE ASSIGNED TO `_mouth_smile`, not merely parented under the Mouth node.
-## `_apply_face` fades this arc out as the mouth opens (SMILE_HIDE_AT), and it finds it through that
-## member — a smile it does not hold stays drawn across the open mouth, which is the "two mouths,
-## one thin one that talks and another big open one" bug written up on `_apply_face` itself.
-func _thin_mouth() -> void:
-	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
-	if mouth_node == null:
-		return
-	if _mouth_smile != null and is_instance_valid(_mouth_smile):
-		# `remove_child` first, the way `_drop_eye` does it: `queue_free` alone runs at the END of
-		# the frame, so the cast's own arc would be drawn on top of this one for frame 0.
-		var old_parent := _mouth_smile.get_parent()
-		if old_parent != null:
-			old_parent.remove_child(_mouth_smile)
-		_mouth_smile.queue_free()
-	# `_smile_arc`'s own placement, reproduced here because the arc mesh has to be rebuilt before it
-	# is handed over: the mesh's origin is the RING CENTRE, which `_smile_arc` seats at
-	# y = ring_r * cos(MOUTH_HALF) so the arc's endpoints land on the mouth node's y = 0 and the
-	# curve hangs down from there. Same numbers, same node name, same parent.
-	var a0 := deg_to_rad(270.0 - MOUTH_HALF)
-	var a1 := deg_to_rad(270.0 + MOUTH_HALF)
-	var ring_y := MOUTH_ARC_R * cos(deg_to_rad(MOUTH_HALF))
-	_mouth_smile = _mi(_wound_outward(arc_tube(MOUTH_ARC_R, MOUTH_TUBE_A, a0, a1, 14, 6)),
-		_toon(MOUTH, {"spec": 0.0, "rim": 0.0, "shade": 0.06}),
-		mouth_node, Vector3(0.0, ring_y, MOUTH_LINE_Z), "Smile")
+## [yaw_deg, pitch_deg, front_deg, splay_deg, drop, base_r, tip_r, curl_rad], every row mirrored.
+##   yaw/pitch   where the root sits, solved on the head shell (`_orient_on_head`), so it follows
+##               `head_semi` / `head_n`. Pitch -16 to -24 is the old mouth line (the mouth sat at -20).
+##   front       the azimuth the strand leans and CURLS toward (`_hang_basis`): 90 straight forward,
+##               0 straight out to the side.
+##   splay       how far off straight-down the root leans before the curl starts.
+##   drop        length. base_r / tip_r its radius at each end. curl the total turn, root to tip.
+##
+## ONE ROW OF FOUR: two long inner strands under the eyes that curl forward, and two outer ones at
+## the cheeks that curl out and up. Together they span the lower face cheek to cheek.
+##
+## NO CENTRE STRAND, on purpose. An odd count puts the longest strand on the midline, hanging down
+## the chest like a trunk, and that single long dangling limb is the whole Cthulhu read.
+##
+## THE CHIN (R6.1), the fix for A's one flaw. On the phone camera (34 deg down, 2556x1179
+## --ui=mobile) the inner pair hung apart in a "^", and the pink scarf collar showing through that gap
+## read as an open mouth, with the two strands as mandibles either side of it. Three fixes were
+## rendered in the real game on Zorp's world and rejected before this one:
+##   * inner pair turned fully forward or crossed inward (front 90-105, yaw 6-7): the two strands
+##     fused into one trunk, and the collar still showed between them and the outer pair;
+##   * a filler in the beard's own tint behind the strands: the whole lower face became one lump
+##     and the four curls stopped reading as four;
+##   * the same filler darker (a recess): the gap came back as a dark "^", which is a mouth again.
+## What holds is a CHIN: one head-spotted superellipsoid under the jaw, set back behind the strands
+## and down over the front of the collar, so what shows between the tentacles is more of his face. The inner pair is also tipped 7 deg toward the middle (front 65 -> 72, yaw
+## 9 -> 8), which narrows the "^" without closing it. Measured on the phone frames, the collar-pink
+## pixels with beard or skin on BOTH sides of them within 25 px (the "between the tentacles" count)
+## went from 62 / 108 / 47 / 96 / 62 to 0 / 0 / 0 / 0 / 0 in idle / talk / talk +0.17 s / surprised /
+## happy; the scarf still shows at the sides and back.
+## R6.2: that 0 was one frame 0.5 s into each state. Captured densely (38 frames: idle, 14 talk
+## frames 0.11 s apart, 8 surprised, 12 happy 0.13 s apart), the collar still showed under the face
+## in every happy frame, because the chin is part of the head and the happy pose tips the head back
+## (HEAD_PITCH -0.16): the chin's bottom swung BACK behind the collar's front, and the camera looking
+## down saw the collar in front of it. Two changes, each measured in the real game on Zorp's world:
+##   * the chin hangs from `_chin_pivot`, whose basis is set every frame to the exact inverse of the
+##     head's, so the chin stays where the torso put it while the face tips, rolls and turns above
+##     it. No gain, no tuned angle. Alone it cut the count of collar pixels under the face (columns
+##     within 34 px of the eyes' centre, from the eye line down to the sweater) from 313 to 97 over
+##     the 12 happy frames, and the rest was the collar showing beside the chin's narrow bottom;
+##   * the chin is wider and deeper, 0.17 x 0.09 -> 0.20 x 0.10 with its centre 10 mm lower (bottom
+##     y -0.38 -> -0.40), which covers the collar between the inner and outer strands. Over a
+##     74-frame timeline (the one above plus a second happy at a shifted phase, wave, dance, think
+##     and a second surprised) that left 0 such pixels in every frame but 4 of the 12 dance frames
+##     (1-2 px each). The in-between size (0.20 x 0.09, bottom -0.38) left 6 / 5 in the two
+##     happies and 6 in idle.
+## COST: 4 strands x 3 joints + the chin = 13 draws against the eight-curl beard's 16; 5678
+## triangles in characters_lineup --stats against 5854, inside the 6000 budget.
+const BEARD := [
+	[8.0, -21.0, 72.0, 3.0, 0.175, 0.062, 0.037, 1.40],
+	[31.0, -19.0, 25.0, 7.0, 0.150, 0.057, 0.034, 2.00],
+]
+## How far the root sits inside the shell, as a fraction of its base radius — enough that the round
+## root cap emerges from the skin rather than resting on it.
+const BEARD_INSET := 0.55
+## Nested joints per strand; each is one draw call.
+const BEARD_JOINTS := 3
+## Tube resolution, authored directly rather than through DETAIL (the cast helpers' 4-6 sides read
+## as square rods at this thickness). Inner joints get one ring fewer and a one-ring dome — their end
+## is hidden inside the next joint and only has to fill the gap when the joint bends.
+const BEARD_SIDES := 8
+const BEARD_RINGS := 3
+const BEARD_DOME := 2
+## THE CHIN (see above): centre and semi-axes in head space. Its top sits inside the shell, its front
+## (z -0.21) behind the strands' roots (about -0.24), and its bottom (y -0.40) below the scarf's top
+## stripe, which otherwise peeked out under the beard as a cream line when the head tips back.
+## R6.2: 30 mm wider, 20 mm taller, and it hangs in the torso's frame (`_chin_pivot`).
+const CHIN_POS := Vector3(0.0, -0.30, -0.11)
+const CHIN_SEMI := Vector3(0.20, 0.10, 0.10)
+const CHIN_N := 3.0
+## The rest angle of the root joint, tipping the whole strand slightly outward off the face.
+const BEARD_ROOT_LEAN := 0.04
+## The widest seat yaw in BEARD. A strand's share of the sideways SPREAD (surprise, happy) is its yaw
+## over this, so the inner pair barely moves and the beard never parts down the middle — a parted
+## beard shows the pink collar behind it, and a pink gap under the eyes reads as an open mouth.
+const BEARD_OUTER_YAW := 31.0
+
+## THE BEARD'S COLOUR AND SKIN, both picked on renders, not on swatches.
+##   * TINT #9282b6 keeps SKIN's hue (259 against 261 deg), sits between SKIN and SKIN_DARK in value
+##     (V 0.71) and drops saturation from 0.37 to 0.29. Rendered side by side in one pose: at SKIN the
+##     beard melted into the face; at SKIN_DARK (the first build) it read as a bluer, heavier animal
+##     clamped over his chin; at the plain halfway point #8b75b9 it looked right but the lit render
+##     pushes a darker lavender UP in saturation, and the head crop's beard swatch came out at S 0.60
+##     (0.64 in its shadow) — on the gate. Measured at #9282b6 on the same crop (510,120,770,380 of a
+##     1280x720 portrait): beard swatch S 0.42-0.46, crop saturation mean 0.462 / 0.472 and p90
+##     0.559 / 0.562 on Compatibility / Forward+, against today's R5 face at 0.498 / 0.519 and 0.722 /
+##     0.718. #9786ba (lighter again) measured lower still but read as a milky white moustache.
+##   * R6.1 #9586b4 (S 0.26, V 0.71, hue 260). Four long strands leave more of the head skin
+##     showing between them than eight short curls did, and at #9282b6 the same crop measured
+##     saturation mean 0.473 / 0.471 (Compatibility idle / talk) and 0.487 / 0.495 (Forward+), over
+##     the 0.48 gate on Forward+. At #9586b4, rendered in the same session with the same cameras:
+##     0.449 / 0.451 and 0.468 / 0.468, p90 0.559-0.641. Side by side the strands are a touch greyer
+##     and do not go milky. (Same-frame re-renders of one build vary by about +-0.01.)
+##   * SURF_BEARD keeps the skin family (spots that stop at the jaw read as a mask) but at a coarser
+##     pitch and 0.6 strength. At SURF_LIMB's 49 mm cells every strand carried a row of dark speckles
+##     that read as SUCKERS, and the pattern broke at every joint (each segment is its own mesh, and
+##     the pattern is in object space), so the strands looked ribbed like caterpillars.
+const BEARD_TINT := Color("#9586b4")
+const SURF_BEARD := {"surface": "skin", "surface_scale": 1.30, "surface_strength": 0.60,
+	"surface_spot": 1.00, "surface_scales": 0.0, "surface_spot_radius": 0.74,
+	"surface_near": 7.0, "surface_far": 20.0}
+
+## Stride of `_beard_params`, one row per joint: k, period, phase, rest_x, spread_x, spread_z, root.
+const BP_STRIDE := 7
 
 
-## THE SAME ARC, WITH ITS TRIANGLES TURNED RIGHT WAY OUT. This is the fix for "the mouth is not a
-## line, it is 4-5 disconnected dark pixels", and it is worth the whole block because the cause is
-## invisible in source and three passes of tuning went at the wrong lever before it was found.
-##
-## WHAT WAS ACTUALLY ON SCREEN. `arc_tube` is documented in chibi_model.gd as being wound
-## INSIDE-OUT ("Flipping these two triples is the whole fix; it was tried during integration and
-## reverted"). The toon shader is `render_mode cull_back`, so on an inside-out tube the NEAR wall
-## is culled and what draws is the FAR wall — the inside of the back of the tube — seen through the
-## hole where the near wall should have been. The far wall is buried in the head for everything
-## except a narrow strip at each rim, so a 25 mm tube rendered as TWO ~1 px outlines with bare skin
-## between them, not as a 25 mm band.
-##
-## MEASURED, at --dist=1.4 where the head is 290 px wide (0.453 px/mm): with MOUTH_TUBE_A at
-## 0.0220 the mouth drew as two separate arcs 20 px apart — exactly the tube's 44 mm diameter —
-## with lit skin in the gap. With the winding turned out, the same frame draws one solid band.
-## AND AT --gameplay, per column of the arc's span, ink coverage against the local skin, four
-## sampled frames each (the head bobs, so one frame proves nothing):
-##   before  3, 5, 7 and 9 of ~29 columns inked; longest unbroken run 2, 2, 2, 4 px
-##   after   15, 15, 16, 16 of ~29 columns inked at 100 %; longest run 15, 15, 16, 16 — i.e. the
-##           whole span, with no interior column below full ink, in every frame. That is also why the previous pass's "raise MOUTH_TUBE_A" did not
-## help: raising the radius does not thicken the line, it drives the two rims FURTHER APART, and
-## at --gameplay the two 1 px rims land on the same pixel row or on neighbouring ones depending on
-## where the head's bob puts them that frame. A stroke that breaks in and out along its length is
-## precisely what a pair of hairline rims does.
-##
-## WHY NOT THE OBVIOUS FIXES.
-##   * chibi_model.gd's `arc_tube` is off limits this round, and flipping it there would silently
-##     change every brow, every "^ ^" happy eye and every other neighbour's smile at once.
-##   * A negative scale (`Vector3(1, 1, -1)`) on the mesh instance was built and rendered first. It
-##     is a no-op: Godot flips the front-face direction for a negative-determinant transform so
-##     that mirrored meshes do not turn inside out, so the cull flips back. Measured identical to
-##     no change at all (inked columns 13.0 vs 12.5, longest run 8.2 vs 8.2 — inside the noise).
-##   * The shader's cull mode is baked into `render_mode`, so there is no per-material override.
-## Rebuilding the index buffer is what is left, and it is cheap and completely local.
-##
-## THE SOURCE MESH IS SHARED AND MUST NOT BE TOUCHED. `arc_tube` hands back a cached ArrayMesh that
-## other characters are already using; `surface_get_arrays` copies, so a fresh ArrayMesh built from
-## the copy leaves the cache alone. Vertex positions, normals and UVs are carried over untouched —
-## `arc_tube` already sets correct OUTWARD normals, so only the winding was ever wrong, and shading
-## is bit-for-bit what it was.
+func _build_tentacles() -> void:
+	# LOAD-BEARING. `ChibiModel.rebuild()` frees every child but knows nothing about these arrays;
+	# without the clear a second rebuild leaves freed nodes that `_animate_extras` touches next tick.
+	_tentacles.clear()
+	_beard_params = PackedFloat32Array()
+	var m_tent := _toon(BEARD_TINT, _matte(SURF_BEARD))
+	var strand := 0
+	for t: Array in BEARD:
+		for sx: float in [-1.0, 1.0]:
+			var seat := _node("Tentacle%d" % strand, _head, Vector3.ZERO)
+			# `_orient_on_head` for the POSITION only; its basis faces outward and would hang the
+			# strand back under the chin, so the basis is replaced (never `.rotation`, see R5).
+			_orient_on_head(seat, float(t[0]) * sx, float(t[1]), float(t[5]) * BEARD_INSET)
+			seat.basis = _hang_basis(sx, float(t[3]), float(t[2]))
+			# SPREAD, solved from the frame rather than guessed: a joint's +rotation.x swings its hang
+			# (-Y) toward -Z and +rotation.z toward +X, so the sideways direction (sx, 0, 0) maps to
+			# (-side.z, side.x) in the seat's own axes. Weighted by yaw — see BEARD_OUTER_YAW.
+			var side := seat.basis.inverse() * Vector3(sx, 0.0, 0.0)
+			var w := clampf(float(t[0]) / BEARD_OUTER_YAW, 0.0, 1.0)
+			_build_strand(seat, m_tent, t, Vector2(-side.z, side.x) * w, strand)
+			strand += 1
+	# THE CHIN. Head-spotted so it reads as more face, not as a lump of beard. Its colour is exactly
+	# halfway from SKIN to BEARD_TINT, no new hue. At SKIN it read best in Compatibility, but it sits
+	# in the head's shadow, and Forward+ rendered it a deep violet block (swatches S 0.60-0.66, head
+	# crop p90 0.708 in talk); a raised shadow_floor on it changed nothing measurable. At BEARD_TINT
+	# it merged with the strands into one grey lump. Halfway, over three Forward+ renders per state:
+	# talk mean 0.477-0.484 / p90 0.669-0.677, idle 0.466-0.471 / 0.602-0.607.
+	_chin_pivot = _node("ChinPivot", _head, Vector3.ZERO)
+	_mi(superellipsoid(CHIN_SEMI, CHIN_N, 14, 8), _toon(SKIN.lerp(BEARD_TINT, 0.5), _matte(SURF_HEAD)), _chin_pivot, CHIN_POS, "Chin")
+
+
+## ONE strand of BEARD_JOINTS nested pivots. The curl is BACK-LOADED (it grows with t squared), so a
+## strand hangs first and its END turns out. Each child pivot sits exactly where its parent's tube
+## ends and is turned by the angle that tube ended at, so the strand is continuous in position and
+## direction and the joints disappear at rest.
+func _build_strand(seat: Node3D, mat: Material, t: Array, spread: Vector2, idx: int) -> void:
+	var drop := float(t[4])
+	var r0 := float(t[5])
+	var r1 := float(t[6])
+	var curl := float(t[7])
+	var seg := drop / float(BEARD_JOINTS)
+	var cursor := seat
+	var prev_c := 0.0
+	for j in BEARD_JOINTS:
+		var ta := float(j) / float(BEARD_JOINTS)
+		var tb := float(j + 1) / float(BEARD_JOINTS)
+		var c := curl * (tb * tb - ta * ta)
+		var last := j == BEARD_JOINTS - 1
+		var pos := Vector3.ZERO if j == 0 else _beard_end(seg, prev_c, _rings_for(false))
+		var node := _node("Joint%d" % j, cursor, pos)
+		node.rotation.x = BEARD_ROOT_LEAN if j == 0 else prev_c
+		_mi(_beard_tube(seg, lerpf(r0, r1, ta), lerpf(r0, r1, tb), c, last, j == 0), mat, node,
+			Vector3.ZERO, "Seg")
+		prev_c = c
+		# k grows down the strand and sums to 3 over the joints: nested joints add up, so a small
+		# angle per joint moves the tip rather than shearing the root.
+		var k := float(j + 1) * 6.0 / float(BEARD_JOINTS * (BEARD_JOINTS + 1))
+		_beard_params.append_array([k, 1.55 + 0.17 * float(idx) + 0.21 * float(j),
+			fmod(0.618 * float(idx) + 0.317 * float(j), 1.0), node.rotation.x, spread.x, spread.y,
+			1.0 if j == 0 else 0.0])
+		_tentacles.append(node)
+		cursor = node
+
+
+static func _rings_for(last: bool) -> int:
+	return BEARD_RINGS if last else BEARD_RINGS - 1
+
+
+## Where a beard tube of this length and curl ends, in its own space — the same path `_beard_tube`
+## walks, so a child pivot placed here cannot drift off its parent's end.
+static func _beard_end(length: float, curl: float, n: int) -> Vector3:
+	var p := Vector3.ZERO
+	for i in range(1, n + 1):
+		var a := curl * (float(i) - 0.5) / float(n)
+		p += Vector3(0.0, -cos(a), -sin(a)) * (length / float(n))
+	return p
+
+
+
+static var _beard_cache: Dictionary = {}
+
+## A HANGING, TAPERING, CURLING TUBE with a round domed end. It runs down -Y from the origin and turns
+## toward -Z (the outward side `_hang_basis` sets up). `root` swaps the flat top cap for a round one,
+## so the strand grows out of the face instead of showing a cut edge where it enters the skin.
+## Wound CLOCKWISE seen from outside, which is Godot's front face under `toon_soft`'s cull_back.
+static func _beard_tube(length: float, r0: float, r1: float, curl: float, last: bool, root: bool) -> ArrayMesh:
+	var key := "%.4f|%.4f|%.4f|%.4f|%s|%s" % [length, r0, r1, curl, last, root]
+	if _beard_cache.has(key):
+		return _beard_cache[key]
+	var n := _rings_for(last)
+	var dome_n := BEARD_DOME if last else 1
+	var sides := BEARD_SIDES
+	var rings: Array[PackedVector3Array] = []
+	var norms: Array[PackedVector3Array] = []
+	if root:
+		var rr := PackedVector3Array()
+		var rn := PackedVector3Array()
+		for s in sides:
+			var b := TAU * float(s) / float(sides)
+			var d := (Vector3.RIGHT * cos(b) + Vector3.FORWARD * sin(b)) * 0.7071 + Vector3.UP * 0.7071
+			rr.append(d * r0)
+			rn.append(d)
+		rings.append(rr)
+		norms.append(rn)
+	var p := Vector3.ZERO
+	var tang := Vector3.DOWN
+	var slope := (r1 - r0) / maxf(length, 1e-5)
+	for i in n + 1:
+		if i > 0:
+			var a := curl * (float(i) - 0.5) / float(n)
+			p += Vector3(0.0, -cos(a), -sin(a)) * (length / float(n))
+		var ai := curl * float(i) / float(n)
+		tang = Vector3(0.0, -cos(ai), -sin(ai))
+		var r := lerpf(r0, r1, float(i) / float(n))
+		var n2 := Vector3.RIGHT.cross(tang).normalized()
+		var ring := PackedVector3Array()
+		var nr := PackedVector3Array()
+		for s in sides:
+			var b := TAU * float(s) / float(sides)
+			var radial := Vector3.RIGHT * cos(b) + n2 * sin(b)
+			ring.append(p + radial * r)
+			nr.append((radial - tang * slope).normalized())
+		rings.append(ring)
+		norms.append(nr)
+	var n2e := Vector3.RIGHT.cross(tang).normalized()
+	for k in range(1, dome_n + 1):
+		var phi := (float(k) / float(dome_n + 1)) * PI * 0.5
+		var ring := PackedVector3Array()
+		var nr := PackedVector3Array()
+		for s in sides:
+			var b := TAU * float(s) / float(sides)
+			var d := ((Vector3.RIGHT * cos(b) + n2e * sin(b)) * cos(phi) + tang * sin(phi)).normalized()
+			ring.append(p + d * r1)
+			nr.append(d)
+		rings.append(ring)
+		norms.append(nr)
+	var verts := PackedVector3Array()
+	var vn := PackedVector3Array()
+	var uv := PackedVector2Array()
+	for i in rings.size():
+		verts.append_array(rings[i])
+		vn.append_array(norms[i])
+		for s in sides:
+			uv.append(Vector2(float(i) / float(rings.size()), float(s) / float(sides)))
+	var apex := verts.size()
+	verts.append(p + tang * r1)
+	vn.append(tang)
+	uv.append(Vector2(1.0, 0.5))
+	var top := verts.size()
+	verts.append(Vector3.UP * r0 if root else Vector3.ZERO)
+	vn.append(Vector3.UP)
+	uv.append(Vector2(0.0, 0.5))
+	var idx := PackedInt32Array()
+	for i in rings.size() - 1:
+		for s in sides:
+			var a0 := i * sides + s
+			var a1 := i * sides + (s + 1) % sides
+			var b0 := (i + 1) * sides + s
+			var b1 := (i + 1) * sides + (s + 1) % sides
+			idx.append_array([a0, b1, b0, a0, a1, b1])
+	var lastr := (rings.size() - 1) * sides
+	for s in sides:
+		idx.append_array([lastr + s, lastr + (s + 1) % sides, apex])
+		idx.append_array([top, (s + 1) % sides, s])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = vn
+	arrays[Mesh.ARRAY_TEX_UV] = uv
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_beard_cache[key] = mesh
+	return mesh
+
+
+## THE "^ ^" ARC, TURNED RIGHT WAY OUT. `arc_tube` in chibi_model.gd is wound inside-out (its own
+## docs say so), and under cull_back only the far wall draws. On Zorp's flat ink eye that far wall
+## is buried in the shell, so before R6 his happy eyes rendered as NOTHING — a blank face in happy,
+## wave and dance. With the mouth gone the eyes carry the expression, so it is fixed here, locally:
+## the source mesh is shared with other characters and is copied, never edited.
 static func _wound_outward(src: ArrayMesh) -> ArrayMesh:
+	var key := "wound|%d" % src.get_instance_id()
+	if _beard_cache.has(key):
+		return _beard_cache[key]
 	var arr: Array = src.surface_get_arrays(0)
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 	var flipped := PackedInt32Array()
@@ -642,108 +711,72 @@ static func _wound_outward(src: ArrayMesh) -> ArrayMesh:
 	arr[Mesh.ARRAY_INDEX] = flipped
 	var out := ArrayMesh.new()
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	_beard_cache[key] = out
 	return out
 
 
-# ==================================================================================== the tentacles
-## Three strands a side, built joint by joint here rather than through `_add_tendril_ring`.
-##
-## USING THE HELPER WAS TRIED FIRST AND RENDERED. It is the right shape of thing — nested joints,
-## a tapering tube per joint, animation metas on every pivot — and this function keeps its whole
-## structure and its meta contract deliberately, so `_animate_extras` is the same single loop it
-## would have been. Three things forced the copy, and none of them are style:
-##   1. SIDES. The helper hard-codes `taper_tube(..., 4, 5)` and there is no argument for it. See
-##      TENT_SIDES: four sides is a square rod at this thickness, and it rendered as one.
-##   2. CURL. The helper passes curl 0, so each joint is dead straight and the only bend is at the
-##      hinges. See TENT_CURL.
-##   3. ONE DROP PER CALL. Every strand in a call shares a `drop`, and graded lengths are the main
-##      thing keeping this off a beard — so it would have been six calls of `count = 1` regardless,
-##      which also means the helper's per-strand phase spread (derived from the index WITHIN a call)
-##      would have come out identical for all six and marched them in lockstep.
-## chibi_model.gd is off limits this round; if it opens up, the clean fix is `sides`, `segs` and
-## `curl` arguments on `_add_tendril_ring` plus a phase seed, and this function goes away.
-##
-## THE SEAT'S BASIS IS REPLACED OUTRIGHT, and only the basis — see the tentacle constants for why
-## `_orient_on_head`'s outward-facing frame hangs these wrong. `seat.position` is written by
-## `_orient_on_head` and left alone, so the strand stays exactly on the shell. What is forbidden and
-## still forbidden is writing `seat.rotation` (euler) on a part that has to keep FACING outward —
-## an eye, the mouth — and the sway therefore writes to the joint pivots below, which are seated by
-## euler, never to these seats.
-func _build_tentacles() -> void:
-	# LOAD-BEARING. `ChibiModel.rebuild()` frees every child and clears its own five eye arrays and
-	# `_brows`, but it knows nothing about this one. Without the clear, a second `rebuild()` leaves
-	# six freed Node3Ds in the array and `_animate_extras` calls `get_meta` on a freed node on the
-	# very next tick. twin_model.gd clears `_antennae` at the top of its own `_build_geometry` for
-	# the same reason.
-	_tentacles.clear()
-	# SKIN_DARK, NOT SKIN, and carrying SURF_LIMB. Two reasons:
-	#   1. This file's rule is that spots which stop at the jaw look like a mask, so the strands have
-	#      to be spotted like the rest of him. SURF_LIMB's 2.90 scale puts 49 mm cells on a 60 mm
-	#      strand — two to four blotches each, the same pitch the mittens and legs run at.
-	#   2. SKIN_DARK because the top third of every strand is seen AGAINST the head, and a same-value
-	#      limb on a same-value head is one silhouette rather than seven. It is a single value step
-	#      down and is already the legs' colour, so it is not a new number in the palette.
-	var m_tent := _toon(SKIN_DARK, _matte(SURF_LIMB))
-	var strand := 0
-	for sx: float in [-1.0, 1.0]:
-		for i in TENT_SEATS.size():
-			var t: Array = TENT_SEATS[i]
-			var seat := _node("Tentacle%s%d" % ["L" if sx < 0.0 else "R", i], _head, Vector3.ZERO)
-			_orient_on_head(seat, float(t[0]) * sx, float(t[1]), TENT_INSET)
-			seat.basis = _hang_basis(sx, float(t[2]), float(t[3]))
-			_build_strand(seat, m_tent, float(t[4]), float(t[5]), float(t[6]), strand)
-			strand += 1
 
-
-## ONE hanging strand of TENT_JOINTS nested pivots under `seat`, tapering `r0` to `r1` over `drop`.
-##
-## The mesh is turned over in place (`rotation.x = PI`) because `taper_tube` grows along its own +Y
-## and a tentacle hangs — the same trick `_add_tendril_ring` uses. That flip also sends the tube's
-## bend direction, its own +Z, to the pivot's -Z, which is the OUTWARD direction `_hang_basis` set.
-## So a positive TENT_CURL bends the strand away from the head, which is the way it should fall.
-##
-## THE CHILD PIVOT SITS AT `taper_tube_end`, NOT AT (0, -seg, 0). With curl 0 those are the same
-## point and the helper can get away with the constant; with curl they are 4 mm apart per joint and
-## the strand would show a visible step at every hinge. `taper_tube_end` reports the end of the very
-## path `taper_tube` builds, so the two cannot drift apart, and the same PI flip is applied to it.
-func _build_strand(seat: Node3D, mat: Material, drop: float, r0: float, r1: float, idx: int) -> void:
-	var seg_drop := drop / float(TENT_JOINTS)
-	var tip: Vector3 = taper_tube_end(seg_drop, TENT_CURL, TENT_SEGS)
-	var step := Vector3(tip.x, -tip.y, -tip.z)      ## the mesh's PI flip, applied to the join point
-	var cursor := seat
-	for j in TENT_JOINTS:
-		var t0 := float(j) / float(TENT_JOINTS)
-		var t1 := float(j + 1) / float(TENT_JOINTS)
-		var node := _node("Joint%d" % j, cursor, Vector3.ZERO if j == 0 else step)
-		node.rotation.x = float(TENT_LEAN[mini(j, TENT_LEAN.size() - 1)])
-		_mi(taper_tube(seg_drop, lerpf(r0, r1, t0), lerpf(r0, r1, t1), TENT_CURL,
-			TENT_SEGS, TENT_SIDES), mat, node, Vector3.ZERO, "Seg").rotation.x = PI
-		# The animation contract, copied from `_add_tendril_ring` so `_animate_extras` stays a plain
-		# loop. "period"/"phase" are seeded from the GLOBAL strand index, which is the whole reason
-		# they are re-derived: the helper seeds them from the index within one call, and with one
-		# strand per call all six would have shared a clock and swayed in lockstep. "rest_x"/"rest_z"
-		# must record the pose actually built — a rest_x that disagrees snaps the strand on frame 1.
-		node.set_meta("joint", j)
-		node.set_meta("period", 1.45 + 0.19 * float(idx) + 0.23 * float(j))
-		node.set_meta("phase", fmod(0.618 * float(idx) + 0.317 * float(j), 1.0))
-		node.set_meta("rest_x", node.rotation.x)
-		node.set_meta("rest_z", node.rotation.z)
-		_tentacles.append(node)
-		cursor = node
+## EXPRESSION WITHOUT A MOUTH. Everything reads pose channels the cast already drives, so every state
+## and emote gets beard motion for free and blends in and out with the pose:
+##   idle       a slow lean down every strand, no two in step.
+##   talk       (EXTRA_A 1) a ripple travels down each strand, and on every syllable (MOUTH_OPEN
+##              pulsing) the tips flick out — the beat the open mouth used to carry.
+##   happy      (EYE_HAPPY: happy, wave, dance) every strand curls up and wags, the outer ones perk out.
+##   surprised  (EYE_ROUND) the beard fans out stiff and quivers.
+##   think      (EXTRA_A -1) the strands go limp and slow down.
+## The spread terms are per strand (BEARD_OUTER_YAW), so no state ever parts the beard in the middle.
+func _animate_extras(delta: float) -> void:
+	_bob += delta
+	# soft hover bob (the whole model floats; the glow ring stays on the ground)
+	_root.position.y = hover_height + sin(TAU * _bob / 2.6) * 0.022
+	var think := clampf(-pose(P.EXTRA_A), 0.0, 1.0)
+	var talk := smoothstep(0.3, 1.0, pose(P.EXTRA_A))
+	var flick := talk * clampf((pose(P.MOUTH_OPEN) - 0.45) / 0.55, 0.0, 1.0)
+	var happy := clampf(pose(P.EYE_HAPPY), 0.0, 1.0)
+	var surpr := clampf(pose(P.EYE_ROUND), 0.0, 1.0)
+	# INTEGRATED clocks, not `_bob * rate`: a rate multiplied into an absolute clock jumps the phase
+	# the instant an emote blends in, and the strands would snap.
+	_sway += delta * (1.0 + 0.5 * talk + 1.1 * happy - 0.4 * think)
+	_ripple += delta * 2.1
+	_quiver += delta * 9.0
+	# THE CHIN stays in the torso's frame: `_apply_pose` has just written this frame's head rotation.
+	if _chin_pivot:
+		_chin_pivot.basis = _head.basis.inverse()
+	var still := 1.0 - 0.8 * surpr
+	var rest_mul := 1.0 - 0.5 * think
+	for i in _tentacles.size():
+		var o := i * BP_STRIDE
+		var k := _beard_params[o]
+		var ph := _beard_params[o + 2]
+		var spx := _beard_params[o + 4]
+		var spz := _beard_params[o + 5]
+		var root := _beard_params[o + 6]
+		var w := TAU * (_sway / _beard_params[o + 1] + ph)
+		var j := float(i % BEARD_JOINTS)
+		var rx := _beard_params[o + 3] * rest_mul + 0.026 * k * sin(w) * still
+		var rz := 0.020 * k * sin(w * 0.71 + 1.4) * still
+		rx += talk * 0.12 * k * sin(TAU * (_ripple + ph) - 1.2 * j) + flick * 0.16 * k
+		rx += happy * (k * (0.10 + 0.07 * sin(TAU * (_ripple * 1.6 + ph))) + 0.22 * root * spx)
+		rz += happy * 0.22 * root * spz
+		rx += surpr * (0.50 * root * spx + 0.02 * k * sin(TAU * _quiver + ph * 5.0))
+		rz += surpr * 0.50 * root * spz
+		_tentacles[i].rotation = Vector3(rx, 0.0, rz)
+	if _ring_mat:
+		var a := 0.24 + 0.10 * sin(TAU * _bob / 2.6 + 1.2)
+		_ring_mat.albedo_color = Color(BULB.r, BULB.g, BULB.b, a)
 
 
 ## THE FRAME A STRAND HANGS IN, built in head-local space so it owes nothing to the shell's normal
 ## at the seat. Two angles, both in degrees:
-##   splay  how far off straight-down the strand leans, toward `front`. Small — 5-7 deg — because
-##          TENT_LEAN and TENT_CURL add another 17 deg of flare on top of it by the tip.
+##   splay  how far off straight-down the strand leans, toward `front`. Small — 3-7 deg — because
+##          the back-loaded curl turns the tip another 80-115 deg the same way.
 ##   front  the AZIMUTH of that lean in the head's XZ plane: 0 is straight out to the side, 90 is
-##          straight forward. So the front strand (48) falls forward and out across the cheek and
-##          the back one (20) falls almost straight down the flank. Grading it is what stops the
-##          trio from looking like one fan.
+##          straight forward. The inner pair (72) curls forward, the outer pair (25) out toward
+##          the cheeks.
 ##
 ## The basis is built rather than eulered because the two angles are a direction, not a rotation
-## order: -Y is the hang, and -Z is the outward direction the nested joint leans then follow (the
-## helper's joints pitch about local X, which tips them toward local -Z). `xb = yb.cross(zb)` keeps
+## order: -Y is the hang, and -Z is the outward direction the nested joints lean and curl toward (a
+## joint's +X rotation tips it toward local -Z). `xb = yb.cross(zb)` keeps
 ## it right-handed — the same identity Basis.IDENTITY satisfies.
 func _hang_basis(sx: float, splay_deg: float, front_deg: float) -> Basis:
 	var outv := Vector3(sx * cos(deg_to_rad(front_deg)), 0.0, -sin(deg_to_rad(front_deg))).normalized()
@@ -792,46 +825,6 @@ func _build_glow_ring() -> void:
 	add_child(_glow_ring)
 
 
-func _animate_extras(delta: float) -> void:
-	_bob += delta
-	# soft hover bob (the whole model floats; the glow ring stays on the ground)
-	_root.position.y = hover_height + sin(TAU * _bob / 2.6) * 0.022
-	# The EXTRA_A channel keeps exactly the meaning the antenna gave it — "think" drives droop to 1,
-	# "talk" drives perk to 1, idle breathes it +/-0.05 — it just drives six strands now instead of
-	# one stalk. droop cuts each joint's resting lean to 40 % (0.06 -> 0.024, 0.08 -> 0.032), so the
-	# strands straighten and hang limp; perk adds up to 0.33 rad of cumulative outward flare and
-	# speeds the sway 55 %, so they lift and spread while he talks.
-	var droop := clampf(-pose(P.EXTRA_A), 0.0, 1.0)
-	var perk := clampf(pose(P.EXTRA_A), 0.0, 1.0)
-	# A SEPARATE ACCUMULATOR, NOT `_bob`, and this is not a style choice. `perk` multiplies the sway
-	# RATE, and multiplying a rate into an absolute clock jumps the PHASE the instant perk blends in
-	# — the tentacles would snap sideways at the start of every talk. Integrating the rate keeps the
-	# phase continuous through the blend. `_bob` stays on its own clock because the hover and the
-	# glow ring are not rate-modulated.
-	_sway += delta * (1.0 + 0.55 * perk)
-	for t: Node3D in _tentacles:
-		# AMPLITUDE GROWS DOWN THE STRAND because the joints are NESTED — the helper's docstring is
-		# explicit that this is the difference between a tentacle that whips and one that shears.
-		# k = 1/2/3 gives 0.030 / 0.060 / 0.090 rad of pitch sway summing to 0.18 rad at the tip.
-		# On the 320 mm front strand each joint's share moves the length hanging below it by about
-		# 10 / 13 / 10 mm, so the tip travels ~32 mm off centre over a 1.45-2.4 s period — a slow
-		# lean, roughly a tenth of the strand's own length. The lateral drift runs on a different
-		# multiple of the same clock (0.71, offset 1.4) so no two joints and no two strands are ever
-		# in lockstep. Gentle idle sway, not a wag.
-		var k := float(int(t.get_meta("joint", 0))) + 1.0
-		var per := maxf(float(t.get_meta("period", 1.6)), 0.2)
-		var w := TAU * (_sway / per + float(t.get_meta("phase", 0.0)))
-		# Writing `rotation` on these is SAFE: `_build_strand` seats every joint pivot by euler, and
-		# records that pose in "rest_x"/"rest_z". The SEAT above them carries a BASIS and must never
-		# be written to here — euler assignment would rebuild it and throw the hang direction away.
-		t.rotation.x = float(t.get_meta("rest_x", 0.0)) * (1.0 - 0.60 * droop) \
-			+ 0.030 * k * sin(w) + 0.055 * k * perk
-		t.rotation.z = float(t.get_meta("rest_z", 0.0)) + 0.026 * k * sin(w * 0.71 + 1.4)
-	if _ring_mat:
-		var a := 0.24 + 0.10 * sin(TAU * _bob / 2.6 + 1.2)
-		_ring_mat.albedo_color = Color(BULB.r, BULB.g, BULB.b, a)
-
-
 ## Small radial falloff texture used for the hover glow (shared, generated once).
 static var _dot_tex: ImageTexture
 
@@ -849,3 +842,4 @@ static func soft_dot_texture() -> ImageTexture:
 			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a * a))
 	_dot_tex = ImageTexture.create_from_image(img)
 	return _dot_tex
+

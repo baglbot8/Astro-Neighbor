@@ -292,6 +292,11 @@ var _sight_query: PhysicsShapeQueryParameters3D
 ## Current extra elevation the spring arm is holding to see over an obstacle, in radians. Smoothed
 ## (see the LIFT_* block) so engaging and releasing it is a camera move, not a pop.
 var _lift: float = 0.0
+## Heat item 9 (docs/OPEN_ISSUES.md 57, cpu-6): `_arm_query()` used to build a fresh
+## PhysicsRayQueryParameters3D every call - up to LIFT_STEPS+1 times per frame while avoiding
+## terrain. Built once and its from/to updated in place instead; exclude is never set here, so
+## there is nothing stale to carry across a player swap.
+var _arm_query_cache: PhysicsRayQueryParameters3D
 ## `--fade-debug` (after "--") prints the fade set whenever it changes. Off in normal play; it is
 ## the only way to prove from a capture run that the right prop faded and not merely that the
 ## astronaut happened to be visible.
@@ -1707,9 +1712,13 @@ func _avoid_terrain(delta: float, pivot: Vector3, cam_pos: Vector3) -> Vector3:
 
 
 func _arm_query(pivot: Vector3, cam_pos: Vector3) -> PhysicsRayQueryParameters3D:
-	var q := PhysicsRayQueryParameters3D.create(pivot, cam_pos, AVOID_MASK)
-	q.hit_from_inside = false
-	return q
+	if _arm_query_cache == null:
+		_arm_query_cache = PhysicsRayQueryParameters3D.create(pivot, cam_pos, AVOID_MASK)
+		_arm_query_cache.hit_from_inside = false
+	else:
+		_arm_query_cache.from = pivot
+		_arm_query_cache.to = cam_pos
+	return _arm_query_cache
 
 
 func _arm_clear(space: PhysicsDirectSpaceState3D, pivot: Vector3, cam_pos: Vector3) -> bool:

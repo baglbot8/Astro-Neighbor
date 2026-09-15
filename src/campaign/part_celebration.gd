@@ -64,7 +64,10 @@ extends Node3D
 
 signal finished(skipped: bool)
 
-enum Phase { IDLE, PENDING, RUNNING, SKIPPING, RELEASING }
+## CONFIRMING (2026-09-14): a SkipConfirm question is on screen. `_process`'s RUNNING arm already
+## stops advancing `_t`/`_step` the instant `_phase` leaves RUNNING, so this freezes the shot's clock
+## for free - no separate flag needed, unlike CrashIntro which has no phase machine of its own.
+enum Phase { IDLE, PENDING, RUNNING, CONFIRMING, SKIPPING, RELEASING }
 
 const MODAL_NAME := "cutscene"
 const PART_SFX := "part_fitted"
@@ -411,7 +414,7 @@ func _exit_tree() -> void:
 	# Leaving mid-shot (a quit, a scene change): never leave the menus locked, the astronaut frozen,
 	# the view on a camera that is about to be freed, or the rocket on its old finish. Children leave
 	# the tree before this runs, so the camera's transform is not read here (no hand-back gap log).
-	if _phase == Phase.RUNNING or _phase == Phase.SKIPPING or _phase == Phase.RELEASING:
+	if _phase == Phase.RUNNING or _phase == Phase.CONFIRMING or _phase == Phase.SKIPPING or _phase == Phase.RELEASING:
 		_drop_camera(false)
 		_thaw_player()
 		_end_modal()
@@ -497,6 +500,8 @@ func _process(delta: float) -> void:
 				_finish(false)
 				return
 			_step(dt)
+		Phase.CONFIRMING:
+			pass # `_skip()` owns everything while a SkipConfirm question is up; the clock is frozen.
 		Phase.SKIPPING:
 			pass
 		Phase.RELEASING:
@@ -1479,8 +1484,24 @@ func _poll_skip_actions() -> void:
 		_skip("action")
 
 
+## Asks first (2026-09-14). `_phase == CONFIRMING` freezes the shot's clock for free (see the enum
+## comment), so "Keep watching" resumes from exactly where it paused with nothing lost.
 func _skip(why: String) -> void:
 	if _phase != Phase.RUNNING:
+		return
+	_phase = Phase.CONFIRMING
+	_log("skip requested (%s) at t=%.2f" % [why, _t])
+	var go: bool = await SkipConfirm.ask(self, "Skip this celebration?", "Skip", "Keep watching")
+	if not is_inside_tree() or _phase != Phase.CONFIRMING:
+		return
+	if not go:
+		# The key/button that answered "Keep watching" (ui_accept, cancel...) is also one of our own
+		# SKIP_ACTIONS - resync the debounce to what is actually down right now, or a still-held
+		# answer key reads as a brand new press next frame and reopens the question at once (measured
+		# 2026-09-14: an Enter-key decline immediately re-triggered `_skip()` before this fix).
+		_phase = Phase.RUNNING
+		for a: String in SKIP_ACTIONS:
+			_skip_held[a] = Input.is_action_pressed(a)
 		return
 	_phase = Phase.SKIPPING
 	_skipped = true
@@ -1671,7 +1692,7 @@ func _update_hint(delta: float) -> void:
 	if _phase == Phase.RUNNING and _t >= SKIP_HINT_T and _t < _t_handback:
 		want = SKIP_HINT_ALPHA
 	_hint_alpha = move_toward(_hint_alpha, want, delta / SKIP_HINT_FADE)
-	if _phase == Phase.SKIPPING or _phase == Phase.RELEASING:
+	if _phase == Phase.CONFIRMING or _phase == Phase.SKIPPING or _phase == Phase.RELEASING:
 		_hint_alpha = 0.0
 	_hint_pill.modulate.a = _hint_alpha
 	_hint_pill.visible = _hint_alpha > 0.005
@@ -1809,3 +1830,72 @@ func debug_report(tag: String) -> void:
 		tag, Phase.keys()[_phase], _t, EventBus.modal_total(), str(EventBus.modal_counts()),
 		str(p.input_enabled) if p != null else "-", str(p.is_physics_processing()) if p != null else "-",
 		str(p.is_processing()) if p != null else "-", cam.name if cam != null else "-"])
+
+
+## THE DIRECT HIT (2026-09-14, shared with CrashIntro's identical hook): finds the SkipConfirm
+## popup's "Skip" or "Keep watching" button by its visible text and taps its exact centre through
+## `MobileUI.synth_tap`, which applies the viewport's stretch transform the way a real finger's
+## window-pixel touch does - a hand-rolled InputEventScreenTouch measurably missed the button
+## entirely under this project's stretch mode (2026-09-14, this brief's own round 1 measurement).
+## Proves a same-spot accidental tap-train landing squarely on the rendered button cannot slip past
+## the arm guard, which code-reading alone cannot settle.
+func debug_tap_button(text: String) -> void:
+	var b := _find_button(get_tree().root, text)
+	if b == null:
+		print("CELEBRATE TAP_BUTTON %s: not found" % text)
+		return
+	var c := b.get_global_rect().get_center()
+	print("CELEBRATE TAP_BUTTON %s: found at %s" % [text, str(c)])
+	MobileUI.synth_tap(c)
+
+
+## THE HELD-KEY PROOF (guarantee 3, shared with CrashIntro's identical hook): one genuine press
+## ("echo"=false, the real down-edge) followed by `echo_count` OS-repeat echoes, and NO release - the
+## exact shape of a physically held key. `Input` only reports `is_action_just_pressed` true on that
+## first genuine edge (echoes never re-trigger it - measured: an all-echo train with no genuine edge
+## at all, tried first, DOES still read as "just pressed" on its first event, because Godot's action
+## state cares about the pressed-boolean's transition, not the `echo` flag on the event that caused
+## it - so a real down-edge belongs in the proof, not a substitute for it). What must never happen, no
+## matter how long this runs, is a SECOND `_answer()` call - and `_Guard.armed()` structurally cannot:
+## every echo is itself a fresh press edge (`skip_confirm.gd`'s `_Guard._mark_press`), and OS echoes
+## fire every ~30-50 ms, far under the 400 ms quiet-gap the guard requires before a press can arm - so
+## a held key can never go quiet long enough to arm. Pair with `debug_release_key`.
+func debug_hold_key_no_release(physical_keycode: int, echo_count: int) -> void:
+	var down := InputEventKey.new()
+	down.physical_keycode = physical_keycode as Key
+	down.keycode = physical_keycode as Key
+	down.pressed = true
+	down.echo = false
+	Input.parse_input_event(down)
+	await get_tree().process_frame
+	for i in echo_count:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = physical_keycode as Key
+		ev.keycode = physical_keycode as Key
+		ev.pressed = true
+		ev.echo = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+	print("CELEBRATE HOLD_KEY: 1 genuine press + %d echoes sent, still held (no release); confirm_open=%s" % [echo_count, str(SkipConfirm.is_open(self))])
+
+
+## Releases a key `debug_hold_key_no_release` left held. A release never calls `_answer()` (only a
+## press does), so this cannot itself confirm or decline anything.
+func debug_release_key(physical_keycode: int) -> void:
+	var rel := InputEventKey.new()
+	rel.physical_keycode = physical_keycode as Key
+	rel.keycode = physical_keycode as Key
+	rel.pressed = false
+	Input.parse_input_event(rel)
+	await get_tree().process_frame
+	print("CELEBRATE RELEASE_KEY: released; confirm_open=%s" % str(SkipConfirm.is_open(self)))
+
+
+static func _find_button(n: Node, text: String) -> Button:
+	if n is Button and (n as Button).text == text and (n as Button).is_visible_in_tree():
+		return n as Button
+	for c in n.get_children():
+		var found := _find_button(c, text)
+		if found != null:
+			return found
+	return null

@@ -158,6 +158,8 @@ const ROCKET_SCENE := preload("res://src/rocket/rocket_model.tscn")
 const COMPASS_SCRIPT := preload("res://src/rocket/pad_compass.gd")
 const PICKER_SCRIPT := preload("res://src/rocket/pad_destination_picker.gd")
 const SPACE_SCENE := "res://src/rocket/space_travel.tscn"
+## Where a skipped launch goes straight to (the arrival install space_travel.gd `_arrive` does).
+const WORLD_SCENE := "res://src/world/world.tscn"
 
 # Deck tones. Clean warm greys, NOT muddied down: the blown-highlight budget is met by killing the
 # deck's specular, dropping its shade_floor and cutting the pad lamps' energy (STYLE_GUIDE:
@@ -298,6 +300,13 @@ var _ref_blend := 1.0
 ## Cached environment node (looked up once; `_descent_step` runs every frame).
 var _env: Node
 var _env_looked_up := false
+## The flight's "Skip" button (RocketJourney.SkipControl): up for the launch and climb, and again for
+## the descent, once a whole flight has been flown. Null otherwise.
+var _skip_ui: RocketJourney.SkipControl
+## True from a confirmed skip until this pad has handed control back (or been swapped out).
+var _skipping := false
+## The descent tween, kept so a skip mid-descent can run it to its end and release the coroutine.
+var _desc_tween: Tween
 
 
 func _ready() -> void:
@@ -321,7 +330,10 @@ func _ready() -> void:
 	_build_interactable()
 	_build_trail()
 	_build_compass()
-	if RocketJourney.pending("arrive") and RocketJourney.to_id == planet_id():
+	if RocketJourney.pending("arrive") and RocketJourney.to_id == planet_id() and RocketJourney.skipped:
+		_prepare_skipped_arrival()
+		call_deferred("_play_skipped_arrival")
+	elif RocketJourney.pending("arrive") and RocketJourney.to_id == planet_id():
 		_prepare_journey_arrival()
 		call_deferred("_play_journey_arrival")
 	elif _arriving():
@@ -368,6 +380,9 @@ func _update_arrival_watchdog(delta: float) -> void:
 	_arrival_watchdog -= delta
 	if _arrival_watchdog <= 0.0 and _busy:
 		push_warning("RocketPad: arrival sequence overran its budget — restoring control.")
+		if _skipping:
+			# A skip darkened the screen; never hand control back under a black overlay.
+			SceneRouter.fade_in(RocketJourney.SKIP_FADE_IN)
 		_finish_arrival(_find_player())
 
 
@@ -480,6 +495,9 @@ func _build_lights() -> void:
 		omni.omni_range = 1.8
 		omni.light_energy = 0.0
 		omni.shadow_enabled = false
+		# Heat item 8 (docs/OPEN_ISSUES.md 57), a no-op today: layer 19 is reserved for the ground,
+		# and nothing draws on it yet.
+		omni.light_cull_mask &= ~(1 << 18)
 		root.add_child(omni)
 		_light_nodes.append(omni)
 
@@ -562,6 +580,8 @@ func _build_mast() -> void:
 	beacon_light.omni_range = 4.0
 	beacon_light.light_energy = 0.0
 	beacon_light.shadow_enabled = false
+	# Heat item 8, same no-op as the ring lights above.
+	beacon_light.light_cull_mask &= ~(1 << 18)
 	root.add_child(beacon_light)
 	_light_nodes.append(beacon_light)
 
@@ -655,6 +675,45 @@ func _build_rocket() -> void:
 	_hatch_dir_local = toward
 	# Where the descent has to end up, and what the legacy landing restores.
 	_rest_xf = rocket.transform
+
+
+## "rocket" or "ship" (PHASE5_SPEC.md §6: "the pad compass and board string say 'ship'" once the
+## friends' gift is standing here). Reads the model actually on the pad, not a separate has_ship()
+## lookup — a --rocket-look= override or a stale flag can never disagree with what is drawn.
+func _rocket_word() -> String:
+	if rocket != null and is_instance_valid(rocket) and rocket.look() == RocketModel.LOOK_SKIFF:
+		return "ship"
+	return "rocket"
+
+
+## Swaps the model standing on the pad (docs/PHASE5_SPEC.md §2 "Gift": `rocket_pad.adopt_model`).
+## Frees the old node and adopts `model` in its place, at the same facing and ground height — every
+## other system here (lights, hops, launch, arrival, compass) keys off the public `rocket` var and
+## RocketModel's own API, never the node's identity, so nothing but this function needs to know a
+## swap happened. `fit_to_ground` is re-run because `model` may have been built (and so already run
+## its own _ready fit) before it had a "Deck" sibling to measure — see its own doc comment.
+func adopt_model(model: RocketModel) -> void:
+	if model == null or model == rocket:
+		return
+	var old := rocket
+	var facing := old.rotation.y if old != null and is_instance_valid(old) else 0.0
+	var old_parent := model.get_parent()
+	if old_parent != null:
+		old_parent.remove_child(model)
+	model.name = "Rocket"
+	model.position = Vector3(0.0, DECK_Y, 0.0)
+	model.rotation.y = facing
+	_pad_root.add_child(model)
+	model.fit_to_ground()
+	rocket = model
+	# Where the descent has to end up, and what the legacy landing restores.
+	_rest_xf = rocket.transform
+	if _compass != null:
+		# Almost always already retired by the time the gift happens — updated anyway so a compass
+		# still on screen (a save loaded straight into the gift, say) reads "Ship" too.
+		_compass.label_text = _rocket_word().capitalize()
+	if old != null and is_instance_valid(old):
+		old.queue_free()
 
 
 func _build_hose() -> void:
@@ -855,7 +914,7 @@ func _build_compass() -> void:
 	_compass = COMPASS_SCRIPT.new() as PadCompass
 	_compass.name = "PadCompass"
 	_compass.target = _pad_root.global_position + _pad_root.global_transform.basis.y * 1.6
-	_compass.label_text = "Rocket"
+	_compass.label_text = _rocket_word().capitalize()
 	add_child(_compass)
 	if _arriving():
 		_compass.retire()
@@ -953,11 +1012,16 @@ func _update_marker(delta: float) -> void:
 ## touchscreen. `MobileUI.interact_hint` names the same action in the words of the front end
 ## actually in the player's hand; see its doc comment for every other hint that reuses it.
 func _update_hint(_delta: float) -> void:
+	# Heat item 9 (docs/OPEN_ISSUES.md 57): once the hint is retired for good it can never come back
+	# (HintChannel.request would refuse it anyway), so nothing below is worth paying for either — the
+	# distance check and the string build both stop, every frame, for the rest of the game.
+	if HintChannel.was_shown("rocket_pad"):
+		return
 	if _cutscene or _busy or _found or _player_distance() < FOUND_RANGE:
 		HintChannel.mark_acted("rocket_pad")
 		return
 	HintChannel.request("rocket_pad",
-		"Follow the arrows to the rocket pad — %s to fly!" % MobileUI.interact_hint(),
+		"Follow the arrows to the %s pad — %s to fly!" % [_rocket_word(), MobileUI.interact_hint()],
 		"star", HINT_DELAY)
 
 
@@ -1072,14 +1136,22 @@ func _launch(p: Player, may_cut: bool = false) -> void:
 	# `_fade_player_to_stand` for the far case.
 	var stand := rocket.global_position + rocket.global_transform.basis.z * -HATCH_STAND_OFF
 	if not may_cut or p.global_position.distance_to(_interactable.global_position) <= _interactable.reach:
+		_attach_skip()
 		await _walk_player_to(p, planet.dir_of(stand), WALK_SECONDS)
 	else:
 		await _fade_player_to_stand(p, stand)
+		# Only after the far-start cut's own fade, so a skip's fade can never fight it.
+		_attach_skip()
+	if _skipping or not is_inside_tree():
+		return
 
 	# 2. door open, hop in, door shut
 	rocket.open_hatch()
 	AudioManager.play_sfx_at("door_open", rocket.global_position, -3.0)
 	await get_tree().create_timer(0.45).timeout
+	await _wait_unfrozen()
+	if _skipping or not is_inside_tree():
+		return
 	await _hop_into_hatch(p)
 	rocket.close_hatch()
 	# Stow the boarding ladder with the door. It used to fly the whole cruise hanging off the hull
@@ -1090,6 +1162,9 @@ func _launch(p: Player, may_cut: bool = false) -> void:
 	_carry_player = true
 	_set_rocket_height(DECK_Y)
 	await get_tree().create_timer(0.4).timeout
+	await _wait_unfrozen()
+	if _skipping or not is_inside_tree():
+		return
 
 	# 3. ignition: flame grows, dust ring, decaying camera shake
 	AudioManager.play_sfx_at("rocket_ignite", rocket.engine_point(), 1.0)
@@ -1106,6 +1181,9 @@ func _launch(p: Player, may_cut: bool = false) -> void:
 	grow.tween_method(_set_rocket_height, DECK_Y, DECK_Y + IGNITION_LIFT, 0.85).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_shake_camera(0.075, 1.7)
 	await get_tree().create_timer(0.85).timeout
+	await _wait_unfrozen()
+	if _skipping or not is_inside_tree():
+		return
 
 	# 4. THE CLIMB. One continuous move: the flight camera takes the frame, the sky darkens to
 	#    space, the planet shrinks away below and the rocket leans over toward the destination.
@@ -1151,7 +1229,7 @@ func _climb() -> void:
 	t.tween_method(_climb_step.bind(env), 0.0, 1.0, CLIMB_SECONDS) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await t.finished
-	if not is_inside_tree():
+	if not is_inside_tree() or _skipping:
 		return
 	_climb_step(1.0, env)
 	_depart(env)
@@ -1176,11 +1254,12 @@ func _climb_step(k: float, env: Node) -> void:
 	# so the reference is squared up against the flight axis over the same `s` that swings the
 	# camera round behind. `_depart` records THIS vector, so the space scene inherits the same rig.
 	_seam_up = RocketJourney.square_up(pos.normalized(), fwd, s)
+	var chase_scale := _chase_scale()
 	var frame := _chase_frame(pos, fwd, _seam_up,
-		lerpf(LAUNCH_CAM_BACK, RocketJourney.CHASE_BACK, s),
-		lerpf(LAUNCH_CAM_UP, RocketJourney.CHASE_UP, s),
-		lerpf(LAUNCH_CAM_SIDE, RocketJourney.CHASE_SIDE, s),
-		lerpf(LAUNCH_CAM_LEAD, RocketJourney.CHASE_LEAD, s),
+		lerpf(LAUNCH_CAM_BACK, RocketJourney.CHASE_BACK * chase_scale, s),
+		lerpf(LAUNCH_CAM_UP, RocketJourney.CHASE_UP * chase_scale, s),
+		lerpf(LAUNCH_CAM_SIDE, RocketJourney.CHASE_SIDE * chase_scale, s),
+		lerpf(LAUNCH_CAM_LEAD, RocketJourney.CHASE_LEAD * chase_scale, s),
 		(1.0 - s) * minf(alt * LAUNCH_LOOK_DOWN, LAUNCH_LOOK_DOWN_MAX))
 	_place_camera(frame, smoothstep(0.0, CLIMB_CAM_BLEND / maxf(CLIMB_SECONDS, 0.01), k))
 	# `_place_camera` BLENDS out of the gameplay rig's framing, and a blend between two frames that
@@ -1334,6 +1413,20 @@ func _hold_rocket_in_frame(target: Vector3) -> void:
 	var xf := _cam.global_transform
 	_cam.global_transform = RocketJourney.flight_frame(xf.origin, xf.origin - xf.basis.z * 10.0,
 		target, xf.basis.y)
+
+
+## Ratio of the model actually on the pad to the gold rocket's 3.2 m (docs/PHASE5_SPEC.md §8: "the
+## skiff in flight, chase offsets scale by model_height()/3.2"). Exactly 1.0 for the rocket, so every
+## `RocketJourney.CHASE_*` read below is unchanged without the ship; ~0.72 for the 2.3 m skiff, so
+## the seam and touchdown framings shrink toward it the same way space_travel.gd's copy of the same
+## constants does (see journey_state.gd's CHASE_* doc comment) — the two must move together or the
+## camera pops at the cut. `_chase_frame`'s own ground-clearance clamp (`min_r` below) is the only
+## limit this needs; a smaller offset can only pull the eye closer to the rocket, never through the
+## ground, so that gate alone is what "only if under gate" (BUILD_PLAN Phase 5, M2) is relying on.
+func _chase_scale() -> float:
+	if rocket == null or not is_instance_valid(rocket):
+		return 1.0
+	return RocketJourney.chase_scale(rocket.model_height())
 
 
 ## The canonical chase framing: `back` behind the nose, `up` along the local radial, `side` out on
@@ -1650,6 +1743,9 @@ func _prepare_journey_arrival() -> void:
 	_carry_player = false
 	_build_descent_arc()
 	RocketJourney.clear()
+	# Up from the first frame: the space scene had the same button in the same corner on the frame
+	# before the cut. Retired at touchdown - past that there is nothing left to skip.
+	_attach_skip()
 
 
 ## Waits out the scene-swap stall before letting the descent start moving.
@@ -1729,13 +1825,16 @@ func _play_journey_arrival() -> void:
 	# over, before anything starts moving - and then as many more as it takes for the frame clock to
 	# come back to normal. See `_await_steady_frame`.
 	await _await_steady_frame()
-	if not is_inside_tree():
+	if not is_inside_tree() or _skipping:
 		return
 	var t := create_tween()
 	t.tween_method(_descent_step, 0.0, 1.0, DESCENT_SECONDS).set_trans(Tween.TRANS_SINE)
+	_desc_tween = t
 	await t.finished
-	if not is_inside_tree():
+	_desc_tween = null
+	if not is_inside_tree() or _skipping:
 		return
+	_retire_skip()
 	_descent_step(1.0)
 
 	AudioManager.play_sfx_at("rocket_land", rocket.global_position, 0.0)
@@ -1859,11 +1958,12 @@ func _descent_frame(k: float) -> Transform3D:
 	var s := smoothstep(0.22, 0.96, k)
 	var alt := maxf(pos.length() - planet.radius, 0.0)
 	var hold := smoothstep(0.03, 0.24, k) * (1.0 - smoothstep(0.52, 0.90, k))
+	var chase_scale := _chase_scale()
 	return _chase_frame(pos, fwd, pos.normalized(),
-		lerpf(RocketJourney.CHASE_BACK, LAND_CAM_BACK, s),
-		lerpf(RocketJourney.CHASE_UP, LAND_CAM_UP, s),
-		lerpf(RocketJourney.CHASE_SIDE, LAND_CAM_SIDE, s),
-		lerpf(RocketJourney.CHASE_LEAD, -1.4, s),
+		lerpf(RocketJourney.CHASE_BACK * chase_scale, LAND_CAM_BACK, s),
+		lerpf(RocketJourney.CHASE_UP * chase_scale, LAND_CAM_UP, s),
+		lerpf(RocketJourney.CHASE_SIDE * chase_scale, LAND_CAM_SIDE, s),
+		lerpf(RocketJourney.CHASE_LEAD * chase_scale, -1.4, s),
 		minf(alt * DESCENT_LOOK_DOWN, DESCENT_LOOK_DOWN_MAX) * hold)
 
 
@@ -1876,6 +1976,156 @@ func _apply_seam_offset(frame: Transform3D, decay: float) -> Transform3D:
 	var b := frame.basis.orthonormalized()
 	var q := Quaternion.IDENTITY.slerp(_seam_err_rot.get_rotation_quaternion(), decay)
 	return Transform3D(b * Basis(q), frame.origin + b * (_seam_err_pos * decay))
+
+
+# ============================================================================= flight skip
+## Puts up the Skip button for this pad's leg of the flight, when the skip is unlocked (see
+## RocketJourney.SkipControl for the rule and the freeze).
+func _attach_skip() -> void:
+	if _skip_ui != null and is_instance_valid(_skip_ui):
+		return
+	_skip_ui = RocketJourney.SkipControl.attach(self)
+	if _skip_ui != null:
+		_skip_ui.confirmed.connect(_on_skip_confirmed)
+
+
+## Takes the button away for good (touchdown / hand-back). Freed, not hidden: this pad lives on after
+## the landing, and the NEXT launch from it must get a fresh, unfrozen control from `_attach_skip`.
+func _retire_skip() -> void:
+	if _skip_ui != null and is_instance_valid(_skip_ui):
+		_skip_ui.retire()
+		_skip_ui.queue_free()
+	_skip_ui = null
+
+
+## Returns in the same frame (no await taken) unless the Skip question has frozen this pad. Guards
+## the launch's plain timers, which - unlike its tweens - keep running while the pad is DISABLED.
+func _wait_unfrozen() -> void:
+	while _skip_ui != null and is_instance_valid(_skip_ui) and _skip_ui.frozen and is_inside_tree():
+		await get_tree().process_frame
+
+
+func _on_skip_confirmed() -> void:
+	if _skipping:
+		return
+	_skipping = true
+	if _journey_arrival:
+		_skip_descent()
+	else:
+		_skip_launch()
+
+
+## A confirmed Skip before the departure cut (walk, hop, ignition or climb). The pad is frozen, so the
+## picture holds while it fades to dark. Then the signals and state the rest of the flight would have
+## produced, in the order it produces them - `_depart` (leave, travel_started, cutscene closed), the
+## space scene's own `travel_started`, and space_travel.gd `_arrive` (record + GameState, music cue,
+## travel_finished, `swap_scene(WORLD, true)`) - with no space scene in between.
+func _skip_launch() -> void:
+	await SceneRouter.fade_out(RocketJourney.SKIP_FADE_OUT)
+	if not is_inside_tree():
+		return
+	var from := planet_id()
+	RocketJourney.switching = true
+	GameState.previous_planet_id = from
+	EventBus.planet_leave_requested.emit(from)
+	EventBus.travel_started.emit(from, _dest_id)
+	_end_cutscene()
+	EventBus.travel_started.emit(from, _dest_id)
+	RocketJourney.write_skipped_arrival(from, _dest_id)
+	AudioManager.play_music("", 0.8)
+	EventBus.travel_finished.emit(_dest_id)
+	RocketJourney.swap_scene(get_tree(), WORLD_SCENE, true)
+
+
+## A confirmed Skip during the descent: already on the destination, so land in place under the fade.
+func _skip_descent() -> void:
+	await SceneRouter.fade_out(RocketJourney.SKIP_FADE_OUT)
+	if not is_inside_tree():
+		return
+	# The question froze this pad and a confirm leaves it frozen; the landing below needs it back.
+	process_mode = _skip_ui._target_mode if _skip_ui != null and is_instance_valid(_skip_ui) \
+		else Node.PROCESS_MODE_INHERIT
+	# Run the descent tween to its end so `_play_journey_arrival` resumes, sees `_skipping` and
+	# returns, instead of being left suspended on a tween that never finishes.
+	if _desc_tween != null and _desc_tween.is_valid():
+		_desc_tween.custom_step(DESCENT_SECONDS * 4.0)
+	_desc_tween = null
+	await _land_after_skip()
+
+
+## Destination side of a skip from the pad or the cruise. Runs inside _ready under the still-dark fade
+## the far side left up: the same gates `_prepare_journey_arrival` raises (busy, cutscene modal,
+## `rocket_arriving`, Interactable off, astronaut frozen at the spot world.gd spawned them), and the
+## record cleared the same way.
+func _prepare_skipped_arrival() -> void:
+	_busy = true
+	_journey_arrival = true
+	_skipping = true
+	_begin_cutscene()
+	GameState.set_flag("rocket_arriving", true)
+	_arrival_watchdog = 10.0
+	_interactable.enabled = false
+	var p := _find_player()
+	if p != null:
+		_landed_dir = planet.dir_of(p.global_position)
+		_freeze_player(p)
+		p.visible = false
+	rocket.set_engine(false)
+	rocket.set_ladder_deployed(true)
+	RocketJourney.clear()
+
+
+func _play_skipped_arrival() -> void:
+	# Pay the install stall (world.gd `_ready`) and first-draw compiles on the dark screen.
+	await _await_steady_frame()
+	if not is_inside_tree():
+		return
+	await _land_after_skip()
+
+
+## The end state of a whole landing, reached at once: the rocket at rest on the pad with its engine
+## off, ladder down and hatch shut; the sky back to the ground; the astronaut standing where `_pop_out`
+## leaves them, facing away from the rocket, with the gameplay camera reseated behind them - then the
+## fade comes up and `_finish_arrival` hands control back, exactly as a full landing ends. Also the
+## same "happy" hop a beat later (see `_play_journey_arrival` for why it is safe there).
+func _land_after_skip() -> void:
+	var p := _find_player()
+	rocket.global_transform = _pad_root.global_transform * _rest_xf
+	rocket.set_flame_scale(0.0)
+	rocket.set_engine(false)
+	_rocket_space_look(0.0)
+	rocket.set_ladder_deployed(true)
+	rocket.close_hatch()
+	var env := _find_environment()
+	if env != null:
+		env.call("set_space_blend", 0.0)
+	AudioManager.stop_loop("rocket_loop", 0.35)
+	GameState.set_flag("rocket_arriving", false)
+	if p != null and is_instance_valid(p):
+		_hop_to = planet.surface_point(_landed_dir) + _landed_dir * 0.02
+		var xf := planet.surface_transform(_landed_dir, _hop_to - _pad_root.global_position)
+		p.global_transform = xf
+		p.up = xf.basis.y
+		p.up_direction = p.up
+		p.get_model().scale = Vector3.ONE
+		p.get_model().set_state("idle")
+		p.visible = true
+	_drop_camera()
+	if not _reseat_off:
+		_reseat_camera_behind(p)
+	# Two frames for the rig's follow to take the reseat before anything is visible (the same wait
+	# `_fade_player_to_stand` gives it).
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	await SceneRouter.fade_in(RocketJourney.SKIP_FADE_IN)
+	if not is_inside_tree():
+		return
+	_finish_arrival(p)
+	await get_tree().create_timer(0.35).timeout
+	if is_instance_valid(p) and is_inside_tree():
+		p.play_emote("happy")
 
 
 # ============================================================================= legacy arrival
@@ -1959,6 +2209,13 @@ func _play_arrival() -> void:
 ## the node leaving the tree mid-animation — so `_interactable.enabled` and `_busy` can never be
 ## left in a state where the pad is un-interactable and the player is stranded on the planet.
 func _finish_arrival(p: Player) -> void:
+	# The first whole flight ever unlocks the Skip button for every flight after it (saved with the
+	# rest of GameState.flags). Only a real journey landing counts - not the legacy short arrival a
+	# dev teleport or a Director timeline takes.
+	if _journey_arrival:
+		GameState.set_flag(RocketJourney.FLAG_FLOWN, true)
+	_retire_skip()
+	_skipping = false
 	if p != null and is_instance_valid(p):
 		_thaw_player(p)
 		p.visible = true

@@ -125,6 +125,10 @@ const EMOTE_CYCLE := ["wave", "happy", "dance"]
 const EMOTE_GRACE := 0.75
 const FOOTSTEP_CANDIDATES := ["footstep_grass", "footstep_grass_1", "footstep_grass_2", "footstep_grass_a", "footstep_grass_b"]
 
+## Engine metadata key for a dev-menu teleport queued across a planet change (see `dev_teleport`'s
+## header and `_consume_pending_dev_teleport`).
+const DEV_PENDING_TELEPORT_META := "astro_dev_pending_teleport"
+
 ## False while a modal UI is open (or when a system such as dialogue freezes the player).
 var input_enabled: bool = true
 
@@ -181,6 +185,12 @@ var _boost_loop_on: bool = false
 var _last_pos: Vector3 = Vector3.ZERO
 ## Cached CameraRig (see `_camera_rig`), used to front the camera during an emote.
 var _rig: CameraRig = null
+## Heat item 9 (docs/OPEN_ISSUES.md 57, "Allocations"): `_update_shadow`'s ground probe reused across
+## frames instead of a fresh `PhysicsRayQueryParameters3D.create()` (plus its `exclude` array) every
+## single physics tick - one of the ~60 of 3,600 per-frame mallocs the heat diagnosis measured. Built
+## once in `_build_shadow`; only `from`/`to` change per call.
+var _shadow_query: PhysicsRayQueryParameters3D
+var _dev_teleport_checked := false
 
 
 func _ready() -> void:
@@ -340,6 +350,70 @@ func debug_dump_interactables() -> void:
 		print(r)
 
 
+## DEV HOOK (Phase 5, HOOKS): safely reseats the astronaut on THIS planet, at a ground direction or an
+## equivalent world-space point (every planet sits at the world origin - `docs/PHASE5_SPEC.md`'s
+## builders already rely on this - so `Planet.dir_of` reads the identical direction off either one).
+## Goes through the SAME safe surface snap every spawn and rocket arrival already uses
+## (`PlanetBody.teleport_to_dir` -> `place_on_planet` -> `Planet.surface_transform`, which builds a
+## proper `Transform3D(Basis.looking_at(...), point)`) - never a bare `global_position = pos`, which
+## would leave the astronaut sideways or half underground on the curved ground for a frame or more
+## (the audit's finding on this hook). Clears velocity and every in-flight movement state (falling,
+## jumping, boosting, an emote) the same way a scene load leaves a fresh astronaut, so nothing carries
+## over from wherever they were a moment ago. Returns a status string.
+func dev_teleport(pos: Vector3) -> String:
+	if planet == null:
+		_find_planet()
+	if planet == null:
+		return "no planet loaded; nowhere to teleport to"
+	teleport_to_dir(planet.dir_of(pos))
+	velocity = Vector3.ZERO
+	_jumping = false
+	_jump_cut_done = true
+	_jump_anticipation = -1.0
+	_jump_buffer = 0.0
+	_coyote = 0.0
+	_boosting = false
+	_boost_thrust = 0.0
+	_boost_hold = 0.0
+	_air_time = 0.0
+	_was_on_floor = true
+	_land_timer = 0.0
+	_cancel_emote()
+	_last_pos = global_position
+	return "Teleported."
+
+
+## Consumed once, on this Player's first physics frame, so a dev-menu row that must first cross
+## planets (`SceneRouter.go_to_planet`, which destroys this whole scene) can still finish the job once
+## the NEW Player exists on the target world. `Engine` metadata survives a scene change (a plain
+## script var on the old Player would not), and is the same mechanism `DEV_SHOW_ALL_META`-style dev
+## flags already use for exactly this reason.
+##   Engine.set_meta(Player.DEV_PENDING_TELEPORT_META, {"planet": "hub", "building": "town_hall", "pos": Vector3.ZERO})
+## `"building"` (a `Planet.building_dir` id) wins over `"pos"` when both are given, since a building's
+## world direction is only resolvable once its OWN planet is the one loaded - resolving it here, after
+## arrival, is the whole point. Left queued (never consumed or dropped) until `GameState
+## .current_planet_id` actually matches `"planet"`, so a request made before a multi-hop flight simply
+## waits for the right world to load rather than teleporting somewhere en route.
+func _consume_pending_dev_teleport() -> void:
+	if not Engine.has_meta(DEV_PENDING_TELEPORT_META):
+		return
+	var raw: Variant = Engine.get_meta(DEV_PENDING_TELEPORT_META)
+	if not (raw is Dictionary):
+		Engine.remove_meta(DEV_PENDING_TELEPORT_META)
+		return
+	var req := raw as Dictionary
+	if str(req.get("planet", "")) != GameState.current_planet_id:
+		return
+	Engine.remove_meta(DEV_PENDING_TELEPORT_META)
+	var building := str(req.get("building", ""))
+	var dir := planet.building_dir(building) if building != "" else Vector3.ZERO
+	if dir == Vector3.ZERO:
+		var raw_pos: Variant = req.get("pos", Vector3.ZERO)
+		dir = raw_pos if raw_pos is Vector3 else Vector3.ZERO
+	if dir != Vector3.ZERO:
+		dev_teleport(dir)
+
+
 func is_running() -> bool:
 	return _speed_factor > 1.2
 
@@ -369,6 +443,9 @@ func _physics_process(delta: float) -> void:
 		_find_planet()
 		if planet == null:
 			return
+	if not _dev_teleport_checked:
+		_dev_teleport_checked = true
+		_consume_pending_dev_teleport()
 	# Teleport guard: the exhaust plume is world-space by design (that trailing arc is the point),
 	# so anything that moves the astronaut instantly — a spawn, a rocket arrival — would otherwise
 	# leave a line of puffs stretched across the planet.
@@ -854,6 +931,8 @@ func _build_shadow() -> void:
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_shadow.top_level = true
 	add_child(_shadow)
+	_shadow_query = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1)
+	_shadow_query.exclude = [get_rid()]
 
 
 func _update_shadow() -> void:
@@ -863,9 +942,9 @@ func _update_shadow() -> void:
 	# stops short would report "no ground", and a miss used to mean `_ground_height = 0`, i.e. "on
 	# the floor" — which would have let the boost climb for ever off a cliff edge.
 	var to := global_position - up * 12.0
-	var q := PhysicsRayQueryParameters3D.create(from, to, 1)
-	q.exclude = [get_rid()]
-	var hit := space.intersect_ray(q)
+	_shadow_query.from = from
+	_shadow_query.to = to
+	var hit := space.intersect_ray(_shadow_query)
 	if hit.is_empty():
 		_shadow.visible = false
 		# A miss means the ground is further than the probe reaches, so report it as HIGH. This is

@@ -147,11 +147,21 @@ varying vec3 v_world_nrm;
 varying vec4 v_color;
 /// View-space normal BEFORE the R2.9 detail bump, so light() can measure what the bump changed.
 varying vec3 v_flat_nrm;
+// Heat item 3 (gpu-1 Fix A, docs/OPEN_ISSUES.md 57): patch, macro and the weathering fbm (all
+// wavelengths >= 2.2 m) now run once per VERTEX instead of per fragment - see grass_planet.gdshader
+// for the identical-picture measurement. One vec4 varying (x=patch, y=macro, z=weathering; w
+// unused), same budget reasoning. Do not raise these frequencies without re-asserting
+// `mesh_subdivisions >= 6` in planet_data.gd.
+varying vec4 v_macro;
 
 void vertex() {
 	v_world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_world_nrm = normalize(mat3(MODEL_MATRIX) * NORMAL);
 	v_color = COLOR;
+	v_macro.x = pc_fbm3(v_world_pos * 0.11 + vec3(3.7));
+	v_macro.y = pc_fbm3(v_world_pos * 0.042 + vec3(11.3, 4.1, 7.9));
+	v_macro.z = pc_fbm3(v_world_pos * 0.075 + vec3(5.5));
+	v_macro.w = 0.0;
 }
 
 float tile_sdf(vec2 uv, out vec2 cell) {
@@ -178,9 +188,9 @@ void fragment() {
 	vec2 tri = pc_tri_pattern(uv / cell_size, tri_radius, tri_density);
 	vec3 tri_col = mix(pc_in(lawn_b.rgb), pc_in(lawn_c.rgb), mix(step(0.62, tri.y), 0.38, lod_g));
 	vec3 lawn = mix(pc_in(lawn_a.rgb), tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod_g));
-	float patch = pc_fbm3(wp * 0.11 + vec3(3.7));
+	float patch = v_macro.x;
 	lawn *= 1.0 + (patch - 0.5) * 0.12;
-	float macro = pc_fbm3(wp * 0.042 + vec3(11.3, 4.1, 7.9));
+	float macro = v_macro.y;
 	lawn = mix(lawn, pc_in(lawn_shadow.rgb), smoothstep(0.40, 0.70, macro) * shadow_patch);
 
 	// --- sand near water --------------------------------------------------------------------------
@@ -246,7 +256,7 @@ void fragment() {
 	vec3 bank = pc_in(bank_color.rgb) * (0.94 + 0.10 * strata);
 	col = mix(col, bank, bank_t);
 	// Weathering: same cream family, a few percent of value — enough to break the flat plate.
-	col = mix(col, pc_in(tile_shadow.rgb), smoothstep(0.30, 0.70, pc_fbm3(wp * 0.075 + vec3(5.5))) * tile_weather * tile_mask);
+	col = mix(col, pc_in(tile_shadow.rgb), smoothstep(0.30, 0.70, v_macro.z) * tile_weather * tile_mask);
 	// Contact AO where the paving meets lawn/curb, and a matching pool on the grass just outside it.
 	float ao_in = smoothstep(-edge_ao_width, -0.05, sd_zone) * tile_mask;
 	float ao_out = (1.0 - smoothstep(0.05, edge_ao_width * 0.7, sd_zone)) * step(0.0, sd_zone);

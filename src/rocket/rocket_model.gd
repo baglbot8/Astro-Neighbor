@@ -29,6 +29,24 @@ extends Node3D
 ##   set_finish_stage(n)     paint finish n now: 0 rusty after the crash .. 4 clean .. 5 gold
 ##   finish_stage()          the finish stage painted right now
 ##   set_review_mask(on)     REVIEW ONLY: flat magenta hull, for per-region palette scoring
+##   look() / set_look(s)    "rocket" or "skiff" (below); set_look rebuilds in place, keeping state
+##   model_height()          3.2 for the rocket, 2.3 for the skiff (ground contact to the top)
+##   default_look()          static: the look a new model builds (--rocket-look=, else has_ship())
+##   fit_to_ground()         stand the skiff's feet on the deck under it (auto at _ready and set_look)
+##   set_ground_radius(r)    stand them on an ideal sphere cap of radius r instead (INF = flat)
+##   foot_points()           world positions under the skiff's three pads (empty for the rocket)
+##   foot_frames()           world frames of those pad undersides (disc of radius SkiffMeshLib.PAD_R)
+##
+## Two looks (docs/PHASE5_SPEC.md §4 "Skiff", M1). "rocket" is everything below, unchanged. "skiff"
+## is the friends' gift after the story: geometry in SkiffMeshLib, built by `_build_skiff`, driven by
+## the same member variables, so every public method above works in both looks. The finish calls
+## (refresh_finish, set_finish_stage) do nothing on the skiff and finish_stage() stays -1. The look
+## is picked at _ready: an explicit set_look() before that wins, else the user arg
+## `--rocket-look=rocket|skiff`, else FinaleState.has_ship() read through a guarded load by path (the
+## class may not ship yet), else the rocket.
+##
+## Every OmniLight3D here clears render layer 19 (GROUND_LIGHT_LAYER) from its cull mask (heat item 8,
+## docs/OPEN_ISSUES.md 57). Nothing is on layer 19 yet, so today this changes no pixel.
 ##
 ## Finish review hook: the user arg `--rocket-finish=N` (after the `--`) pins every rocket in the
 ## run to stage N (0-5) and ignores part changes. For captures only; nothing in the game passes it.
@@ -240,6 +258,53 @@ const CABIN_LIGHT_RANGE := 2.6
 const BEACON_LIGHT_RANGE := 5.0
 const ENGINE_LIGHT_RANGE := 7.0
 
+## Render layer 19 is reserved for the planet ground (heat item 8: lights off the ground). Every light
+## this model makes clears it from light_cull_mask. 1-based, like CrashAsteroid.FILL_LAYER.
+const GROUND_LIGHT_LAYER := 19
+
+## ---- Looks (docs/PHASE5_SPEC.md §4 "Skiff") ----
+const LOOK_ROCKET := "rocket"
+const LOOK_SKIFF := "skiff"
+const LOOK_ARG := "--rocket-look="
+## FinaleState (builder K) is read by path, never by class name, so this file ships without it.
+const FINALE_STATE_PATH := "res://src/campaign/finale_state.gd"
+## Skiff palette. The spec names slate-blue #6f7fa8, cream #d9d2c0 and the visor's navy #1b2450; like
+## the rocket's (palette note above) these are what the skiff RENDERS as, not its albedo, because a
+## toon surface under the space sky's blue-violet ambient renders far more saturated than its swatch.
+## Measured on the skiff's own pixels (review mask, tests/director/m1_palette_mask.py), home and hub,
+## 13:00, Forward+ and Compatibility, five cameras from 3 m to 11 m:
+##   slate  #6f7fa8 rendered #5777b5 S 0.52 lit, royal blue; #7b86a1 still #2c3c74 S 0.62 over 30% of
+##          the skiff in the back view; #7f8699 (S 0.17) renders #8891a9 S 0.19 lit, #334269 S 0.51 shade.
+##   navy   #1b2450 rendered #050322 S 0.91, a black hole at 11 m; #505a7e #222b6b S 0.68; #5b6079
+##          #242a5c S 0.61; #62667a (S 0.20) renders #262a5d-#2f3c6f, S 0.50-0.57: still the visor's navy.
+##   gold   GOLD #dcc284 rendered pale butter #efdcaf; #b89a5c #e1bb57 S 0.62; #b8a06e renders S 0.46.
+## With these every dominant swatch is S <= 0.55 on both renderers (was 0.91).
+const SKIFF_SLATE := Color("#7f8699")
+const SKIFF_CREAM := Color("#d9d2c0")
+const SKIFF_NAVY := Color("#62667a")
+const SKIFF_STREAK := Color("#eeeae0")
+const SKIFF_TRIM := Color("#6b6f7d")
+const SKIFF_METAL := Color("#8d97a6")
+const SKIFF_GOLD := Color("#b8a06e")
+const SKIFF_CHALK := Color("#e6e1d4")
+const SKIFF_INK := Color("#55565e")
+const SKIFF_BULB := Color("#9ccfc6")
+const SKIFF_BULB_BASE := Color("#73a39b")
+## The shade side of the blue-grey parts. toon_soft's default lavender tint (0.62, 0.55, 0.85) plus the
+## space sky's blue-violet ambient turned the slate's shade side royal blue: back view, home noon,
+## Forward+, a 30% swatch #2c3c74 at S 0.62 and 40% of the skiff's pixels over S 0.60 (albedo S 0.24).
+## A near-neutral tint and a higher floor keep it slate in shade.
+const SKIFF_SHADE_TINT := Color(0.72, 0.70, 0.72)
+const SKIFF_SLATE_FLOOR := 0.50
+## The canopy's own gloss: at spec 0.30 the facets facing the sun from behind blew out to cream-white
+## and the navy stopped reading as one pane (back view). The streak is the highlight.
+const SKIFF_NAVY_SPEC := 0.10
+## The plume is the rocket's, at 0.7 scale, from the skiff's smaller engine bell.
+const SKIFF_PLUME_SCALE := 0.7
+const SKIFF_LAMP_RANGE := 2.2
+const SKIFF_BULB_RANGE := 2.5
+const SKIFF_ENGINE_RANGE := ENGINE_LIGHT_RANGE * SKIFF_PLUME_SCALE
+
 var _hull_root: Node3D
 var _hatch_pivot: Node3D
 var _hatch_tween: Tween
@@ -278,11 +343,34 @@ var _sparkle: MeshInstance3D
 ## GeometryInstance3D -> its real material_override while the review mask is on.
 var _mask_saved: Dictionary = {}
 var _mask_mat: StandardMaterial3D
+## Which look is built ("" until _ready or set_look decides).
+var _look := ""
+## Top-level children the current look built, freed by set_look before it rebuilds.
+var _own_nodes: Array[Node] = []
+## The ground the skiff's feet stand on: a height field (x, z) -> y in model space (SkiffMeshLib).
+var _ground := SkiffMeshLib.sphere_ground(INF)
+var _skiff_legs: MeshInstance3D
+var _skiff_rails: MeshInstance3D
+var _skiff_digits: MeshInstance3D
+## State the public setters leave behind, re-applied when set_look rebuilds.
+var _ladder_down := true
+var _local_lights_on := true
+var _light_range_scale := 1.0
+## Beacon pulse per look: the rocket's hard nose blink, the skiff's slow antenna glow.
+var _beacon_base := 0.35
+var _beacon_gain := 5.0
+var _beacon_light_base := 0.15
+var _beacon_light_gain := 2.4
+var _beacon_speed := 2.6
+var _beacon_sharp := 6.0
 
 
 func _ready() -> void:
 	if _hull_root == null:
-		_build()
+		if _look == "":
+			_look = default_look()
+		_build_look()
+	fit_to_ground()
 	refresh_finish()
 
 
@@ -307,9 +395,9 @@ func _process(delta: float) -> void:
 	if _beacon_mat != null:
 		var blink := 0.0
 		if _beacon_on:
-			blink = pow(maxf(sin(_time * 2.6), 0.0), 6.0)
-		_beacon_mat.set_shader_parameter("emission_strength", 0.35 + 5.0 * blink)
-		_beacon_light.light_energy = 0.15 + 2.4 * blink
+			blink = pow(maxf(sin(_time * _beacon_speed), 0.0), _beacon_sharp)
+		_beacon_mat.set_shader_parameter("emission_strength", _beacon_base + _beacon_gain * blink)
+		_beacon_light.light_energy = _beacon_light_base + _beacon_light_gain * blink
 	if _engine_mat != null:
 		var flicker := 1.0 + 0.16 * sin(_time * 34.0) + 0.09 * sin(_time * 61.0 + 1.3)
 		var burn := _flame_scale * _engine_power
@@ -377,6 +465,7 @@ func is_hatch_open() -> bool:
 ## ground. Flying an interplanetary cruise with the ladder hanging off the hull and dipping into
 ## the exhaust is exactly the sort of thing a critic screenshots.
 func set_ladder_deployed(down: bool) -> void:
+	_ladder_down = down
 	if _ladder == null:
 		return
 	_ladder.visible = down
@@ -419,16 +508,19 @@ func set_beacon(on: bool) -> void:
 ## draws the rocket at ~1/3 scale next to 2 m globes, so it shrinks them to keep the planets' own
 ## lighting clean.
 func set_light_range_scale(f: float) -> void:
+	_light_range_scale = f
 	if _cabin_light == null:
 		return
-	_cabin_light.omni_range = CABIN_LIGHT_RANGE * f
-	_beacon_light.omni_range = BEACON_LIGHT_RANGE * f
-	_engine_light.omni_range = ENGINE_LIGHT_RANGE * f
+	var skiff := _look == LOOK_SKIFF
+	_cabin_light.omni_range = (SKIFF_LAMP_RANGE if skiff else CABIN_LIGHT_RANGE) * f
+	_beacon_light.omni_range = (SKIFF_BULB_RANGE if skiff else BEACON_LIGHT_RANGE) * f
+	_engine_light.omni_range = (SKIFF_ENGINE_RANGE if skiff else ENGINE_LIGHT_RANGE) * f
 
 
 ## Turns off the cabin and beacon point lights (their emissive materials still glow). The space map
 ## uses this so a 1 m rocket does not tint a whole miniature planet.
 func set_local_lights_enabled(on: bool) -> void:
+	_local_lights_on = on
 	if _cabin_light == null:
 		return
 	_cabin_light.visible = on
@@ -437,12 +529,224 @@ func set_local_lights_enabled(on: bool) -> void:
 
 ## World position an astronaut walks into when boarding (the middle of the doorway).
 func hatch_point() -> Vector3:
+	if _look == LOOK_SKIFF:
+		return to_global(Vector3(0.0, (SkiffMeshLib.HATCH_Y0 + SkiffMeshLib.HATCH_Y1) * 0.5 - 0.25,
+			-SkiffMeshLib.APOTHEM * 0.35))
 	return to_global(Vector3(0.0, (HATCH_Y0 + HATCH_Y1) * 0.5 - 0.25, -HULL_R * 0.35))
 
 
 ## World position of the nozzle mouth (ground dust, ignition sfx).
 func engine_point() -> Vector3:
+	if _look == LOOK_SKIFF:
+		return to_global(Vector3(0.0, SkiffMeshLib.NOZZLE_MOUTH_Y, 0.0))
 	return to_global(Vector3(0.0, NOZZLE_MOUTH_Y, 0.0))
+
+
+# ============================================================================= looks
+## The look built right now: "rocket" or "skiff" ("" before _ready decides).
+func look() -> String:
+	return _look
+
+
+## Height from the ground contact to the top of the model: 3.2 m rocket, 2.3 m skiff.
+func model_height() -> float:
+	return SkiffMeshLib.HEIGHT if _look == LOOK_SKIFF else TOTAL_HEIGHT
+
+
+## Builds `which` ("rocket" or "skiff"). Before _ready it only records the choice (and it wins over
+## --rocket-look= and has_ship()); inside the tree it rebuilds now and carries over the engine, flame,
+## hatch, ladder, light and smoke state. Unknown names are refused with a warning.
+func set_look(which: String) -> void:
+	if which != LOOK_ROCKET and which != LOOK_SKIFF:
+		push_warning("RocketModel.set_look: unknown look '%s'" % which)
+		return
+	if which == _look and _hull_root != null:
+		return
+	_look = which
+	if _hull_root == null:
+		return
+	# The build ends by putting the flame out, so read the burn before it.
+	var burn := _flame_scale
+	_teardown()
+	_build_look()
+	_reapply_state(burn)
+	fit_to_ground()
+	refresh_finish()
+
+
+## The look a model built now gets: `--rocket-look=` if the run passed one, else "skiff" when
+## FinaleState.has_ship() says the story's gift is owned, else "rocket".
+static func default_look() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with(LOOK_ARG):
+			var v := a.substr(LOOK_ARG.length())
+			if v == LOOK_ROCKET or v == LOOK_SKIFF:
+				return v
+	return LOOK_SKIFF if _ship_owned() else LOOK_ROCKET
+
+
+## FinaleState.has_ship() through a guarded load: false while the file or the method does not exist.
+static func _ship_owned() -> bool:
+	if not ResourceLoader.exists(FINALE_STATE_PATH):
+		return false
+	var script := load(FINALE_STATE_PATH) as Script
+	if script == null:
+		return false
+	for m: Dictionary in script.get_script_method_list():
+		if m.get("name", "") == "has_ship":
+			return bool(script.call("has_ship"))
+	return false
+
+
+## Stands the skiff's pads and ladder foot on the ideal sphere cap of radius `r` under the origin
+## (INF = flat ground). The rocket only records it. fit_to_ground() is usually what you want.
+func set_ground_radius(r: float) -> void:
+	_set_ground(SkiffMeshLib.sphere_ground(r if r > 2.0 else INF))
+
+
+## World frames of the skiff's three pad undersides: origin at the centre, +Y the pad's up, the
+## underside a disc of SkiffMeshLib.PAD_R in the frame's XZ plane (empty for the rocket).
+func foot_frames() -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	if _look != LOOK_SKIFF or _hull_root == null:
+		return out
+	for deg in SkiffMeshLib.LEG_ANGLES_DEG:
+		out.append(_hull_root.global_transform * SkiffMeshLib.foot_frame(deg_to_rad(deg), _ground))
+	return out
+
+
+## World positions of the centres of the skiff's three pad undersides (empty for the rocket).
+func foot_points() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if _look != LOOK_SKIFF or _hull_root == null:
+		return out
+	for deg in SkiffMeshLib.LEG_ANGLES_DEG:
+		out.append(_hull_root.to_global(SkiffMeshLib.foot_contact(deg_to_rad(deg), _ground)))
+	return out
+
+
+## Stands the skiff's feet and ladder on what is under it, as placed right now. Runs at _ready and
+## after set_look; call it again after moving the model onto a pad that was added to the tree first.
+## On a pad (a sibling MeshInstance3D named "Deck", rocket_pad.gd `_build_deck`) it samples that
+## mesh's triangles, so the pads sit on the deck actually drawn (a 40-segment lathe whose chords run
+## up to 1.2 cm above the ideal sphere under the feet); else on the planet's sphere under the model
+## if it stands within half a metre of that ground; else flat. Nothing for the rocket.
+func fit_to_ground() -> void:
+	if _look != LOOK_SKIFF or not is_inside_tree():
+		return
+	var parent := get_parent()
+	var deck := parent.get_node_or_null("Deck") as MeshInstance3D if parent != null else null
+	if deck != null and deck.mesh != null:
+		_set_ground(_deck_ground(deck))
+		return
+	var planet := get_tree().get_first_node_in_group("planet") as Node3D
+	if planet == null or not planet.has_method("height_at"):
+		set_ground_radius(INF)
+		return
+	var rel := global_position - planet.global_position
+	var d := rel.length()
+	if d < 0.001:
+		set_ground_radius(INF)
+		return
+	var h := float(planet.call("height_at", rel / d))
+	set_ground_radius(h if absf(d - h) < 0.5 else INF)
+
+
+func _set_ground(ground: Callable) -> void:
+	_ground = ground
+	if _look != LOOK_SKIFF or _skiff_legs == null:
+		return
+	_skiff_legs.mesh = SkiffMeshLib.legs(_ground)
+	_skiff_rails.mesh = SkiffMeshLib.ladder(_ground)
+	_skiff_digits.mesh = SkiffMeshLib.ladder_digits(_ground)
+
+
+## A height field from a deck mesh's triangles, as the model stands now: a ray straight down (model
+## -Y) from 1 m up. Where it misses the deck the model's own ground plane (y = 0) is used.
+func _deck_ground(deck: MeshInstance3D) -> Callable:
+	var faces := deck.mesh.get_faces()
+	var to_deck := deck.global_transform.affine_inverse() * global_transform
+	var from_deck := to_deck.affine_inverse()
+	return func(x: float, z: float) -> float:
+		var from := to_deck * Vector3(x, 1.0, z)
+		var dir := (to_deck.basis * Vector3.DOWN).normalized()
+		for f in range(0, faces.size(), 3):
+			var hit: Variant = Geometry3D.ray_intersects_triangle(from, dir, faces[f], faces[f + 1], faces[f + 2])
+			if hit != null:
+				return (from_deck * (hit as Vector3)).y
+		return 0.0
+
+
+func _build_look() -> void:
+	var before := get_children()
+	if _look == LOOK_SKIFF:
+		_build_skiff()
+	else:
+		_build()
+	_own_nodes.clear()
+	for c in get_children():
+		if not before.has(c):
+			_own_nodes.append(c)
+
+
+## Frees everything the current look built and forgets it, so the other look can build clean.
+func _teardown() -> void:
+	if _hatch_tween != null and _hatch_tween.is_valid():
+		_hatch_tween.kill()
+	set_review_mask(false)
+	for n in _own_nodes:
+		if is_instance_valid(n):
+			remove_child(n)
+			n.queue_free()
+	_own_nodes.clear()
+	_hull_root = null
+	_hatch_pivot = null
+	_flame = null
+	_plume_outer = null
+	_plume_collar = null
+	_plume_mats.clear()
+	_plume_caps.clear()
+	_licks = null
+	_flame_glow = null
+	_smoke = null
+	_engine_light = null
+	_cabin_light = null
+	_beacon_mesh = null
+	_beacon_light = null
+	_beacon_mat = null
+	_engine_mat = null
+	_rivets = null
+	_ladder = null
+	_flame_mats.clear()
+	_finish_mats.clear()
+	_finish_base.clear()
+	_finish_stage = -1
+	_sparkle = null
+	_mask_saved.clear()
+	_skiff_legs = null
+	_skiff_rails = null
+	_skiff_digits = null
+
+
+## After a rebuild: put back what the public setters had set on the old look.
+func _reapply_state(burn: float) -> void:
+	var was_open := _hatch_open
+	_hatch_open = false
+	if was_open and _hatch_pivot != null:
+		_hatch_open = true
+		_hatch_pivot.rotation.y = -deg_to_rad(HATCH_OPEN_DEG)
+	set_ladder_deployed(_ladder_down)
+	set_local_lights_enabled(_local_lights_on)
+	set_light_range_scale(_light_range_scale)
+	set_flame_intensity(_flame_intensity)
+	set_smoke_enabled(_smoke_enabled)
+	set_engine(_engine_on, _engine_power)
+	set_flame_scale(burn if _engine_on else 0.0)
+
+
+static func _clear_ground_layer(light: Light3D) -> void:
+	if light != null:
+		light.light_cull_mask &= ~(1 << (GROUND_LIGHT_LAYER - 1))
 
 
 ## Triangles in the built model. `include_fx` adds the flame plume meshes (hidden whenever the
@@ -503,6 +807,8 @@ static func deep_toon(color: Color, opts: Dictionary, floor_level: float) -> Sha
 ## gates are off (an old save, a finished story, a Director timeline without --campaign). Wired to
 ## EventBus.rocket_parts_changed and campaign_changed, so fitting a part repaints the hull live.
 func refresh_finish() -> void:
+	if _look == LOOK_SKIFF:
+		return
 	var forced := _forced_finish_arg()
 	var stage := forced if forced >= 0 else CampaignData.finish_stage()
 	if stage != _finish_stage:
@@ -514,7 +820,7 @@ func refresh_finish() -> void:
 ## Paints finish `stage` (clamped to 0-5) immediately. Public so a cutscene can hold the old finish
 ## and then show the new one; the next part change or refresh_finish() puts the real stage back.
 func set_finish_stage(stage: int) -> void:
-	if _hull_root == null:
+	if _hull_root == null or _look == LOOK_SKIFF:
 		return
 	_finish_stage = clampi(stage, 0, FINISH_STAGE_COUNT - 1)
 	var wear: float = FINISH_WEAR[_finish_stage]
@@ -683,6 +989,12 @@ static func _baked(mesh: Mesh, xf: Transform3D) -> ArrayMesh:
 
 # ============================================================================= build
 func _build() -> void:
+	_beacon_base = 0.35
+	_beacon_gain = 5.0
+	_beacon_light_base = 0.15
+	_beacon_light_gain = 2.4
+	_beacon_speed = 2.6
+	_beacon_sharp = 6.0
 	_hull_root = Node3D.new()
 	_hull_root.name = "Hull"
 	add_child(_hull_root)
@@ -745,6 +1057,129 @@ func _build() -> void:
 	_licks.emitting = false
 	_smoke.emitting = false
 	_flame_glow.visible = false
+	for light: Light3D in [_engine_light, _cabin_light, _beacon_light]:
+		_clear_ground_layer(light)
+
+
+# ============================================================================= skiff
+## The skiff (docs/PHASE5_SPEC.md §4): SkiffMeshLib geometry merged into one mesh per material, on
+## toon_soft materials like the rocket's own trim, and the rocket's flame, smoke and light rig. The
+## same member variables as `_build`, so the public API needs no special case beyond the finish.
+func _build_skiff() -> void:
+	_hull_root = Node3D.new()
+	_hull_root.name = "Hull"
+	add_child(_hull_root)
+	var slate := deep_toon(SKIFF_SLATE, {"shade": 0.50, "rim": 0.12, "spec": 0.06, "spec_size": 80.0,
+		"shade_tint": SKIFF_SHADE_TINT}, SKIFF_SLATE_FLOOR)
+	var cream := deep_toon(SKIFF_CREAM, {"shade": 0.54, "rim": 0.08, "spec": 0.04, "spec_size": 50.0,
+		"softness": 0.40}, HULL_SHADE_FLOOR)
+	var trim := deep_toon(SKIFF_TRIM, {"shade": 0.40, "rim": 0.10, "spec": 0.06}, 0.42)
+	var navy := deep_toon(SKIFF_NAVY, {"shade": 0.40, "rim": 0.10, "spec": SKIFF_NAVY_SPEC, "spec_size": 90.0,
+		"shade_tint": SKIFF_SHADE_TINT}, 0.55)
+	var streak := deep_toon(SKIFF_STREAK, {"shade": 0.20, "rim": 0.0, "spec": 0.0}, 0.90)
+	var metal := deep_toon(SKIFF_METAL, {"metallic": 0.30, "roughness": 0.5, "spec": 0.16, "spec_size": 120.0,
+		"rim": 0.14, "shade_tint": SKIFF_SHADE_TINT}, SKIFF_SLATE_FLOOR)
+	var gold := deep_toon(SKIFF_GOLD, {"shade": 0.45, "rim": GOLD_RIM, "spec": GOLD_SPEC, "spec_size": GOLD_SPEC_SIZE,
+		"shade_tint": GOLD_SHADE_TINT}, GOLD_SHADE_FLOOR)
+	var chalk := deep_toon(SKIFF_CHALK, {"shade": 0.50, "rim": 0.06, "spec": 0.0, "softness": 0.42}, 0.42)
+	var ink := deep_toon(SKIFF_INK, {"shade": 0.30, "rim": 0.0, "spec": 0.0}, 0.60)
+
+	RocketMeshLib.mi(SkiffMeshLib.barrel(), slate, _hull_root, Vector3.ZERO, "Barrel")
+	RocketMeshLib.mi(SkiffMeshLib.cream_parts(), cream, _hull_root, Vector3.ZERO, "CreamParts")
+	RocketMeshLib.mi(SkiffMeshLib.dark_trim(), trim, _hull_root, Vector3.ZERO, "Trim")
+	RocketMeshLib.mi(SkiffMeshLib.canopy(), navy, _hull_root, Vector3.ZERO, "Canopy")
+	var streak_mi := RocketMeshLib.mi(SkiffMeshLib.streak(), streak, _hull_root, Vector3.ZERO, "CanopyStreak")
+	streak_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_skiff_legs = RocketMeshLib.mi(SkiffMeshLib.legs(_ground), metal, _hull_root, Vector3.ZERO, "Legs")
+
+	var hinge := SkiffMeshLib.hatch_hinge()
+	_hatch_pivot = Node3D.new()
+	_hatch_pivot.name = "HatchPivot"
+	_hatch_pivot.position = hinge
+	_hull_root.add_child(_hatch_pivot)
+	RocketMeshLib.mi(SkiffMeshLib.door(hinge), gold, _hatch_pivot, Vector3.ZERO, "Door")
+
+	_ladder = Node3D.new()
+	_ladder.name = "Ladder"
+	_hull_root.add_child(_ladder)
+	_skiff_rails = RocketMeshLib.mi(SkiffMeshLib.ladder(_ground), chalk, _ladder, Vector3.ZERO, "Rails")
+	_skiff_digits = RocketMeshLib.mi(SkiffMeshLib.ladder_digits(_ground), ink, _ladder, Vector3.ZERO, "Numbers")
+	_skiff_digits.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	# Fen's lamp: the porthole's warm glow, and the cabin light's job.
+	var lamp_mat := MaterialLib.glow(CABIN_GLOW, 1.1, Color("#8a6a3c")).duplicate() as ShaderMaterial
+	lamp_mat.set_shader_parameter("emission_day_scale", 1.0)
+	lamp_mat.set_shader_parameter("emission_cap", 1.4)
+	RocketMeshLib.mi(SkiffMeshLib.lamp_lens(), lamp_mat, _hull_root, Vector3.ZERO, "LampLens")
+	_cabin_light = OmniLight3D.new()
+	_cabin_light.name = "LampLight"
+	_cabin_light.position = SkiffMeshLib.lamp_light_pos()
+	_cabin_light.light_color = CABIN_GLOW
+	_cabin_light.light_energy = 0.7
+	_cabin_light.omni_range = SKIFF_LAMP_RANGE
+	_cabin_light.shadow_enabled = false
+	_hull_root.add_child(_cabin_light)
+
+	# Zorp's antenna bulb: the beacon, as a slow muted glow rather than the rocket's hard blink.
+	_beacon_mat = MaterialLib.glow(SKIFF_BULB, 1.0, SKIFF_BULB_BASE).duplicate() as ShaderMaterial
+	_beacon_mat.set_shader_parameter("emission_day_scale", 0.6)
+	_beacon_mat.set_shader_parameter("emission_cap", 1.6)
+	_beacon_mesh = RocketMeshLib.mi(SkiffMeshLib.bulb(), _beacon_mat, _hull_root, Vector3.ZERO, "AntennaBulb")
+	_beacon_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beacon_light = OmniLight3D.new()
+	_beacon_light.name = "BulbLight"
+	_beacon_light.position = SkiffMeshLib.bulb_pos()
+	_beacon_light.light_color = SKIFF_BULB
+	_beacon_light.omni_range = SKIFF_BULB_RANGE
+	_beacon_light.light_energy = 0.0
+	_beacon_light.shadow_enabled = false
+	_hull_root.add_child(_beacon_light)
+	_beacon_base = 0.45
+	_beacon_gain = 1.1
+	_beacon_light_base = 0.05
+	_beacon_light_gain = 0.5
+	_beacon_speed = 1.3
+	_beacon_sharp = 2.0
+
+	# Engine: the rocket's throat glow and light, and its plume at SKIFF_PLUME_SCALE.
+	_engine_mat = MaterialLib.glow(ENGINE_GLOW, 0.3, Color("#3a2118")).duplicate() as ShaderMaterial
+	_engine_mat.set_shader_parameter("emission_day_scale", 1.0)
+	RocketMeshLib.mi(SkiffMeshLib.throat(), _engine_mat, _hull_root, Vector3.ZERO, "EngineThroat")
+	_engine_light = OmniLight3D.new()
+	_engine_light.name = "EngineLight"
+	_engine_light.position = Vector3(0.0, SkiffMeshLib.NOZZLE_MOUTH_Y - 0.25, 0.0)
+	_engine_light.light_color = ENGINE_GLOW
+	_engine_light.omni_range = SKIFF_ENGINE_RANGE
+	_engine_light.light_energy = 0.0
+	_engine_light.shadow_enabled = false
+	_engine_light.visible = false
+	add_child(_engine_light)
+	var mount := Node3D.new()
+	mount.name = "FlameMount"
+	mount.position = Vector3(0.0, SkiffMeshLib.NOZZLE_MOUTH_Y, 0.0)
+	mount.scale = Vector3.ONE * SKIFF_PLUME_SCALE
+	add_child(mount)
+	_build_flame(mount, 0.0, SkiffMeshLib.NOZZLE_MOUTH_Y)
+
+	var body := StaticBody3D.new()
+	body.name = "Blocker"
+	body.collision_layer = 1 << 3
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = SkiffMeshLib.DRUM_R + 0.05
+	cyl.height = SkiffMeshLib.COLLAR_Y1
+	shape.shape = cyl
+	shape.position = Vector3(0.0, SkiffMeshLib.COLLAR_Y1 * 0.5, 0.0)
+	body.add_child(shape)
+	add_child(body)
+
+	set_flame_scale(0.0)
+	_licks.emitting = false
+	_smoke.emitting = false
+	_flame_glow.visible = false
+	for light: Light3D in [_engine_light, _cabin_light, _beacon_light]:
+		_clear_ground_layer(light)
 
 
 func _build_skirt(navy: Material, dark: Material) -> void:
@@ -1013,11 +1448,14 @@ static func _collar_profile(w: float, l: float) -> PackedVector2Array:
 	])
 
 
-func _build_flame() -> void:
+## `flame_parent` (default: this model) and `flame_y` place the plume; `smoke_y` is the smoke
+## emitter's height on this model. The rocket passes nothing; the skiff a scaled mount at its bell.
+func _build_flame(flame_parent: Node3D = null, flame_y: float = NOZZLE_MOUTH_Y,
+		smoke_y: float = NOZZLE_MOUTH_Y) -> void:
 	_flame = Node3D.new()
 	_flame.name = "Flame"
-	_flame.position = Vector3(0.0, NOZZLE_MOUTH_Y, 0.0)
-	add_child(_flame)
+	_flame.position = Vector3(0.0, flame_y, 0.0)
+	(flame_parent if flame_parent != null else self).add_child(_flame)
 
 	# ONE painted silhouette, not nested shells. `rocket_flame.gdshader` carries the structure the
 	# style guide asks for — hot blue-white throat, white-gold, orange body, deep orange-red tip,
@@ -1057,7 +1495,7 @@ func _build_flame() -> void:
 	_smoke.lifetime = 1.3
 	_smoke.local_coords = false
 	_smoke.emitting = false
-	_smoke.position = Vector3(0.0, NOZZLE_MOUTH_Y, 0.0)
+	_smoke.position = Vector3(0.0, smoke_y, 0.0)
 	_smoke.visibility_aabb = AABB(Vector3(-14, -30, -14), Vector3(28, 60, 28))
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE

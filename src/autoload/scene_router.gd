@@ -6,6 +6,10 @@ extends Node
 const WORLD_SCENE := "res://src/world/world.tscn"
 const SPACE_SCENE := "res://src/rocket/space_travel.tscn"
 const TITLE_SCENE := "res://src/ui/title/title_screen.tscn"
+## Loaded by path only, never by class name - see `_prebuild_current_planet`'s note on why an
+## autoload must not write a class symbol for something it does not always need (heat item 5,
+## docs/BUILD_PLAN.md Phase 5 HEAT-LOAD).
+const SHADER_WARMUP_SCRIPT := "res://src/world/shader_warmup.gd"
 
 var _fade: ColorRect
 var _busy := false
@@ -58,6 +62,14 @@ func _transition_to(path: String) -> void:
 	if get_tree().paused:
 		push_warning("SceneRouter: tree was paused at a scene change; force-unpausing.")
 		get_tree().paused = false
+	# Snapshotted BEFORE the scene changes, because afterward there is nothing left to check: a
+	# rocket arrival back into the world (space_travel.gd's map-mode Esc/`_fly`, or wherever it
+	# lands) must NOT get the shader warm-up below - `RocketJourney.prewarm_destination` already
+	# primed that planet's geometry during the cruise, and the pad-launch journey most players
+	# actually take (`RocketJourney.swap_scene`) never calls `_transition_to` at all, so it was
+	# never at risk. "Rocket arrival" here means: whatever we are LEAVING is the space map.
+	var leaving_space := get_tree().current_scene != null \
+		and get_tree().current_scene.scene_file_path == SPACE_SCENE
 	_busy = true
 	await fade_out(0.45)
 	if path == WORLD_SCENE:
@@ -68,6 +80,13 @@ func _transition_to(path: String) -> void:
 	# The new scene may have installed something that pauses again before we finish fading in.
 	if get_tree().paused:
 		get_tree().paused = false
+	# Heat item 5: pay the first-shader-compile stall HERE, behind the still-solid fade, instead of
+	# scattered across the player's first few steps. Title -> world (start_game) and every ordinary
+	# hop (go_to_planet) qualify; a rocket arrival does not (see `leaving_space` above). Guarded by
+	# ResourceLoader so a build missing the new file just skips this, and called by path (never by
+	# class name) so this autoload's own parse never has to resolve it.
+	if path == WORLD_SCENE and not leaving_space and ResourceLoader.exists(SHADER_WARMUP_SCRIPT):
+		await load(SHADER_WARMUP_SCRIPT).call("run", get_tree())
 	await fade_in(0.6)
 	_busy = false
 

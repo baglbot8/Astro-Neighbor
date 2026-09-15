@@ -79,6 +79,16 @@ var _closing_tween: Tween
 ## Current (animated) panel height. See PANEL_MIN_HEIGHT.
 var _panel_h := PANEL_MIN_HEIGHT
 var _resize_tween: Tween
+## PHASE5_SPEC.md §2 choice ("presses ignored 0.6 s after the pills show"): seconds left before a choice
+## press (button tap, ui_accept or cancel alike - every path runs through `_choose`) is answered rather
+## than dropped on the floor, counted from the moment the pills actually appear (`_show_choices`), not
+## from the `show_choice` call. Set from `show_choice`'s `arm_delay` argument; 0 (the default) arms the
+## choice immediately, so a press on the very first frame the pills are visible still answers - today's
+## behaviour, unchanged.
+var _arm_remaining := 0.0
+## The `arm_delay` passed to the current `show_choice` call; copied into `_arm_remaining` when the pills
+## actually appear (`_show_choices`), since `show_choice` itself may still be typing out the prompt line.
+var _choice_arm_delay := 0.0
 
 @onready var _panel: Panel = $Panel
 @onready var _text: RichTextLabel = $Panel/Text
@@ -233,7 +243,10 @@ func show_lines(speaker: String, lines: Array, voice_profile: String = "alien", 
 	await finished
 
 ## Shows a prompt with 2-4 pill options. Returns the chosen index, -1 on cancel.
-func show_choice(prompt: String, options: Array) -> int:
+## `arm_delay` (default 0 = today's behaviour exactly): seconds after the pills actually show during
+## which a press - button tap, ui_accept, cancel, all alike - is ignored instead of answering. See
+## `_arm_remaining`.
+func show_choice(prompt: String, options: Array, arm_delay: float = 0.0) -> int:
 	_options.clear()
 	for o in options:
 		_options.append(str(o))
@@ -246,6 +259,7 @@ func show_choice(prompt: String, options: Array) -> int:
 	# Set the line BEFORE _open() so a fresh box pops in already sized to the prompt.
 	_lines = PackedStringArray([prompt])
 	_line_index = 0
+	_choice_arm_delay = maxf(0.0, arm_delay)
 	_open()
 	_state = State.CHOICE
 	_choice_index = 0
@@ -408,6 +422,8 @@ func _show_choices() -> void:
 	_choice_index = 0
 	UIFocus.focus(_choice_buttons[0])
 	_cooldown = INPUT_COOLDOWN
+	# Armed from THIS moment (the pills are actually up), not from the show_choice() call.
+	_arm_remaining = _choice_arm_delay
 
 func _hide_choices(instant: bool) -> void:
 	if not _choices_shown:
@@ -429,6 +445,10 @@ func _hide_choices(instant: bool) -> void:
 func _choose(i: int) -> void:
 	if _state != State.CHOICE:
 		return
+	# arm_delay (PHASE5_SPEC.md §2): every path that can answer a choice - a button tap, ui_accept,
+	# cancel - calls _choose, so this one guard covers them all. 0 (the default) never blocks.
+	if _arm_remaining > 0.0:
+		return
 	if i >= 0:
 		UIStyle.play_confirm()
 	else:
@@ -441,6 +461,8 @@ func _choose(i: int) -> void:
 func _process(delta: float) -> void:
 	if _state == State.HIDDEN:
 		return
+	if _arm_remaining > 0.0:
+		_arm_remaining -= delta
 	if _marker.visible:
 		_marker_phase += delta * MARKER_BOB_SPEED
 		_marker.position.y = _marker_rest_y() + sin(_marker_phase) * MARKER_BOB

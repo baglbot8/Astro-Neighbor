@@ -145,6 +145,10 @@ var _hints_timer := HINTS_LIFETIME
 var _jet_pill: PanelContainer
 var _jet_bar: ProgressBar
 var _jet_fill_box: StyleBoxFlat
+## Heat item 9 (docs/OPEN_ISSUES.md 57): StyleBoxFlat.bg_color's setter allocates and notifies on
+## every write, even when the colour is unchanged - 22 of the ~26 mallocs `_update_jet_fuel` made
+## per frame. Cached here so the write only happens when the band actually changes.
+var _jet_fill_color := Color()
 var _placement_active := false
 # ---- placement blocked-reason pill
 var _block_pill: PanelContainer
@@ -494,8 +498,12 @@ func _update_jet_fuel(delta: float) -> void:
 	var fuel: float = player.call("get_boost_fuel")
 	_jet_bar.value = fuel
 	# Amber while burning down, back to the stardust yellow when it is healthy again; red when the
-	# tank is nearly dry, which is the read that tells you to get your feet down.
-	_jet_fill_box.bg_color = UIStyle.RED if fuel < 0.2 else (UIStyle.ORANGE if fuel < 0.55 else UIStyle.YELLOW)
+	# tank is nearly dry, which is the read that tells you to get your feet down. Guarded (heat item
+	# 9): write the StyleBox colour only when the band changes, not once a frame for the same value.
+	var fill_col: Color = UIStyle.RED if fuel < 0.2 else (UIStyle.ORANGE if fuel < 0.55 else UIStyle.YELLOW)
+	if fill_col != _jet_fill_color:
+		_jet_fill_color = fill_col
+		_jet_fill_box.bg_color = fill_col
 	var want := fuel < 0.999 and not EventBus.is_modal_open()
 	_jet_pill.visible = want or _jet_pill.modulate.a > 0.01
 	_jet_pill.modulate.a = move_toward(_jet_pill.modulate.a, 1.0 if want else 0.0, delta * (8.0 if want else 2.2))

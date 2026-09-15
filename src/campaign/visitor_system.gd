@@ -246,8 +246,14 @@ func _exit_tree() -> void:
 
 # ============================================================================= the day
 ## True when visits can happen at all: the campaign is on, or the story is over (a Director timeline only
-## with "--campaign").
+## with "--campaign") - EXCEPT while the finale owns the screen. docs/PHASE5_SPEC.md §1:
+## GameState.flags["finale_stage"] (JSON gives floats back, so always read through int()) is 1 CALLED,
+## 2 MET or 3 SENT for the call/meeting/choice/send-off/gift beats; nobody should wander in mid-finale.
+## Unaffected at stage 0 (before the call) or 4 (DONE): a visit still rolls at home then, same as today.
 static func visits_on() -> bool:
+	var finale_stage := int(GameState.flags.get("finale_stage", 0))
+	if finale_stage == 1 or finale_stage == 2 or finale_stage == 3:
+		return false
 	if CampaignData.gates_on():
 		return true
 	return GameState.story_done and (not Director.is_active() or Director.campaign_opt_in())
@@ -1043,7 +1049,12 @@ func view_report(d: Vector3, first_only: bool, ring_sight: bool = true) -> Dicti
 ## THE OCCLUDERS as their real triangles, in a private physics space that lives only while a spot is
 ## searched: a body added to a private PhysicsServer3D space answers a query in the same frame
 ## (measured for replay_board_prop.gd, 2026-09-13), where the world's own space would need a physics step.
-func _open_sight_space() -> void:
+## `use_centre`/`centre_override`/`reach_override`: `open_sight`'s way of aiming this at an arbitrary
+## point with an arbitrary reach (a boolean flag rather than a sentinel Vector3, since Vector3 has no
+## built-in "unset" value) - every other caller (the ordinary landing-spot search) leaves them at the
+## defaults and gets the old behaviour: centred on the landed astronaut, reach sized to the search
+## lattice this file already uses (AHEAD_MAX_M / SIDE_MAX_M).
+func _open_sight_space(use_centre: bool = false, centre_override: Vector3 = Vector3.ZERO, reach_override: float = -1.0) -> void:
 	if _space.is_valid():
 		return
 	_space = PhysicsServer3D.space_create()
@@ -1060,11 +1071,13 @@ func _open_sight_space() -> void:
 	if pad_node != null:
 		roots.append(pad_node)
 	var rocket: Node3D = pad_node.get("rocket") as Node3D if pad_node != null else null
-	var centre := _astronaut_xf.origin
+	var centre := centre_override if use_centre else _astronaut_xf.origin
 	var reach := 0.0
 	for v: Dictionary in _views:
 		reach = maxf(reach, (v["eye"] as Vector3).distance_to(centre))
 	reach = maxf(reach, Vector2(AHEAD_MAX_M, SIDE_MAX_M).length()) + 2.0
+	if reach_override > 0.0:
+		reach = reach_override
 	var shapes := {}
 	var stack: Array[Node] = roots.duplicate()
 	while not stack.is_empty():
@@ -1184,6 +1197,56 @@ func _ray_hit(a: Vector3, b: Vector3) -> String:
 	return str(_sight_names.get(hit.get("rid", RID()), "?"))
 
 
+# ============================================================================= K2: ground and sight, on any world
+## `_ready` only builds the caches `_ground_problem` reads (`_prompts`, `_deco_cache`, `_landing_dir`)
+## when the world IS home - nowhere else has ever needed a spot check before Phase 5. K2 (the finale
+## meeting, on the Commons) needs the same rules anywhere, so these three are public and rebuild
+## whatever they need themselves rather than trusting `_ready` to have done it. `_ground_problem`
+## itself was never home-specific (every check already reads `planet.data`/generic node paths), so
+## nothing about its rules changes off home.
+
+## Ground-rule verdict at `dir` on the CURRENT world (see "THE GROUND RULES"): "" when clear, otherwise
+## the first rule broken ("water", "shore", "pad", "spawn", "landing", "stones", "house", "prompt:<x>",
+## "prop", "decoration", "pickup", "trash", "slope" or "uneven"). Rebuilds the caches every call so a
+## decoration placed a moment ago is never stale - cheap: no physics query runs here (`_rebuild_caches`
+## measured on home for `_bring_in`; `view_report`'s ray casts, not this, are the costly part).
+func ground_problem(dir: Vector3) -> String:
+	if planet == null:
+		planet = get_tree().get_first_node_in_group("planet") as Planet
+	if planet == null or planet.data == null:
+		return "no planet"
+	_rebuild_caches()
+	return _ground_problem(dir)
+
+
+## Opens a private occluder space (see `_open_sight_space`'s header) around `centre`, `reach` metres
+## out - generous enough by default (200 m) to cover any shipped world whole, so a caller need not
+## measure its own scene first. Building it is the only cost; querying it with `sight_blocker` is
+## then as cheap as a single ray cast. Always call `close_sight` when done (or the next `open_sight`
+## call is a no-op: `_open_sight_space` refuses to rebuild over a space that is still open).
+func open_sight(centre: Vector3, reach: float = 200.0) -> void:
+	if planet == null:
+		planet = get_tree().get_first_node_in_group("planet") as Planet
+	_close_sight_space()
+	_open_sight_space(true, centre, reach)
+
+
+## The label of the first real occluder (a prop, a building, a decoration, the pad, the rocket at
+## rest, the astronaut - never a glow sprite, see `_is_glow`) on the line from `a` to `b`, or "" when
+## the line is clear. Needs `open_sight` first; "" (never a false "clear") when it was not called or
+## already closed, so a caller that forgets it fails loudly in a debug_report rather than silently.
+func sight_blocker(a: Vector3, b: Vector3) -> String:
+	if not _space.is_valid():
+		push_warning("VisitorSystem.sight_blocker: open_sight was never called (or already closed)")
+		return ""
+	return _ray_hit(a, b)
+
+
+## Frees the occluder space opened by `open_sight` (or by the ordinary spot search - safe either way).
+func close_sight() -> void:
+	_close_sight_space()
+
+
 # ============================================================================= helpers
 static func _vec(a: Array) -> Vector3:
 	if a.size() != 3:
@@ -1229,6 +1292,74 @@ static func dev_clear_today() -> String:
 	if host != null:
 		host.call("restage")
 	return "No visitor today (day %d)." % GameState.day_count
+
+
+## "Meet request": satisfies today's live request without a talk, so the neighbour hands it in the
+## next time you speak to them - a "play" request's progress is filled straight to its count; a
+## "gift" request gets a real placed instance of the gift on home (through DecorationManager when this
+## world IS home, so it actually appears; a direct GameState.placed_decorations write otherwise, the
+## same shape DecorationManager.place itself writes, since `request_met` only ever reads that saved
+## list - a forced visit set from another world must still work once you fly home). No-op with a
+## clear reason when there is no live, asked request to meet.
+static func dev_mark_met() -> String:
+	var rec := record()
+	if rec.is_empty() or str(rec["npc"]) == "" or bool(rec["left"]) or bool(rec["done"]):
+		return "No live visit request to meet."
+	if not bool(rec["asked"]):
+		return "%s has not asked yet; talk to them first." % _npc_name(str(rec["npc"]))
+	if str(rec["kind"]) == "play":
+		rec["progress"] = int(rec["count"])
+		_write(rec)
+		return "%s: game request ready to hand in." % _npc_name(str(rec["npc"]))
+	var item_id := str(rec["item"])
+	if item_id == "":
+		return "This visit has no gift item set."
+	var placed := false
+	if GameState.current_planet_id == HOME_ID:
+		var tree := Engine.get_main_loop() as SceneTree
+		var deco: DecorationManager = tree.root.get_node_or_null("World/Decorations") as DecorationManager if tree != null else null
+		if deco != null:
+			var spot := _vec(rec.get("spot", []) as Array)
+			if spot == Vector3.ZERO and deco.planet != null:
+				spot = deco.planet.data.spawn_dir.normalized()
+			placed = spot != Vector3.ZERO and deco.place(item_id, spot) != ""
+	if not placed:
+		GameState.add_placed_decoration(HOME_ID, "dev_visit_%d" % Time.get_ticks_msec(), item_id, Vector3.ZERO, Basis.IDENTITY)
+	GameState.remove_item(item_id)
+	_write(rec)
+	return "%s: gift request ready to hand in." % _npc_name(str(rec["npc"]))
+
+
+## "Re-roll today's visit": a fresh RANDOM pick among today's eligible neighbours, excluding whoever
+## is already visiting today, so repeated taps cycle through different neighbours to test. This is
+## NOT the natural day-seeded roll: `roll_visitor` is a pure function of the day, the eligible pool
+## and YESTERDAY's neighbour, so calling it again for the same day would always return the exact same
+## neighbour it already returned - a "re-roll" needs a dev-only substitute the same way
+## `dev_force_visit` already is one. It cannot honour "never two days running" against the true
+## yesterday either: the save keeps only ONE record (see the header's "SAVED STATE"), so once
+## `ensure_today` has written today's, yesterday's neighbour is gone for good - that rule is
+## exercised by the natural schedule alone (`debug_schedule`), never by this dev row.
+static func dev_reroll_today() -> String:
+	var day := GameState.day_count
+	var rec := record()
+	var today_npc := str(rec["npc"]) if not rec.is_empty() and int(rec["day"]) == day else ""
+	var pool: Array[String] = []
+	for n: String in eligible_neighbours():
+		if n != today_npc:
+			pool.append(n)
+	if pool.is_empty():
+		return "No other eligible neighbour to re-roll to."
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var picked: String = pool[rng.randi_range(0, pool.size() - 1)]
+	var fresh := _blank(day, picked)
+	fresh["forced"] = true
+	_plan_request(fresh, "")
+	_write(fresh)
+	var host := find()
+	if host != null:
+		host.call("restage")
+	return "Visitor: %s (re-rolled)" % _npc_name(picked)
 
 
 # ============================================================================= QA
@@ -1304,6 +1435,21 @@ func debug_search_tally(tag: String = "") -> void:
 			tally[key] = int(tally.get(key, 0)) + 1
 	_close_sight_space()
 	print("VISITTALLY %s %s passed=[%s]" % [tag, JSON.stringify(tally), ",".join(passed)])
+
+
+## `ground_problem(dir)`, printed - lets a Director timeline or a critic assert the exact rule name
+## on ANY world (K2's Commons meeting spots, most of all), not only home. Prints only.
+func debug_ground_problem(tag: String, dir: Vector3) -> void:
+	print("VISITGROUND %s dir=%s problem=%s" % [tag, str(dir), ground_problem(dir)])
+
+
+## Opens a sight space at `centre`/`reach`, prints the blocker on the line from `a` to `b`, then
+## closes it - one call for a Director timeline or a critic to assert `sight_blocker`'s answer
+## without managing `open_sight`/`close_sight` by hand. Prints only.
+func debug_sight_blocker(tag: String, centre: Vector3, a: Vector3, b: Vector3, reach: float = 200.0) -> void:
+	open_sight(centre, reach)
+	print("VISITSIGHT %s blocker=%s" % [tag, sight_blocker(a, b)])
+	close_sight()
 
 
 ## SYNTHETIC SCHEDULE PROBE: writes GameState.day_count for each of `days` days from `from_day`, runs

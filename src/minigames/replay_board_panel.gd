@@ -59,6 +59,7 @@ const OPEN_COOLDOWN := 0.22
 
 const TEXT_TITLE := "Game board"
 const TEXT_SUB := "Pick a game. Your rocket flies you to its world."
+const TEXT_SUB_SHIP := "Pick a game. Your ship flies you to its world."
 const TEXT_EMPTY := "No games on the board yet."
 
 var is_open := false
@@ -95,12 +96,15 @@ func _ready() -> void:
 
 # ============================================================================= open / close
 ## `list` is replay_board.gd `entries()`; `quiet_line` is the one soft line under it ("" for none).
-func open(list: Array, quiet_line: String) -> void:
+## `ship` is replay_board.gd's own FinaleState.has_ship() read (docs/PHASE5_SPEC.md §6: "the board
+## string" says "ship") — passed in rather than read here so this file never has to know how to find
+## FinaleState itself.
+func open(list: Array, quiet_line: String, ship: bool = false) -> void:
 	if is_open:
 		return
 	if _close_tween != null and _close_tween.is_valid():
 		_close_tween.kill()
-	_build(list, quiet_line)
+	_build(list, quiet_line, ship)
 	is_open = true
 	visible = true
 	_cooldown = OPEN_COOLDOWN
@@ -157,7 +161,7 @@ func close() -> void:
 
 
 # ============================================================================= build
-func _build(list: Array, quiet_line: String) -> void:
+func _build(list: Array, quiet_line: String, ship: bool = false) -> void:
 	if _panel != null:
 		_panel.queue_free()
 	_buttons.clear()
@@ -189,7 +193,7 @@ func _build(list: Array, quiet_line: String) -> void:
 		header.add_child(_close_button)
 
 	if not list.is_empty():
-		var sub := _soft_label(TEXT_SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		var sub := _soft_label(TEXT_SUB_SHIP if ship else TEXT_SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		box.add_child(sub)
 		_scroll = ScrollContainer.new()
 		_scroll.name = "Scroll"

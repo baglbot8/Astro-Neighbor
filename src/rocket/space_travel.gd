@@ -215,6 +215,11 @@ var _seam_world_basis := Basis.IDENTITY
 ## Post-processing the planet handed us, so `_set_match` can cross-fade between it and the map look
 ## instead of guessing at numbers the environment builder owns.
 var _ground_post: Dictionary = {}
+## The flight's "Skip" button (journey mode, once a whole flight has been flown - see
+## RocketJourney.SkipControl). Null on the first flight ever and in map mode.
+var _skip_ui: RocketJourney.SkipControl
+## True from a confirmed skip until this scene is swapped out.
+var _skipping := false
 
 
 func _ready() -> void:
@@ -275,6 +280,11 @@ func _ready() -> void:
 		_park_on_terminator(terminator_probe)
 	elif _journey:
 		_begin_journey()
+		# The pad showed the same button in the same corner right up to the departure cut, so it is up
+		# from this scene's first frame too - no fade, nothing to notice across the seam.
+		_skip_ui = RocketJourney.SkipControl.attach(self)
+		if _skip_ui != null:
+			_skip_ui.confirmed.connect(_skip_flight)
 
 
 func _process(delta: float) -> void:
@@ -788,7 +798,7 @@ func _begin_journey() -> void:
 	_ref_flank = (cam_basis * RocketJourney.flank).normalized()
 	_ref_blend = 0.0
 	_chase_pos = cam_pos
-	_chase_look = _rocket.position + _rocket.basis.y.normalized() * CHASE_LEAD
+	_chase_look = _rocket.position + _rocket.basis.y.normalized() * (CHASE_LEAD * _chase_scale())
 	RocketJourney.leg = ""
 	RocketJourney.switching = false
 
@@ -1042,7 +1052,7 @@ func _fly_journey(dest: String, heading: Vector3 = Vector3.ZERO) -> void:
 	# planet scene just handed over is the picture this scene starts from. Then as many more as the
 	# swap's own stall needs - see `_await_steady_frame`.
 	await _await_steady_frame()
-	if not is_inside_tree():
+	if not is_inside_tree() or _skipping:
 		return
 	_build_path(_rocket.position, dest, heading, true)
 	_rocket.set_engine(true, 1.0)
@@ -1070,7 +1080,7 @@ func _fly_journey(dest: String, heading: Vector3 = Vector3.ZERO) -> void:
 			_streaks.emitting = false)
 	match_in.tween_method(_entry_match.bind(dest), 0.0, 1.0, ENTRY_MATCH_SECONDS).set_trans(Tween.TRANS_SINE)
 	await cruise.finished
-	if not is_inside_tree():
+	if not is_inside_tree() or _skipping:
 		return
 	_entry_match(1.0, dest)
 	_arrive(dest)
@@ -1181,6 +1191,26 @@ func _arrive(dest: String) -> void:
 	GameState.set_flag("spawn_at_pad", true)
 	AudioManager.play_music("", 0.8)
 	EventBus.travel_finished.emit(dest)
+	RocketJourney.swap_scene(get_tree(), WORLD_SCENE, true)
+
+
+## A confirmed Skip from the cruise (RocketJourney.SkipControl). This scene is already frozen (the
+## question froze it), so the picture holds while it fades to dark; then everything `_arrive` does
+## except the seam frame - the same cutscene close, the same record and GameState writes (through
+## `RocketJourney.write_skipped_arrival`), the same music cue, `travel_finished`, and the same
+## `swap_scene(WORLD, true)` with the prewarmed destination collected. The destination pad sees a
+## pending "arrive" leg marked `skipped` and lands straight away under the fade.
+func _skip_flight() -> void:
+	if _skipping or not _journey:
+		return
+	_skipping = true
+	await SceneRouter.fade_out(RocketJourney.SKIP_FADE_OUT)
+	if not is_inside_tree():
+		return
+	_end_cutscene()
+	RocketJourney.write_skipped_arrival(_origin, _journey_dest)
+	AudioManager.play_music("", 0.8)
+	EventBus.travel_finished.emit(_journey_dest)
 	RocketJourney.swap_scene(get_tree(), WORLD_SCENE, true)
 
 
@@ -1297,6 +1327,18 @@ func _cruise_step(k: float) -> void:
 	_aim_rocket(pos, fwd.normalized())
 
 
+## Ratio of the model actually flying to the gold rocket's 3.2 m (docs/PHASE5_SPEC.md §8), the same
+## number rocket_pad.gd's own `_chase_scale()` computes from its pad model. CHASE_* here is already
+## "rocket_pad.gd's RocketJourney.CHASE_* divided by ROCKET_SCALE" (see the const's doc comment) —
+## scaling both copies by this ratio together is what keeps the seam and the cruise chase on the
+## same pixels; letting only one of them shrink for the skiff is exactly the "seam pop" the M2
+## checklist measures.
+func _chase_scale() -> float:
+	if _rocket == null or not is_instance_valid(_rocket):
+		return 1.0
+	return RocketJourney.chase_scale(_rocket.model_height())
+
+
 ## Seeds the chase camera exactly where `_update_chase` wants it, and picks the flank it rides on:
 ## the side the SUN is on, so the camera looks away from the star for the whole flight.
 func _seed_chase() -> void:
@@ -1307,8 +1349,10 @@ func _seed_chase() -> void:
 	side = side.normalized()
 	# The sun is at the origin; a camera offset TOWARD it is a camera looking AWAY from it.
 	_chase_side = 1.0 if side.dot(-_rocket.position.normalized()) >= 0.0 else -1.0
-	_chase_pos = _rocket.position - fwd * CHASE_BACK + Vector3.UP * CHASE_UP + side * (CHASE_SIDE * _chase_side)
-	_chase_look = _rocket.position + fwd * CHASE_LEAD
+	var scale := _chase_scale()
+	_chase_pos = _rocket.position - fwd * (CHASE_BACK * scale) + Vector3.UP * (CHASE_UP * scale) \
+		+ side * (CHASE_SIDE * scale * _chase_side)
+	_chase_look = _rocket.position + fwd * (CHASE_LEAD * scale)
 	if (_chase_look - _chase_pos).length_squared() > 0.0001:
 		_camera.transform = RocketJourney.flight_frame(_chase_pos, _chase_look, _rocket.position, Vector3.UP)
 
@@ -1387,8 +1431,10 @@ func _update_chase(delta: float) -> void:
 		side = _ref_flank.slerp(side, w).normalized()
 	# Three-quarter rear view: straight-behind puts the camera up the exhaust and the flame bloom
 	# swallows the rocket.
-	var want := _rocket.position - fwd * CHASE_BACK + up * CHASE_UP + side * CHASE_SIDE
-	var look_at := _rocket.position + fwd * CHASE_LEAD
+	var scale := _chase_scale()
+	var want := _rocket.position - fwd * (CHASE_BACK * scale) + up * (CHASE_UP * scale) \
+		+ side * (CHASE_SIDE * scale)
+	var look_at := _rocket.position + fwd * (CHASE_LEAD * scale)
 	if _orbiting:
 		# Ease out of the chase into the framed hero shot of the destination.
 		want = _hero_eye

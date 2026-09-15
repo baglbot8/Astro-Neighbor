@@ -82,6 +82,9 @@ const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
 const MINIGAME_SYSTEM_PATH := "res://src/minigames/minigame_system.gd"
 const CATCH_GAME_PATH := "res://src/minigames/catch_game.gd"
 const DEV_MENU_PATH := "res://src/ui/pause/dev_menu.gd"
+## Read by path only (see "DEPENDENCIES" above): FinaleState ships from Phase 5 on, but this file
+## must still parse and run in a build that predates it.
+const FINALE_STATE_PATH := "res://src/campaign/finale_state.gd"
 const PROP_SCRIPT := preload("res://src/minigames/replay_board_prop.gd")
 const PANEL_SCRIPT := preload("res://src/minigames/replay_board_panel.gd")
 
@@ -391,7 +394,8 @@ func open_panel() -> void:
 		return
 	# With the dev "show every game" switch on the list already holds every game there is, so a line
 	# saying more will unlock would be wrong there.
-	_panel.call("open", entries(), TEXT_LOCKED if has_locked_games() and not dev_show_all() else "")
+	_panel.call("open", entries(), TEXT_LOCKED if has_locked_games() and not dev_show_all() else "",
+		_has_ship())
 
 
 func _ensure_ui() -> void:
@@ -451,7 +455,7 @@ func play(key: String) -> bool:
 		return false
 	var planet := str(e["planet"])
 	if not CampaignData.planet_in_range(planet):
-		_toast("Your rocket can't reach %s yet." % str(e["world"]))
+		_toast("Your %s can't reach %s yet." % [_rocket_word(), str(e["world"])])
 		return false
 	if planet == GameState.current_planet_id:
 		# A game on this very world needs no flight.
@@ -461,7 +465,7 @@ func play(key: String) -> bool:
 	var pad := get_tree().root.get_node_or_null("World/Rocket")
 	var p := get_tree().get_first_node_in_group("player") as Player
 	if pad == null or not pad.has_method("launch_to") or p == null:
-		_toast("The rocket isn't ready. Try again in a moment.")
+		_toast("The %s isn't ready. Try again in a moment." % _rocket_word())
 		return false
 	GameState.flags[FLAG_PENDING] = {
 		"key": key, "npc": str(e["npc"]), "step": int(e["step"]), "planet": planet,
@@ -474,7 +478,7 @@ func play(key: String) -> bool:
 	# (the pad already busy, a journey switching), and then nothing may be left behind.
 	if not EventBus.modal_counts().has("cutscene"):
 		GameState.flags.erase(FLAG_PENDING)
-		_toast("The rocket isn't ready. Try again in a moment.")
+		_toast("The %s isn't ready. Try again in a moment." % _rocket_word())
 		return false
 	return true
 
@@ -610,7 +614,7 @@ func _on_fly_back_answered(yes: bool) -> void:
 	var pad := get_tree().root.get_node_or_null("World/Rocket")
 	var p := get_tree().get_first_node_in_group("player") as Player
 	if pad == null or p == null or EventBus.is_modal_open() or not _world_calm():
-		_toast("The rocket isn't ready. Try again in a moment.")
+		_toast("The %s isn't ready. Try again in a moment." % _rocket_word())
 		return
 	pad.call("launch_to", HUB_ID, p)
 
@@ -622,6 +626,25 @@ func _toast(text: String, icon: String = "") -> void:
 
 static func _npc_name(npc: String) -> String:
 	return str(NpcData.get_data(npc).get("display_name", npc.capitalize()))
+
+
+## FinaleState.has_ship() through a guarded load (see FINALE_STATE_PATH's doc comment) — false while
+## the file or the method does not exist, same as RocketModel's own guard.
+static func _has_ship() -> bool:
+	if not ResourceLoader.exists(FINALE_STATE_PATH):
+		return false
+	var script := load(FINALE_STATE_PATH) as Script
+	if script == null:
+		return false
+	for m: Dictionary in script.get_script_method_list():
+		if m.get("name", "") == "has_ship":
+			return bool(script.call("has_ship"))
+	return false
+
+
+## "rocket" or "ship" (docs/PHASE5_SPEC.md §6: "the pad compass and board string say 'ship'").
+static func _rocket_word() -> String:
+	return "ship" if _has_ship() else "rocket"
 
 
 func _exit_tree() -> void:

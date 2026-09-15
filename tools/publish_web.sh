@@ -7,7 +7,8 @@
 #   tools/publish_web.sh --push   also push main and gh-pages to origin
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$REPO/../../build/web"
+# ASTRO_WEB_OUT only exists so a scratch clone can export somewhere private; unset, it is the old path.
+OUT="${ASTRO_WEB_OUT:-$REPO/../../build/web}"
 cd "$REPO"
 
 BASE="$(git rev-parse --short HEAD)"
@@ -76,7 +77,7 @@ cp project.godot project.godot.prestamp
 trap _restore_project EXIT
 trap _on_interrupt INT TERM
 printf '\n[astro]\n\nbuild_stamp="%s"\n' "$BASE" >> project.godot
-godot --headless --path . --export-release "Web" &
+godot --headless --path . --export-release "Web" "$OUT/index.html" &
 GODOT_PID=$!
 wait "$GODOT_PID"
 trap - INT TERM
@@ -119,16 +120,25 @@ self.addEventListener('activate', (event) => {
 });
 KILLSW
 
-# Stamp the build into index.html so "is the page stale?" is one curl, not a guess:
-#   curl -s <url> | grep astro-build
-python3 - "$OUT/index.html" "$BASE" <<'STAMP'
-import io, sys
-path, base = sys.argv[1], sys.argv[2]
-html = io.open(path, encoding="utf-8").read()
-tag = '<meta name="astro-build" content="%s">' % base
-html = html.replace("<head>", "<head>\n\t" + tag, 1)
-io.open(path, "w", encoding="utf-8").write(html)
-STAMP
+# --- Stamp the page and cache the engine (tools/web/web_postprocess.py) ---------------------------
+# Writes <meta name="astro-build"> as before (so "is the page stale?" is still one curl:
+#   curl -s <url> | grep astro-build ), plus <meta name="astro-engine"> = sha256 of index.wasm.
+#
+# WHY THE ENGINE CACHE: measured on the live site 2026-09-14, every deploy gives every file a new ETag,
+# so a phone re-downloaded ~24 MB after every update, 10.25 MB of it the engine (index.wasm), which
+# almost never changes. The script adds astro-engine-sw.js, a SEPARATE worker (constant URL) that caches
+# ONLY index.wasm, keyed by that sha256 (the page asks for index.wasm?h=<sha256>, so a new engine is always
+# a cache miss, and bytes that do not hash to it error instead of booting). index.html, index.js and
+# index.pck are never cached by it (they pass through to the network and the browser's HTTP cache - see
+# tools/web/astro-engine-sw.js for the measurement behind that). It does not touch
+# index.service.worker.js above, which must stay constant.
+#
+# KILL SWITCH: `ASTRO_ENGINE_CACHE=off tools/publish_web.sh` publishes a page that unregisters the
+# engine worker and deletes its caches on the next visit, without needing the worker's help. (Or edit
+# `var ENABLED = true;` to false in the published index.html.)
+#
+# Also injects window.__astroPerf, a read-only requestAnimationFrame busy/fps meter the dev menu reads.
+python3 "$REPO/tools/web/web_postprocess.py" "$OUT" "$BASE"
 export GIT_INDEX_FILE="$(mktemp -t ghpages-index)"
 rm -f "$GIT_INDEX_FILE"
 git --work-tree="$OUT" add -A -f .

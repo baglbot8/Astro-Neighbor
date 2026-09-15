@@ -3,6 +3,13 @@ extends Control
 ## Small centered "Are you sure?" panel with Yes / No pill buttons.
 ##   var ok: bool = await confirm.ask("Buy Moon Lamp for 240?", "Yes", "No", 240)
 ## Keyboard/gamepad: left/right (or up/down) switch, accept confirms, cancel answers No. Mouse works too.
+##
+## `guard` (2026-09-14, added for SkipConfirm - src/ui/common/skip_confirm.gd): an OPTIONAL Callable
+## checked at the top of `_answer()`, i.e. on EVERY path that could close the popup with an answer -
+## a button click/tap, a gamepad/keyboard accept or cancel. If given and it returns false, the press
+## is swallowed and the popup stays open with nothing else changed. Defaults to an empty Callable,
+## which `_answer()` skips entirely, so every existing caller (shop, the board's fly-back, the dev
+## menu) behaves exactly as before - nobody but SkipConfirm passes one.
 
 signal answered(yes: bool)
 
@@ -19,6 +26,7 @@ var _open := false
 var _index := 0
 var _cooldown := 0.0
 var _repeat := UIFocus.NavRepeat.new()
+var _guard := Callable()
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -68,13 +76,15 @@ func _ready() -> void:
 func is_open() -> bool:
 	return _open
 
-## Shows the question and waits for the answer. price >= 0 shows a stardust price row.
-func ask(text: String, yes_text: String = "Yes", no_text: String = "No", price: int = -1, default_yes: bool = true) -> bool:
+## Shows the question and waits for the answer. price >= 0 shows a stardust price row. `guard`
+## (see the header) is optional and defaults to none, so every caller before 2026-09-14 is unaffected.
+func ask(text: String, yes_text: String = "Yes", no_text: String = "No", price: int = -1, default_yes: bool = true, guard := Callable()) -> bool:
 	_label.text = text
 	_yes.text = yes_text
 	_no.text = no_text
 	_price_row.visible = price >= 0
 	_price_label.text = str(price)
+	_guard = guard
 	_open = true
 	_cooldown = 0.18
 	_repeat.reset()
@@ -97,6 +107,8 @@ func _focus_current() -> void:
 
 func _answer(yes: bool) -> void:
 	if not _open:
+		return
+	if _guard.is_valid() and not bool(_guard.call()):
 		return
 	_open = false
 	EventBus.ui_modal_closed.emit("confirm")

@@ -7,7 +7,7 @@
     python3 tools/gen/audio/build_all.py --viz DIR    # also write waveform/spectrogram PNGs into DIR
     python3 tools/gen/audio/build_all.py --stems      # print per-stem levels for each music track
 
-Outputs: assets/audio/sfx/*.wav (mono/stereo 16-bit 44.1 kHz), assets/audio/music/*.wav (stereo, with a
+Outputs: assets/audio/sfx/*.wav (mono/stereo 16-bit 44.1 kHz), assets/audio/music/*.wav (mono 33,075 Hz since 2026-09-14, with a
 'smpl' loop chunk; loops are a whole number of 5120-sample QOA frames and carry a 2-frame copy of their
 start after the loop end so Godot's QOA loop wrap is click-free -- see synth.write_wav). Prints a table (name, seconds, peak dBFS, size) and validates every file:
 no clipping, no DC offset, faded edges (no clicks), loop seam continuity for loops, size limits.
@@ -28,6 +28,7 @@ import synth as S  # noqa: E402
 import sfx as SFX  # noqa: E402
 import voices as V  # noqa: E402
 import music as M  # noqa: E402
+import music_compact as MC  # noqa: E402  (2026-09-14: music ships mono at 33,075 Hz to cut mobile data; docs/CORE_LOOP.md "Mobile data")
 
 MUSIC_MAX_BYTES = 6 * 1024 * 1024
 
@@ -159,7 +160,8 @@ def main():
             # title (take A) has a one-shot logo before its loop -- see M.TITLE_LOOP_BEGIN.
             loop_begin = M.TITLE_LOOP_BEGIN if name == "title" else 0
             path = os.path.join(MUSIC_DIR, name + ".wav")
-            size = S.write_wav(path, x, loop=True, loop_begin=loop_begin)
+            # Validate and seam-check the 44.1 kHz stereo master; write the compact mono 33,075 Hz file.
+            size = MC.write_music(path, x, loop_begin=loop_begin)
             total_bytes += size
             probs = validate(name, x, True, True, loop_begin=loop_begin)
             if size > MUSIC_MAX_BYTES:

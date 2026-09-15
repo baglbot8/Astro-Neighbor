@@ -108,6 +108,13 @@ var _low_power := false
 ## True ONLY under the Compatibility (WebGL2) renderer. Turns off real-time cast shadows on the
 ## sun and the moon. Set in _ready() from Platform; see the long note above _apply() for why.
 var _no_cast_shadows := false
+## Dev switch for real-time cast shadows (the dev menu's Perf tab, DEV builder). Read by the per-frame
+## write in _apply(), so setting it takes effect on the next frame and is never undone by it - a
+## one-shot edit to `_sun.shadow_enabled` would be (CLAUDE.md "Tooling traps"). Default true is the
+## game as it ships: false removes the sun's and the moon's shadows, true gives them back. It can only
+## take shadows away: on Compatibility `_no_cast_shadows` already keeps them off whatever this says.
+## Per scene and never saved; the Perf tab re-applies it on each planet load.
+var shadows_allowed := true
 ## Colour grade LUT (see _grade_lut). Sampled per channel, so each stop shapes R, G and B separately.
 const GRADE_OFFSETS := [0.0, 0.25, 0.6, 1.0]
 ## The top stop is deliberately BELOW 1.0. R2.6: "no near-clipping whites - cap ~0.92". The grade
@@ -262,6 +269,18 @@ func get_sky_body_ids() -> PackedStringArray:
 ## the player can actually see, instead of looking up the "SkyBodies/Sky_<id>" node by name.
 func get_sky_body_direction(id: String) -> Vector3:
 	return _sky_bodies.direction_of(id) if _sky_bodies != null else Vector3.ZERO
+
+
+## Restarts the opening-bearing lock (see `_body_az_lock` / BODY_AZ_LOCK_SEC above) so the
+## neighbouring worlds re-track the REAL camera from scratch over the next BODY_AZ_LOCK_SEC.
+## Needed by anything that temporarily takes over the viewport's current camera during a scene's
+## first 1.5 s - `_track_opening_bearing` cannot tell a real gameplay camera from a borrowed one, so
+## without this it would already have latched onto the WRONG camera's bearing by the time the real
+## one comes back (heat item 5, "warm-up behind the fade": ShaderWarmup's two far-planet views run
+## in exactly this window). Same reset value `_track_opening_bearing` itself uses when it finds no
+## camera yet - not a new constant.
+func reset_bearing_lock() -> void:
+	_body_az_lock = 0.0
 
 
 ## Forces a full re-apply of sky, lights, fog and grade for the current hour. The arrival half of
@@ -784,14 +803,16 @@ func _apply(hour: float) -> void:
 	# gate is applied separately so the moon still reads the intent rather than the result - if it
 	# read `_sun.shadow_enabled` it would switch its own shadows ON at noon on Compatibility.
 	var sun_casts := sun_energy > 0.08
-	_sun.shadow_enabled = sun_casts and not _no_cast_shadows
+	_sun.shadow_enabled = sun_casts and not _no_cast_shadows and shadows_allowed
 	_moon.light_color = palette.moon_light.sample(t)
 	_moon.light_energy = moon_energy
 	var moon_on := moon_energy > 0.02
 	_moon.visible = moon_on
 	if moon_on:
 		_moon.global_transform = Transform3D(_light_basis(_moon_light_dir), Vector3.ZERO)
-	_moon.shadow_enabled = moon_on and not sun_casts and not _no_cast_shadows
+	# The moon still reads the sun's INTENT (`sun_casts`), not `shadows_allowed`: with shadows switched
+	# off, a moon that saw "the sun does not cast" would switch its own shadows on at noon.
+	_moon.shadow_enabled = moon_on and not sun_casts and not _no_cast_shadows and shadows_allowed
 
 	# --- environment
 	_env.ambient_light_color = palette.ambient.sample(t)

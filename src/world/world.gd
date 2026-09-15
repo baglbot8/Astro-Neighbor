@@ -36,6 +36,10 @@ const REPLAY_BOARD_PATH := "res://src/minigames/replay_board.gd"
 ## Phase 4 builder H (docs/CORE_LOOP.md "Visits and favours"): friends visit your crash site. On home it
 ## stands today's visitor; on every other world it ends today's visit. Same guard as above.
 const VISITOR_SYSTEM_PATH := "res://src/campaign/visitor_system.gd"
+## Phase 5 spec §1/§8 (docs/PHASE5_SPEC.md): the finale flow (call, meeting, choice, send-off, gift).
+## Same guard as above so the world boots with no finale.gd present. Attached after VisitorSystem so
+## it can freely override anything the visitor hook just set up for this load.
+const FINALE_PATH := "res://src/campaign/finale.gd"
 const NPC_DIR := "res://src/characters/npcs/"
 const BUILDING_DIR := "res://src/hub/buildings/"
 
@@ -90,6 +94,15 @@ func _ready() -> void:
 	# placed decorations, space trash) and before planet_loaded, so the visitor is there from the landing.
 	if ResourceLoader.exists(VISITOR_SYSTEM_PATH):
 		load(VISITOR_SYSTEM_PATH).attach(self)
+	# Phase 5 lead prework (docs/PHASE5_SPEC.md §1/§8). Guarded: the game boots and plays with no
+	# finale.gd present, on every world.
+	# Guard the LOAD too, not only the file: a finale.gd whose dependency (FinaleState) is missing fails to
+	# compile, load() returns null, and calling attach on it would stop this world from finishing its
+	# _ready (the DEVF builder reproduced it by renaming finale_state.gd, 2026-09-14).
+	if ResourceLoader.exists(FINALE_PATH):
+		var finale_script: Variant = load(FINALE_PATH)
+		if finale_script is Script:
+			finale_script.attach(self)
 
 	if planet_data.music_track != "":
 		AudioManager.play_music(planet_data.music_track)

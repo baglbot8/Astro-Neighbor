@@ -158,10 +158,22 @@ varying vec3 v_world_pos;
 varying vec4 v_color;
 /// View-space normal BEFORE the R2.9 detail bump, so light() can measure what the bump changed.
 varying vec3 v_flat_nrm;
+// Heat item 3 (gpu-1 Fix A, docs/OPEN_ISSUES.md 57): the three low-frequency fbm calls that used to
+// run per FRAGMENT (patch, macro, macro_sun - wavelengths >= 2.2 m) now run once per VERTEX and are
+// interpolated. Measured visually identical: vertex spacing on a subdivision-6+ mesh is 0.16-0.35 m,
+// far finer than these bands, so linear interpolation between vertices reproduces the same fbm curve.
+// One vec4 varying (x=patch, y=macro, z=macro_sun; w unused) instead of three separate ones, to stay
+// well under WebGL2's guaranteed-15 varying budget. Crater dust (which also reads `patch`) benefits
+// too. Do not raise these frequencies without re-asserting `mesh_subdivisions >= 6` in planet_data.gd.
+varying vec4 v_macro;
 
 void vertex() {
 	v_world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_color = COLOR;
+	v_macro.x = pc_fbm3(v_world_pos * 0.11 + vec3(3.7));
+	v_macro.y = pc_fbm3(v_world_pos * 0.042 + vec3(11.3, 4.1, 7.9));
+	v_macro.z = pc_fbm3(v_world_pos * 0.055 + vec3(31.7, 2.3, 19.1));
+	v_macro.w = 0.0;
 }
 
 void fragment() {
@@ -181,15 +193,15 @@ void fragment() {
 	vec2 tri = pc_tri_pattern(uv, tri_radius, tri_density);
 	vec3 tri_col = mix(pc_in(color_b.rgb), pc_in(color_c.rgb), mix(step(0.62, tri.y), 0.38, lod));
 	vec3 grass = mix(pc_in(color_a.rgb), tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod));
-	float patch = pc_fbm3(wp * 0.11 + vec3(3.7));
+	float patch = v_macro.x;
 	grass *= 1.0 + (patch - 0.5) * patch_strength * 2.0;
 	grass = mix(grass, grass * vec3(1.03, 1.0, 0.93), smoothstep(0.55, 0.8, patch) * 0.35);
 	// Broad, deliberate darker meadow regions (large scale, NOT more noise) so real dark tones exist.
-	float macro = pc_fbm3(wp * 0.042 + vec3(11.3, 4.1, 7.9));
+	float macro = v_macro.y;
 	grass = mix(grass, pc_in(shadow_color.rgb), smoothstep(0.30, 0.62, macro) * shadow_patch);
 	// Sunlit meadow patches. R2.6: the old 1.34x lift pushed the brightest grass past luma 0.95 and
 	// was a big part of the blown-highlight count; a gentler lift still reads as a sunlit patch.
-	float macro_sun = pc_fbm3(wp * 0.055 + vec3(31.7, 2.3, 19.1));
+	float macro_sun = v_macro.z;
 	// NOT clamped to 1.0: clipping a strong sunlit patch clips the dominant channel first, which
 	// desaturates it. That is what turned Zorp's violet into a washed lilac while chasing luma p95.
 	// The albedo is allowed over 1 here; the tonemapper is what decides how bright it lands.

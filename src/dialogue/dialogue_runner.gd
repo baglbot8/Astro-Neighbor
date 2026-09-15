@@ -204,7 +204,9 @@ func say(npc: Node3D, lines: Array) -> void:
 
 ## Asks a question with 2-4 options. Returns the chosen index, or -1 if cancelled.
 ## When the box is already open (the usual case, right after `say`) the speaker's name tag stays up.
-func ask(npc: Node3D, prompt: String, options: Array) -> int:
+## `arm_delay` (default 0 = today's behaviour exactly): forwarded to DialogueBox.show_choice - seconds
+## after the pills show during which a press is ignored rather than answered (PHASE5_SPEC.md §2).
+func ask(npc: Node3D, prompt: String, options: Array, arm_delay: float = 0.0) -> int:
 	if not _active:
 		begin(npc)
 	var box := _ensure_box()
@@ -213,8 +215,8 @@ func ask(npc: Node3D, prompt: String, options: Array) -> int:
 	if not box.is_open():
 		# nothing on screen yet: show the prompt as a line first so the name tag is correct
 		await box.show_lines(_display_name(npc), [prompt], _voice(npc), _accent(npc))
-		return await box.show_choice("", options)
-	return await box.show_choice(prompt, options)
+		return await box.show_choice("", options, arm_delay)
+	return await box.show_choice(prompt, options, arm_delay)
 
 
 ## Narration with no speaker (system messages, "You handed over 3 Gear Bits.").

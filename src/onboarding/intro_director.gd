@@ -537,6 +537,55 @@ func _run_greeting() -> void:
 	_advance()
 
 
+## DEV HOOK (Phase 5, HOOKS - docs/PHASE5_SPEC.md): replays the radio call's lines for testing, with
+## none of `_run_greeting`'s state changes - it never touches FLAG_GREETED, never calls `_advance()`
+## (explicitly required: `_advance()` recomputes the beat machine, and `_campaign_call`/`_legacy_call`
+## can pick the "I'll manage"/"I know my way about" branch, which calls `_skip_all()` - harmless AFTER
+## every beat flag is already true, since `_set_beat` no-ops on an already-set flag, but NOT harmless
+## mid-tutorial, where it would silently finish every remaining beat as a side effect of hearing the
+## call again). Gated on `intro_done` for exactly that reason, so this can never be the footgun above.
+## Leaves every intro flag unchanged and `HintChannel.pending_keys()` empty: nothing here ever queues a
+## hint (the call's own lines never do), and any intro hint still sitting in the queue from earlier is
+## DROPPED (`cancel`, never `mark_acted` - it must never be marked "seen") so a stale one can never
+## show up over the replayed call. Awaitable, so a caller (the dev menu) can wait for it to finish
+## before doing anything else.
+func dev_replay_call() -> String:
+	if not GameState.flag(FLAG_DONE):
+		return "The tutorial isn't finished yet - finish it, then replay the call."
+	if _greeting or _crashing:
+		return "The intro is already talking; try again in a moment."
+	var runner := DialogueRunner.get_or_create(self)
+	var player := _find_player()
+	if runner == null or player == null or runner.is_active():
+		return "Can't replay the call right now (something else has the dialogue box)."
+	_greeting = true
+	var campaign := CampaignData.gates_on()
+	var radio := RadioSpeaker.make("mayor_orbit_radio", "%s (radio)" % Journal.npc_name("mayor_orbit"),
+		"elder", PROFESSOR_ACCENT)
+	if campaign:
+		_hang_campaign_radio(radio, player)
+	else:
+		player.add_child(radio)
+		radio.position = Vector3(0.0, 0.30, -0.45)
+	AudioManager.play_sfx("ui_open", -8.0)
+	runner.begin(radio, player)
+	if campaign:
+		await _campaign_call(runner, radio)
+	else:
+		await _legacy_call(runner, radio)
+	runner.finish()
+	if is_instance_valid(radio):
+		radio.queue_free()
+	if player.has_method("play_emote"):
+		player.call("play_emote", "wave")
+	_greeting = false
+	for b: int in _order():
+		HintChannel.cancel(_hint_key(b))
+	HintChannel.cancel("intro_flew")
+	HintChannel.cancel("intro_talk")
+	return "Replayed the radio call."
+
+
 ## WHERE THE CAMPAIGN CALL'S RADIO HANGS - which decides where the camera goes. CameraRig.focus_on
 ## turns the heading 85% of the way to side-on ACROSS the astronaut-to-speaker line, and
 ## DialogueRunner throws its focus point FOCUS_REACH (2.6x) past the speaker. With the radio 0.45 m in
@@ -581,11 +630,15 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
 	])
 	var solo: int = await runner.ask(radio, "Shall I talk you through it?", ["Yes, please", "I'll manage"])
 	if solo == 1:
-		await runner.say(radio, [
-			"Splendid. I'll keep my scope on you.\nShout if the sky misbehaves.",
-		])
-		_skip_all()
-		return
+		# "I'll manage" tapped by accident is exactly the user's 2026-09-14 report - confirm before
+		# retiring every beat. "Keep watching" falls through to the guided lines below: nothing lost.
+		var skip_it: bool = await SkipConfirm.ask(self, "Skip the walkthrough?", "Skip", "Keep watching")
+		if skip_it:
+			await runner.say(radio, [
+				"Splendid. I'll keep my scope on you.\nShout if the sky misbehaves.",
+			])
+			_skip_all()
+			return
 	await runner.say(radio, [
 		"First, have a little look around.\nYou've landed somewhere rather nice.",
 		"That rock knocked scrap all over the place.\nPick it up. Scrap mends things.",
@@ -605,12 +658,15 @@ func _legacy_call(runner: DialogueRunner, radio: Node3D) -> void:
 	])
 	var known: int = await runner.ask(radio, "Settling in?", ["Show me around", "I know my way about"])
 	if known == 1:
-		await runner.say(radio, [
-			"Ha! An old hand. Off you go, then.",
-			"Shout if the sky misbehaves.",
-		])
-		_skip_all()
-		return
+		# Same confirm as the campaign call above: "Keep watching" falls through, nothing lost.
+		var skip_it: bool = await SkipConfirm.ask(self, "Skip the walkthrough?", "Skip", "Keep watching")
+		if skip_it:
+			await runner.say(radio, [
+				"Ha! An old hand. Off you go, then.",
+				"Shout if the sky misbehaves.",
+			])
+			_skip_all()
+			return
 	await runner.say(radio, [
 		"Your dome is a short walk away. White, with a\nmailbox. Its door tucks the day away and saves it.",
 		"Your bag holds three bits of furniture already.\nPut them wherever pleases you. Nobody will tut.",

@@ -161,7 +161,10 @@ func _build_world() -> void:
 	sun.light_color = Color("#fff4d6")
 	sun.light_energy = 1.9
 	sun.rotation_degrees = Vector3(-34.0, -38.0, 0.0)
-	sun.shadow_enabled = true
+	# Heat item 2 (docs/OPEN_ISSUES.md 57): the title's sun shadow cost 0.62-0.64 ms of 6.35 (10%)
+	# and 94 draws under Compatibility, for a static globe nobody is inspecting for shadow quality.
+	# Off there; Forward+ keeps the shadow. Darkens the phone title to match the desktop - accepted.
+	sun.shadow_enabled = not Platform.is_compatibility_renderer()
 	sun.directional_shadow_max_distance = 140.0
 	sun.shadow_blur = 2.0
 	_cam_pivot.add_child(sun)

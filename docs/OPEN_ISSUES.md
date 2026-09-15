@@ -1810,3 +1810,79 @@ The integration run (Sonnet, 60 min) passed all eight items with Phase 3 in the 
   yet: every neighbour says the generic "Fancy another round of <game>?" until someone writes them in npc_data.gd.
 * **Harness note (not a game bug):** an automated chain of flights must wait on the rocket pad's `_busy`, not on
   the `rocket_arriving` flag, which goes false a beat before the arrival tail ends; `launch_to` refuses while busy.
+
+## 57. [2026-09-14] Heat and lag diagnosis: what costs the phone, measured and re-measured
+
+The user: "Continue to challenge heat and lag." Five Opus investigators measured on the Mac (Apple M5,
+Compatibility, the game's 0.75 3D scale, `--ui=mobile`), two at a time so timings stayed clean; each finding went to a
+re-measure skeptic (default REFUTED) and a fix-safety skeptic. The Mac is only a proxy for the iPhone. Raw findings,
+methods and probes: `.astro_scratch/phase5/inputs/heat_*.json` and `heat_ranked.md`.
+
+**Confirmed, ranked by gain per risk (ms per uncapped frame; spreads in brackets):**
+1. The collectible sparkles' GPUParticles3D cost far more than their look: zorp 1.71 [1.65-1.81], bolt 1.40, hub 0.64 ms
+   (a quarter of zorp's frame); CPUParticles3D copies with the same settings measured free. Cause unknown.
+2. The title's sun shadows on Compatibility: -0.62 ms of 6.35 and -94 draws. Turning them off darkens the phone title
+   to match the desktop.
+3. The ground shaders' fbm per fragment: moving it to `vertex()` saves 0.34-0.52 ms on every world with identical ground.
+4. Web frame pacing: drawing every frame behind a paused menu is waste - skipping alternate frames cut the WebKit GPU
+   process 26.4% -> 15.7%. A draw gate (render_loop_enabled by elapsed time) replaces any runtime cap.
+5. First sight of a world's shaders: the hub's first walk stalled 870 ms; a warm-up draw behind the load fade cut it to
+   ~270 ms (one ~505 ms frame behind black instead).
+6. Idle neighbours' move_and_slide: -0.11 to -0.14 ms of script per tick on the Commons.
+7. The launch frame builds the destination planet: 254-283 ms cold (later, riskier). 8. Omni lights shading the
+ground: 0.14-0.52 ms (later; changes the look). 9. ~60 of 3,600 allocations per frame (tiny). 10. A ground grain
+texture (later, high risk).
+
+**Do not do (measured):** `Engine.max_fps` 30 or any runtime cap on the web - the engine busy-waits and page CPU rose
+from 25% to 69-78%; low-processor mode; pausing with `disable_3d`; discard-free fade copies (221-338 ms first-fade
+freezes); threaded prebuild (the web has no threads); CPU copies of turbulent particles; throttling environment.gd
+(~50 us, the sky lags). Refuted: "the title costs as much as gameplay". At the game's 0.75 scale the camera-fade
+dither (entry 55's +1.1 ms at scale 2.0) measured about 0.2 ms.
+
+**Still unknown, measure on the phone:** whether iPhone WebKit keeps compiled shaders between page loads (the first
+flight stalls 1.5 s natively, the second 0.25 s); merged meshes for neighbours. Phase 5's DEV builder adds a Perf
+tab (an overlay with loop Hz, drawn fps, busy %, worst frame, and toggles) so the user can measure on the device.
+
+## 58. [2026-09-14] Phase 5 build round 1: seven passed, three stopped, and fixes that never left scratch copies
+
+Fourteen dependency-ordered builders (30 agents, 5.1 h). PASSED: L0 prework, M1 skiff, HEAT-R (sparkles, title
+shadows, ground fbm), HEAT-NPC, HOOKS and M2 on round 1; HEAT-WEB (the draw gate) on round 2. STOPPED after two
+fails: L1 (asteroid), K (story flow) and HEAT-LOAD (warm-up); K2, L2's critic, G and DEV's critic were blocked behind
+them.
+
+* **Gates written before the baseline was measured.** L1's "rock S <= 0.20" failed for a plain grey control rock too
+  (S 0.35 at dusk, 0.52 at night: the sky and fill tint), and the noon frame's S p90 is 0.79 with or without the rock.
+  L2 found the same on its sky frames (S p90 0.74-0.79) and its 2.5 ms sky budget came from the flight scene while the
+  Commons sky view costs 4.1-4.3 ms with or without the shower. The lead rewrote these as gates relative to a
+  same-frame control (docs/PHASE5_SPEC.md §0). Lesson: measure the scene's own number before writing an absolute gate.
+* **Round-2 fixes stuck in scratch copies.** Three round-2 builders (K, HEAT-WEB, HEAT-LOAD) fixed their files in
+  their scratch copies and never copied them back; three critics caught it ("the project file is still round 1"). The
+  lead synced the two that passed or mostly passed. Rule added to every brief: the deliverable is the project folder's
+  file, reported with its sha1, and critics FAIL a mismatch.
+* **Parallel builders guessed each other's APIs.** DEV built against HOOKS before HOOKS existed and passed a 1-based
+  step to a 0-based `dev_set_step`. A too-broad fix also broke what it did not test: HEAT-LOAD's round 2 skipped the
+  warm-up whenever any modal was open, which fixed the crash intro and silently skipped every pad arrival.
+* Round 2 (Opus redos): L1 re-checked under §0; K keeps the rocket in frame on the natural path only (a stage-0 load
+  plays the call where you stand); HEAT-LOAD skips only for the crash intro and warms the sky globes; DEV matches the
+  real hook API and reads web busy % from a head_include rAF wrapper the lead adds at ship time.
+
+## 59. [2026-09-14] Mobile data: smaller music and an engine cache, and two service-worker traps
+
+Measured on the live site before: about 24 MB on a first open and again after EVERY deploy (GitHub Pages gives every
+file a new weak ETag per deploy), engine 10.25 MB and pck 13.9 MB over the wire.
+
+* **Music (PASSED):** all 11 loops are mono at 33,075 Hz - exactly 3/4 of 44,100, so every loop length stays an exact
+  integer (32,000 gives none) - downmixed (L+R)/2 and resampled as one period. A scratch export's index.pck went from
+  15.08 to 8.04 MB (gzip 14.11 -> 7.40 MB); loudness within 0.4 LU; seams as smooth as before. Cost, unheard: Godot's
+  QOA noise is 3-7 dB higher relative to the music on busy tracks; the user judges by ear, with 35,280 Hz as the
+  fallback. build_all.py now writes music through tools/gen/audio/music_compact.py, so a rebuild no longer reverts it.
+* **Engine cache (PASSED, held back for a memory fix):** a new worker at a constant URL caches only index.wasm, keyed
+  by its SHA-256 that publish_web.sh writes into index.html; the page asks for index.wasm?h=<sha256>, so a page and an
+  engine from different builds are never combined. Bytes measured: first visit 24.1 MB, revisit ~0, pck-only deploy
+  14.0 MB with 0 engine bytes. A kill switch: publish with ASTRO_ENGINE_CACHE=off. **Held back** because verifying
+  the hash held the whole 39.5 MB engine in memory plus a Blob copy (~80 MB extra), which could crash an iPhone tab on
+  the first load; a streaming-hash fix is in progress.
+* **Trap 1:** in WebKit, a service worker that simply ignores a request makes the browser skip its HTTP cache - index.pck
+  re-downloaded 13.9 MB on every visit. Pass requests through with fetch(request).
+* **Trap 2:** a worker URL that changes per build swapped workers while the page loaded and broke boot once ("Can't find
+  variable: Engine"). Keep the worker URL constant; put the version in the request, not the worker.

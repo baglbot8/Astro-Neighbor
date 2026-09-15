@@ -64,6 +64,24 @@ const CHASE_UP := 3.5
 const CHASE_SIDE := 7.0
 const CHASE_LEAD := 3.0
 
+## The height CHASE_* (and space_travel.gd's own divided copy) were tuned against: the gold
+## rocket's, RocketModel.TOTAL_HEIGHT. Kept as a plain float, not a reference to RocketModel, so
+## this file never has to name that class to do arithmetic.
+const CHASE_REF_HEIGHT := 3.2
+
+## docs/PHASE5_SPEC.md §8, M2: "the skiff in flight, chase offsets scale by model_height()/3.2".
+## 1.0 for the 3.2 m rocket (every CHASE_* read is then exactly what it always was), ~0.72 for the
+## 2.3 m skiff. rocket_pad.gd and space_travel.gd each call this with their OWN model's
+## `model_height()` before multiplying it into their own copy of these offsets — sharing the one
+## division here is what keeps "in both files together" true by construction rather than by two
+## builders copying a formula the same way twice. Neither caller needs a further clamp: the eye
+## point this produces still passes through `rocket_pad.gd`'s existing ground-clearance clamp
+## (`_chase_frame`'s `min_r`), and a smaller offset can only pull the eye closer to the rocket, never
+## through the ground.
+static func chase_scale(model_height: float) -> float:
+	return model_height / CHASE_REF_HEIGHT
+
+
 ## How long the receiving scene takes to relax out of the matched seam arrangement into its own.
 const SETTLE_SECONDS := 2.4
 ## Arrival approach: the descent starts this far round the sphere from the pad, toward the spawn
@@ -114,6 +132,10 @@ static var env: Environment = null
 ## are not the only thing standing between the player and a double transition.
 static var switching := false
 
+## True when the pending "arrive" leg is a SKIPPED flight (see "flight skip" below): the destination
+## pad lands the rocket and the astronaut straight away under the fade instead of flying the descent.
+static var skipped := false
+
 
 ## Wipes the record. Called by whoever consumes it and by any code path that abandons a journey.
 static func clear() -> void:
@@ -124,11 +146,185 @@ static func clear() -> void:
 	sky = {}
 	env = null
 	switching = false
+	skipped = false
 
 
 ## True when `expected` ("depart" / "arrive") is the pending leg.
 static func pending(expected: String) -> bool:
 	return leg == expected and from_id != "" and to_id != ""
+
+
+# ----------------------------------------------------------------------------- flight skip
+## SKIP A FLIGHT, AFTER THE FIRST ONE (2026-09-14, the user: "Can we add a speed up or skip option for
+## traveling between planets? after the first time it plays? ... it starts getting a bit tedious
+## especially during fetch quests", then "People will probably just use skip" - so skip only, no
+## speed-up and no setting).
+##
+## THE RULE. The first flight ever plays in full with no control. Its landing sets `FLAG_FLOWN` in
+## GameState.flags (saved with everything else), and from then on every flight shows one small "Skip"
+## button (`SkipControl`, below) on every leg: the pad launch and climb, the space cruise, and the
+## descent. Tapping it asks first through the one shared SkipConfirm helper ("Keep flying" focused);
+## while the question is up the flight is FROZEN (the owning scene's process_mode is DISABLED, which
+## stops every tween bound to it), exactly the "hold your own clock" contract skip_confirm.gd asks for.
+##
+## WHAT A CONFIRMED SKIP DOES. A short fade to dark, then the destination's ordinary arrival state:
+##   * from the pad or the cruise, `write_skipped_arrival` writes the same "arrive" record, the same
+##     GameState ids and `spawn_at_pad`, and the owner emits the same EventBus signals, in the same
+##     order, that the full flight would have by that point - then `swap_scene(WORLD, true)`, the
+##     same install (prewarm collected) the real arrival cut uses. The destination pad sees
+##     `pending("arrive")` exactly as usual, with `skipped` set, and lands everything at once.
+##   * during the descent (already on the destination), the pad lands in place.
+## Both end in rocket_pad.gd `_finish_arrival`, the one hand-back every arrival uses, so the replay
+## board, visitors, the finale's arrival toasts, the compass and saving see a normal landing.
+const FLAG_FLOWN := "flight_skip_unlocked"
+## The fade to dark and back. Short on purpose: the whole point is to get the player there.
+const SKIP_FADE_OUT := 0.3
+const SKIP_FADE_IN := 0.4
+
+
+## True once the player has sat through (landed) one whole flight.
+static func skip_unlocked() -> bool:
+	return GameState.flag(FLAG_FLOWN)
+
+
+## The "arrive" record for a skipped flight, plus the GameState writes space_travel.gd `_arrive` makes.
+## No seam frame: nothing on the far side rebuilds a picture, the screen is dark.
+static func write_skipped_arrival(origin_id: String, dest_id: String) -> void:
+	leg = "arrive"
+	from_id = origin_id
+	to_id = dest_id
+	bodies = []
+	sky = {}
+	env = null
+	skipped = true
+	switching = true
+	GameState.previous_planet_id = origin_id
+	GameState.current_planet_id = dest_id
+	GameState.set_flag("spawn_at_pad", true)
+
+
+## The one small "Skip" button every flight scene shows once `skip_unlocked()`. Owned by the scene it
+## freezes (`attach(target)` adds it under `target`); it emits `confirmed` only after SkipConfirm said
+## yes, leaving `target` frozen so nothing moves under the fade the owner then runs. On "Keep flying"
+## the target's own process mode is restored and the flight carries on from the same frame.
+##
+## A Button, not tap-anywhere: during a flight the whole screen is the show, and a tap on the sky is
+## the likeliest accident there is. Bottom-right, where the touch controls' primary button normally
+## sits - they (and the HUD) are hidden for the whole flight by the "cutscene" modal, so that corner
+## is empty on every leg. No keyboard focus (focus_mode NONE): an accept key or pad button held from
+## boarding must not be able to press it; click or tap only.
+class SkipControl extends CanvasLayer:
+	signal confirmed
+
+	## Over the HUD (10) and the space map's chips (5), under SkipConfirm (150) and the fade (100).
+	const LAYER := 12
+	const QUESTION := "Skip this flight?"
+	const YES := "Skip"
+	const NO := "Keep flying"
+
+	## True from the tap until "Keep flying" (or, after a confirm, for good).
+	var frozen := false
+	var button: Button
+	var _target: Node
+	var _target_mode := Node.PROCESS_MODE_INHERIT
+	var _asking := false
+	## True while this control holds the tree paused for its question (see `_on_pressed`).
+	var _paused_tree := false
+
+	## Adds the control under `target` when the skip is unlocked; null otherwise.
+	static func attach(target: Node) -> SkipControl:
+		if target == null or not RocketJourney.skip_unlocked():
+			return null
+		var c := SkipControl.new()
+		c._target = target
+		target.add_child(c)
+		return c
+
+	func _ready() -> void:
+		name = "FlightSkip"
+		layer = LAYER
+		# Must keep answering while `_target` (our parent) is DISABLED - and SkipConfirm's popup layer
+		# is added under us, so it inherits this too.
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		var root := Control.new()
+		root.name = "Root"
+		root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.theme = UIStyle.theme()
+		add_child(root)
+		MobileUI.apply_theme(root)
+		var mobile := MobileUI.is_mobile()
+		button = Button.new()
+		button.name = "SkipButton"
+		button.text = YES
+		button.theme_type_variation = "Pill" if mobile else "PillSmall"
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.custom_minimum_size = Vector2(150.0, MobileUI.MIN_TOUCH) if mobile else Vector2(104.0, 44.0)
+		button.modulate.a = MobileUI.ALPHA_ACTIVE if mobile else 0.9
+		root.add_child(button)
+		button.pressed.connect(_on_pressed)
+		_place.call_deferred()
+		root.resized.connect(_place)
+
+	## Bottom-right, inside the safe area.
+	func _place() -> void:
+		if button == null:
+			return
+		var root := button.get_parent() as Control
+		var sa := MobileUI.safe_area() # left, top, right, bottom
+		var edge := MobileUI.pick(26.0, MobileUI.EDGE + 12.0)
+		button.reset_size()
+		button.position = root.size - button.size - Vector2(edge + sa.z, edge + sa.w)
+
+	func _on_pressed() -> void:
+		if _asking or frozen or not visible:
+			return
+		if _target == null or not is_instance_valid(_target):
+			return
+		_asking = true
+		frozen = true
+		_target_mode = _target.process_mode
+		_target.process_mode = Node.PROCESS_MODE_DISABLED
+		# The whole tree pauses too, for as long as the question is up. The DISABLED target is what
+		# holds the flight's own clock; the pause is for everything that watches the clock from
+		# OUTSIDE the flight - above all EventBus's stuck-player watchdog, which thaws (and shows) a
+		# player frozen for 12 s and does not know a question is open. Flights are timed to stay
+		# under it (launch 9.7 s, descent 10 s); a question left open for a few seconds is not
+		# (measured: a 4 s question at the pad tripped it mid-climb and showed the hidden astronaut).
+		# SkipConfirm's popup and this control are PROCESS_MODE_ALWAYS, so they still answer.
+		if not get_tree().paused:
+			get_tree().paused = true
+			_paused_tree = true
+		var go: bool = await SkipConfirm.ask(self, QUESTION, YES, NO)
+		if not is_instance_valid(self) or not is_inside_tree():
+			return
+		_release_pause()
+		_asking = false
+		if go and is_instance_valid(_target) and _target.is_inside_tree():
+			visible = false
+			confirmed.emit()
+			return
+		frozen = false
+		if is_instance_valid(_target):
+			_target.process_mode = _target_mode
+
+	func _release_pause() -> void:
+		if _paused_tree and is_inside_tree():
+			get_tree().paused = false
+		_paused_tree = false
+
+	## Never leave the tree paused behind us, whatever took this control out of the tree.
+	func _exit_tree() -> void:
+		if _paused_tree:
+			get_tree().paused = false
+			_paused_tree = false
+
+	## For the owner once a leg is past the point a skip means anything (the touchdown).
+	func retire() -> void:
+		if _asking:
+			return
+		visible = false
 
 
 # ----------------------------------------------------------------------------- geometry helpers
