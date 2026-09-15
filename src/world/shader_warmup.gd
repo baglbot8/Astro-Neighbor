@@ -124,7 +124,7 @@ static func _read_enabled() -> bool:
 
 ## A copy of what the most recent `run()` did. Fields: ran (bool), planet (String), reason (String:
 ## "disabled" | "no_world" | "crash_intro" | "already_warmed" | "no_viewport" | "freed" | "ok"),
-## and when it ran: views, sky_meshes, materials_warmed, lamps, particles, total_ms. Only "ran" and "reason" are
+## and when it ran: views, sky_meshes, materials_warmed, lamps, particles, range_copies, total_ms. Only "ran" and "reason" are
 ## guaranteed present.
 static func last_report() -> Dictionary:
 	return _last_report.duplicate()
@@ -181,6 +181,7 @@ static func run(tree: SceneTree) -> void:
 	var holder := Node.new()
 	holder.name = "ShaderWarmup"
 	world.add_child(holder)
+	var range_count := _add_range_copies(world, holder)
 	var visible_size: Vector2 = vp.get_visible_rect().size
 	var size := Vector2i(maxi(64, int(visible_size.x * VIEW_SCALE)), maxi(32, int(visible_size.y * VIEW_SCALE)))
 	for i in VIEW_DIRS.size():
@@ -223,6 +224,7 @@ static func run(tree: SceneTree) -> void:
 	_last_report = {
 		"ran": true, "planet": pid, "reason": "ok", "views": VIEW_DIRS.size(),
 		"sky_meshes": sky_count, "materials_warmed": mats.size(), "lamps": lamp_count, "particles": particle_copies.size(),
+		"range_copies": range_count,
 		"total_ms": Time.get_ticks_msec() - t0,
 	}
 
@@ -252,6 +254,45 @@ static func _particle_copies(env: Node) -> Array:
 		c.emitting = true
 		out.append(c)
 	return out
+
+
+## An in-place copy, with no visibility range, of every visible mesh that HAS one (HEAT-ARR2,
+## docs/OPEN_ISSUES.md 62 stall A). A visibility range is measured from the camera, so the far warm-up
+## views cull such a mesh and its shader variant is never drawn here: the rocket's rivets
+## (rocket_model.gd `_build_rivets`, a MultiMesh with visibility_range_end 15 m) then compiled on
+## their first draw, 0.7 s before touchdown on a hub hop (+18-28 ms, once per process). Measured by the
+## 2026-09-15 diagnosis: a 2 cm copy in front of the warm-up camera did NOT warm them (37-42 ms), an
+## in-place copy with the range cleared did (17.5-18.2). Same mesh (or MultiMesh), same material, same
+## transform, freed with the holder; drawn in the main view too, which is behind the solid fade.
+## Returns how many copies were added.
+static func _add_range_copies(world: Node, holder: Node) -> int:
+	var n := 0
+	for g0 in world.find_children("*", "GeometryInstance3D", true, false):
+		var g := g0 as GeometryInstance3D
+		if g.visibility_range_end <= 0.0 or not g.is_visible_in_tree() or holder.is_ancestor_of(g):
+			continue
+		var c: GeometryInstance3D
+		if g is MultiMeshInstance3D and (g as MultiMeshInstance3D).multimesh != null:
+			var mm := MultiMeshInstance3D.new()
+			mm.multimesh = (g as MultiMeshInstance3D).multimesh
+			c = mm
+		elif g is MeshInstance3D and (g as MeshInstance3D).mesh != null:
+			var src := g as MeshInstance3D
+			var mi := MeshInstance3D.new()
+			mi.mesh = src.mesh
+			for s in src.get_surface_override_material_count():
+				mi.set_surface_override_material(s, src.get_surface_override_material(s))
+			c = mi
+		else:
+			continue
+		c.name = "WarmRangeCopy"
+		c.material_override = g.material_override
+		c.layers = g.layers
+		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		holder.add_child(c)
+		c.global_transform = g.global_transform
+		n += 1
+	return n
 
 
 ## A copy of every OmniLight3D and SpotLight3D in the world that is NOT lighting anything right now

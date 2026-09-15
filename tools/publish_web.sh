@@ -133,7 +133,7 @@ KILLSW
 # tools/web/astro-engine-sw.js for the measurement behind that). It does not touch
 # index.service.worker.js above, which must stay constant.
 #
-# KILL SWITCH: `ASTRO_ENGINE_CACHE=off tools/publish_web.sh` publishes a page that unregisters the
+# KILL SWITCH (the default since 2026-09-15; `ASTRO_ENGINE_CACHE=on` opts back in): a plain publish unregisters the
 # engine worker and deletes its caches on the next visit, without needing the worker's help. (Or edit
 # `var ENABLED = true;` to false in the published index.html.)
 #

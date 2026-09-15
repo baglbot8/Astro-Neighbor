@@ -313,9 +313,9 @@ var _plume_outer: MeshInstance3D
 var _plume_collar: MeshInstance3D
 var _plume_mats: Array[ShaderMaterial] = []
 var _plume_caps: Array[float] = []
-var _licks: GPUParticles3D
+var _licks: CPUParticles3D
 var _flame_glow: MeshInstance3D
-var _smoke: GPUParticles3D
+var _smoke: CPUParticles3D
 var _engine_light: OmniLight3D
 var _cabin_light: OmniLight3D
 var _beacon_mesh: MeshInstance3D
@@ -419,8 +419,7 @@ func set_engine(on: bool, power: float = 1.0) -> void:
 	if on and _smoke_enabled:
 		# Buoyancy along the model's own up so exhaust puffs keep drifting instead of freezing in
 		# mid-air once the engine cuts (rocket critic: "two smoke puffs hang frozen after landing").
-		var pm := _smoke.process_material as ParticleProcessMaterial
-		pm.gravity = global_basis.y.normalized() * 0.9
+		_smoke.gravity = global_basis.y.normalized() * 0.9
 	if not on:
 		set_flame_scale(0.0)
 	elif _flame_scale <= 0.001:
@@ -436,8 +435,7 @@ func set_flame_scale(f: float) -> void:
 	var girth := lerpf(0.62, 1.0, minf(s, 1.0)) + maxf(s - 1.0, 0.0) * 0.30
 	_flame.scale = Vector3(girth, s, girth)
 	_flame_glow.scale = Vector3.ONE * lerpf(0.32, 0.95, minf(s, 1.2))
-	var pm := _smoke.process_material as ParticleProcessMaterial
-	pm.initial_velocity_max = 2.2 + 3.4 * s
+	_smoke.initial_velocity_max = 2.2 + 3.4 * s
 	_flame.visible = _flame_scale > 0.01
 
 
@@ -1487,7 +1485,8 @@ func _build_flame(flame_parent: Node3D = null, flame_y: float = NOZZLE_MOUTH_Y,
 	_licks = _make_licks()
 	_flame.add_child(_licks)
 
-	_smoke = GPUParticles3D.new()
+	# CPUParticles3D, not GPUParticles3D (HEAT-ARR2): see `_make_licks`.
+	_smoke = CPUParticles3D.new()
 	_smoke.name = "Smoke"
 	_smoke.amount = 34
 	# Short-lived: a 2.1 s puff with heavy damping just stopped dead and hung in the air after the
@@ -1497,40 +1496,34 @@ func _build_flame(flame_parent: Node3D = null, flame_y: float = NOZZLE_MOUTH_Y,
 	_smoke.emitting = false
 	_smoke.position = Vector3(0.0, smoke_y, 0.0)
 	_smoke.visibility_aabb = AABB(Vector3(-14, -30, -14), Vector3(28, 60, 28))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.24
-	pm.direction = Vector3(0.0, -1.0, 0.0)
-	pm.spread = 34.0
-	pm.initial_velocity_min = 1.8
-	pm.initial_velocity_max = 4.2
-	pm.gravity = Vector3.ZERO
-	pm.damping_min = 0.8
-	pm.damping_max = 1.6
-	pm.scale_min = 0.5
-	pm.scale_max = 1.0
-	pm.angular_velocity_min = -60.0
-	pm.angular_velocity_max = 60.0
+	_smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	_smoke.emission_sphere_radius = 0.24
+	_smoke.direction = Vector3(0.0, -1.0, 0.0)
+	_smoke.spread = 34.0
+	_smoke.initial_velocity_min = 1.8
+	_smoke.initial_velocity_max = 4.2
+	_smoke.gravity = Vector3.ZERO
+	_smoke.damping_min = 0.8
+	_smoke.damping_max = 1.6
+	_smoke.scale_amount_min = 0.5
+	_smoke.scale_amount_max = 1.0
+	_smoke.angular_velocity_min = -60.0
+	_smoke.angular_velocity_max = 60.0
 	var grow := Curve.new()
 	grow.add_point(Vector2(0.0, 0.30))
 	grow.add_point(Vector2(0.35, 1.0))
 	grow.add_point(Vector2(1.0, 1.35))
-	var grow_t := CurveTexture.new()
-	grow_t.curve = grow
-	pm.scale_curve = grow_t
+	_smoke.scale_amount_curve = grow
 	var grad := Gradient.new()
 	grad.set_color(0, Color(0.70, 0.68, 0.68, 0.0))
 	grad.set_color(1, Color(0.36, 0.35, 0.40, 0.0))
 	grad.add_point(0.10, Color(0.80, 0.78, 0.77, 0.78))
 	grad.add_point(0.45, Color(0.56, 0.54, 0.58, 0.40))
-	var grad_t := GradientTexture1D.new()
-	grad_t.gradient = grad
-	pm.color_ramp = grad_t
-	_smoke.process_material = pm
+	_smoke.color_ramp = grad
 	var puff := QuadMesh.new()
 	puff.size = Vector2(1.05, 1.05)
 	puff.material = make_puff_material(Color("#e2ddd6"), Color("#9b96a4"), 0.85, 0.8)
-	_smoke.draw_pass_1 = puff
+	_smoke.mesh = puff
 	add_child(_smoke)
 
 
@@ -1550,48 +1543,47 @@ func _flame_shell(node_name: String, profile: PackedVector2Array, seg: int,
 
 
 ## Small orange sparks flicking off the plume edge — motion on top of the solid silhouette.
-func _make_licks() -> GPUParticles3D:
-	var gp := GPUParticles3D.new()
+func _make_licks() -> CPUParticles3D:
+	# CPUParticles3D, not GPUParticles3D (HEAT-ARR2, docs/OPEN_ISSUES.md 62), like the smoke above,
+	# the pad's dust ring and the astronaut's sparkles. Real journey fen -> zorp, 3 runs each, with the
+	# dust and sparkles already CPU: GPU licks and smoke left frames of 30-46 ms early in the descent
+	# (-6.05 and -5.67 s before touchdown); CPU licks and smoke, none over 30 there. Same settings one
+	# for one (showcase/heat-arr2_parity_run.gd diffs them); fixed_fps 0 - see rocket_pad.gd `_build_dust`.
+	var gp := CPUParticles3D.new()
 	gp.name = "FlameLicks"
 	gp.amount = 22
 	gp.lifetime = 0.42
 	gp.local_coords = true
 	gp.emitting = false
 	gp.visibility_aabb = AABB(Vector3(-3, -8, -3), Vector3(6, 10, 6))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.22
-	pm.direction = Vector3(0.0, -1.0, 0.0)
-	pm.spread = 16.0
-	pm.initial_velocity_min = 3.4
-	pm.initial_velocity_max = 6.2
-	pm.gravity = Vector3.ZERO
-	pm.damping_min = 1.4
-	pm.damping_max = 2.4
-	pm.scale_min = 0.55
-	pm.scale_max = 1.0
+	gp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	gp.emission_sphere_radius = 0.22
+	gp.direction = Vector3(0.0, -1.0, 0.0)
+	gp.spread = 16.0
+	gp.initial_velocity_min = 3.4
+	gp.initial_velocity_max = 6.2
+	gp.gravity = Vector3.ZERO
+	gp.damping_min = 1.4
+	gp.damping_max = 2.4
+	gp.scale_amount_min = 0.55
+	gp.scale_amount_max = 1.0
 	var shrink := Curve.new()
 	shrink.add_point(Vector2(0.0, 1.0))
 	shrink.add_point(Vector2(0.4, 0.7))
 	shrink.add_point(Vector2(1.0, 0.0))
-	var shrink_t := CurveTexture.new()
-	shrink_t.curve = shrink
-	pm.scale_curve = shrink_t
+	gp.scale_amount_curve = shrink
 	var grad := Gradient.new()
 	grad.set_color(0, Color(1.0, 0.86, 0.55, 0.95))
 	grad.set_color(1, Color(0.93, 0.38, 0.12, 0.0))
 	grad.add_point(0.45, Color(1.0, 0.58, 0.18, 0.75))
-	var grad_t := GradientTexture1D.new()
-	grad_t.gradient = grad
-	pm.color_ramp = grad_t
-	gp.process_material = pm
+	gp.color_ramp = grad
 	var quad := QuadMesh.new()
 	# Small: at 0.26 these read as soft bubbles drifting off the plume rather than as sparks.
 	quad.size = Vector2(0.15, 0.15)
 	var fmat := MaterialLib.glow_sprite(Color("#ffd7a0"), _flame_intensity * 0.8, {"softness": 0.55, "core": 0.34}).duplicate() as ShaderMaterial
 	quad.material = fmat
 	_flame_mats.append(fmat)
-	gp.draw_pass_1 = quad
+	gp.mesh = quad
 	return gp
 
 

@@ -349,7 +349,14 @@ func draw_gate_dps() -> float:
 	return float(gate.call("drawn_per_second")) if gate != null and gate.has_method("drawn_per_second") else -1.0
 
 
-# ============================================================================= GPU particles off
+# ============================================================================= particles off
+## "GPU particles off" toggles both GPUParticles3D and CPUParticles3D. The pad dust ring, the
+## astronaut sparkles and the rocket smoke/flame licks were moved to CPUParticles3D (heat item 1,
+## docs/OPEN_ISSUES.md 57); a toggle that only matched GPUParticles3D left those running.
+static func _is_particle_node(n: Node) -> bool:
+	return n is GPUParticles3D or n is CPUParticles3D
+
+
 func particles_off() -> bool:
 	return _particles_off
 
@@ -366,15 +373,15 @@ func _apply_particles_off(on: bool) -> void:
 	if on:
 		_hidden_particles.clear()
 		for n: Node in _walk(world):
-			if n is GPUParticles3D and (n as GPUParticles3D).visible:
-				(n as GPUParticles3D).visible = false
+			if _is_particle_node(n) and (n as GeometryInstance3D).visible:
+				(n as GeometryInstance3D).visible = false
 				_hidden_particles.append(n)
 		if not world.is_connected("child_entered_tree", _on_world_child_added):
 			world.child_entered_tree.connect(_on_world_child_added)
 	else:
 		for n: Variant in _hidden_particles:
 			if is_instance_valid(n):
-				(n as GPUParticles3D).visible = true
+				(n as GeometryInstance3D).visible = true
 		_hidden_particles.clear()
 		_maybe_disconnect_watch(world)
 
@@ -434,8 +441,8 @@ func _apply_neighbours_off(on: bool) -> void:
 
 
 func _on_world_child_added(n: Node) -> void:
-	if _particles_off and n is GPUParticles3D and (n as GPUParticles3D).visible:
-		(n as GPUParticles3D).visible = false
+	if _particles_off and _is_particle_node(n) and (n as GeometryInstance3D).visible:
+		(n as GeometryInstance3D).visible = false
 		_hidden_particles.append(n)
 	if _omni_off and n is OmniLight3D and (n as OmniLight3D).visible:
 		(n as OmniLight3D).visible = false

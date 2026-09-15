@@ -251,7 +251,74 @@ loops still seamless; about 7 MB saved) and **an engine cache** (a strictly vers
 the engine, keyed by its hash, with a kill switch; updates then cost about 7 MB instead of 24). A slimmer custom engine
 build (about 10 -> 6 MB, big tool downloads and hours of building) is held back.
 
+**Engine cache dropped (the user, 2026-09-15: "Skip it for now - every update downloads the engine again").** The
+service-worker cache failed two critics on WebKit memory (`docs/OPEN_ISSUES.md` 60). The live site keeps
+`ASTRO_ENGINE_CACHE=off`; a separate engine site stays an idea for later.
+
 Also that day: the user picked **Zorp's variant A** (4 long, fat curls in one row), with its phone-camera gap closed.
+
+## Cast redesign (decided 2026-09-15)
+
+The user: *"some of our neighbor character designs dont look that great / need improvements notably: the two small green /
+yellow ish aliens and the repeated robot dj design. the three eyed alien is eh as well."* They offered five ideas and
+approved the lead's mapping; every neighbour keeps their id, name, job, voice and lines:
+
+| neighbour | new design (the user's words) |
+|---|---|
+| Fen | "Sentient alien plant with thorned vine legs and arms" |
+| Pip | "tiny green alien (stereotypical alien black eyes) floating sitting in a stereotypical saucer ship with two small levers" |
+| Pop | "Fuzzy monster alien with sharp teethy smile" |
+| DJ Nova | "a floating robot like Eve from Wall-E" - our own floating robot in that sleek style, never a copy |
+
+The fifth idea - *"another astronaut but with a large orange tentacle coming out of a crack from the face mask"* with small
+tentacles poking through the suit - becomes a **new neighbour after the story** (a fellow astronaut who crashed long ago
+and befriended the creature living in their suit), after Phase 5. Designs are built as two variants each in scratch
+copies; the user picks from comparison sheets; nothing enters the game until the finale that stages these characters
+has passed its checks.
+
+## Cast redesign, second pass (asked 2026-09-15)
+
+After the first comparison sheets the user asked for four changes:
+* **Colours:** "Pop orange dj bluer is fine" - Pop's fur goes warm orange so the saucer alien Pip is the only green
+  one; DJ Nova's shell moves toward blue so it no longer shares Zorp's purple.
+* **Grig:** "remove that flat square at the top of Grig's head? It should just be a rounded oval. Also shrink his
+  nostrils to thin slits."
+* **Fen:** "They shouldnt have hands and feet but rather like long vines with pointy ends curling up. The head's petals
+  dont really read like a flower. We may need more petals but also have them coming out at an angle from the neck so
+  it's more like a huge collar (except for petals blocking the face)" - more petals, set at an angle from the neck
+  like a big collar round the face, never over it; arms and legs are long vines that end in pointy tips that curl up.
+* Pip (the saucer) and DJ Nova's shape are accepted as built.
+
+## The mystery neighbour (asked 2026-09-15; built after Phase 5 ships)
+
+The tentacle astronaut, in the user's words: *"personality-wise he should try to pretend to be a human but obviously
+sounds like he's not. I'm thinking he could be a mystery neighbor that shows up randomly on planets sometimes and gives
+unique / rare trophy-type gifts if you answer his questions correctly about the game (multiple choice)"*.
+
+Their follow-up the same day: *"Let's have Norm appear even before you beat the game, but only midway through the game.
+His suit should look a bit ragged as well. Once all his normal trophy rewards deplete e.g. bronze, silver, gold, he
+should give a statue of himself which is constantly his reward after that. Player may collect a lot of these as a funny
+goal for their planet. Also when you land on a planet he's in, a notification should pop up and hints that something
+might be off or interesting on this planet. Since planets can't be viewed as a whole, people may constantly miss him
+because they don't notice he's on the other side of the planet."*
+
+Rules (the user's where quoted above; lead defaults otherwise, open to change):
+* **Look:** a worn, ragged astronaut suit (frayed, patched, scuffed) with a cracked visor; a big orange tentacle curls
+  out of the crack, and small ones poke out of the suit at the arms and legs and get pushed back in. Working name
+  **Norm** ("a normal human").
+* **Voice:** tries hard to sound human and gets it a little wrong ("Greetings, fellow Earth person. I also have one
+  head."). Lines stay short and kind; he is never scary.
+* **When:** from the middle of the story on (lead default: once the third of five ship parts is fitted), and after the
+  story. Some days he stands somewhere on a random world other than home (about one day in four, never two days
+  running), with a "?" marker instead of "!". He is gone the next day. He never appears while the ending plays.
+* **Landing hint:** when you land on a world where he is, a notification says something is a little off here, without
+  saying where - he may be on the far side of the planet.
+* **The quiz:** three multiple-choice questions (three answers each) about the game. Before the story ends, questions
+  only use what this save has already met or visited. No question repeats until the bank has been used up.
+* **Rewards:** all three right gives the next trophy in order - bronze, then silver, then gold - each a decoration.
+  After the gold one he gives a **statue of himself** every time, with no limit, so a planet full of Norm statues is a
+  silly goal of its own. A wrong answer gives a funny line and he leaves; he comes back another day with new
+  questions. No stardust penalty.
 
 ## Open questions
 

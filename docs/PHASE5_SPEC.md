@@ -59,6 +59,64 @@ These replace anything below that says otherwise. Each comes from a measurement 
 * **M2 chase.** Chase offsets scale by model_height() / 3.2 (exactly 1.0 for the rocket); the "gate" is the pad's
   existing ground-clearance clamp.
 
+### Round 3 rulings (2026-09-14, lead, after K2 failed two Opus critics)
+
+* **K2 shot S is a screen split, not a camera angle.** The round-2 critic found S passing on the MEAN head x (0.47)
+  while Grig, Fen and Zorp (x 0.52-0.62) stood on the rocket's half, because the gate compared only the mean and the
+  side-on tolerance was 55°. New gate: every crowd head that shows has its centre on one half with at least 0.03 margin
+  (all x <= 0.47 or all x >= 0.53), and the astronaut's and the rocket's screen centres are on the other half. A raised
+  three-quarter camera is allowed when that holds, since the phone shows the split, not the angle. When no candidate
+  passes the split and the cover gate, S falls back to W and says so in the trace (5 of 12 layouts in round 2 is accepted).
+* **K2 shots P and PA: their own gates are hard.** On seed 9100 layout 0 the cover fallback picked W's framing for PA,
+  P:bolt and P:dj_nova: Bolt's head sat in the pill rect and the speaker's head share fell to 0.11-0.19 (gate 0.18). Rank
+  cover ONLY among candidates that pass P (speaker head >= 18%, heads 20-60% from the top, clear of box and pills; for PA
+  the Professor left of the pills). In P and PA the cover gate applies to the speaker (and the Professor in PA); another
+  head may leave the frame instead of being covered. Never fall back to W for P or PA.
+* **K2 pills wait for the camera.** The round-2 critic saw the ask's pills appear while the camera was still on S, over
+  four heads, with the PA blend taking 6.3 s to settle. The pills (and the 0.6 s arm) now start when the PA camera has
+  settled; the Professor's prompt box shows during the blend.
+* **§7 meeting draws re-gated.** "+62 draws" assumed all friends together cost <= 60. The critic measured about 58 draws
+  per friend: +288 draws and +2.9 ms at W for five friends plus the rock. That is the friends' own models, not the
+  meeting's code. New gate: the meeting adds at most +6 draws and +0.3 ms over the same friends standing in the same
+  spots as plain visitors, at the same camera. Merging each neighbour's rigid meshes is filed for heat wave 2, after the
+  cast redesign lands (it changes four of those models).
+* **§7 arrival stall exempt from K2 and L2.** 89-97 ms frames 2.2-2.9 s after the Commons loads, during the rocket's
+  arrival, repeat in the critic's no-meeting control, so they are not the finale's. They hit every Commons arrival and are
+  under diagnosis as their own heat item. The finale's gate is: no frame over 50 ms that the same-seed control does not have.
+* **L2 19 s streak core.** The sky p95 at 19 s is set by the moon's disc and halo, not the sky (streaks peak at luma
+  0.86-0.87; the |A-B| mask passed -0.010/+0.013/+0.056 over 3 runs). The streak mask is pixels BRIGHTER than the
+  same-frame control, and the sky p95 excludes the moon's disc and halo.
+* **L2 7.5 s plume.** The control is §0's (rocket body drawn): measured +0.49/+0.62 ms, inside +0.7. The body-removed
+  variant is not the control.
+* **L2 reused side pick.** Decorations can be placed on the Commons during free roam, so the reused side pick must also
+  be dropped when the Commons decoration list changed since opening_frame, not only when the crowd moved 0.5 m.
+
+### Round 4 rulings (2026-09-15, lead, after K2R stopped on "every head clear of the box")
+
+* **P and PA are speaker close-ups.** K2R measured that keeping EVERY head inside 20-60%, clear of the box and <= 20%
+  covered has no passing framing in about 95% of shots on this crowd (1 of 22 from a 600-framing ray search): low cameras
+  hide the back row, high ones push near heads over the box, and three solver variants each broke another gate. The lead
+  looked at the round-1 file's frames (k2r-critic1/runs/send): the Professor's P and every W read well, but P:pip and P:pop
+  put a giant foreground head (Zorp, the Professor) between the camera and a back-row speaker. New gates for P and PA:
+  the speaker (and the Professor in PA) keeps head >= 18%, band 20-60%, clear of the box and pills, cover <= 0.20. Other
+  heads may be covered, cropped or under the box, but none may be under the pills, and **no other head in frame may be
+  drawn taller than 1.1x the speaker's head** (nothing looms in front of the speaker).
+* **Back-row speakers get no close-up.** Pip, Pop, Stella and DJ Nova stand behind the front row, and the only cameras that
+  see them past it look down over giant front-row heads. Their boxes use W, and the speaker is marked by a visible move
+  from their existing states when the box opens. A front-row speaker whose P finds no framing under the rule above also
+  uses W.
+* **"No head more than 20% covered, nobody hidden"** (K2 item 1) applies to W, U, S and R. P and PA follow the rule above.
+* **Arrival stalls (diagnosed and cross-checked on 2026-09-15; see OPEN_ISSUES 62)** are a heat job, not K2's.
+* **Round 5 outcome (2026-09-15, lead).** Every job passed an independent Opus or Sonnet critic on the project files:
+  K2S (finale_meeting.gd d9933058), G (finale_gift.gd a4403733), CAMRIG (camera_rig.gd a992c77c) and HEAT-ARR2. Two
+  rules came out of K2S's critic rounds and are now part of P and PA: **the lens stays within 45° of the speaker's
+  facing** (round 1 found close-ups of backs and side views that passed every other gate), and **the astronaut's helmet
+  counts as a head** under the 1.1x rule (the solver holds 1.05x; measured at most 0.95x over seeds 9300-9311, 76 of 76
+  P/PA frames passing). Accepted as known, not fixed: the 45° gate reads the model root, and the Head node sways about
+  +-25° on top of it (one of 76 frames showed Fen side-on); one random layout's PA had a large prop filling about 60% of
+  the frame; some Vela close-ups at the row's end show mostly sky. The gift reads the meeting's private `_goal` and
+  `_has_goal` and relies on its straight-line camera move; keep both, or add a public accessor, before changing either.
+
 ## 1. State machine (K)
 `GameState.flags["finale_stage"]`, read through `int()` (JSON returns floats); inert unless `CampaignData.gates_on()`.
 

@@ -11,7 +11,9 @@ extends Node3D
 ## Touch front end (see the "external look / zoom" block): add_look(), add_look_px(), add_zoom(),
 ## set_zoom_distance(), get_zoom_distance(), get_zoom_range(), get_zoom_fraction().
 ## It also fades out any decoration standing between the camera and the astronaut, so hub props can
-## never hide the player - see the near-geometry fade block below.
+## never hide the player - see the near-geometry fade block below. That fade is suspended outright
+## while some other Camera3D is the viewport's current one (a cutscene): see the guard at the top of
+## `_update_occluder_fade`.
 
 const PIVOT_HEIGHT := 1.0
 const YAW_SPEED_DEG := 120.0
@@ -1365,6 +1367,27 @@ func _auto_recenter(delta: float) -> void:
 ## back in once it moves off the sight line. See the constants above for why this and not a longer
 ## spring arm. Called once per frame with the camera's FINAL position, after `_avoid_terrain`.
 func _update_occluder_fade(delta: float, cam_pos: Vector3) -> void:
+	# CUTSCENE-CAMERA GUARD. The gift builder measured that this fade kept running while a cutscene's
+	# OWN Camera3D was current: a hit on the pad's DeckBody dithered every mesh under Rocket/Pad, and
+	# the pad's parts visibly faded back IN for about 0.7 s (47 frames) at the start of a finale shot.
+	# The fade is a property of THIS rig's own line of sight - it has no business probing or animating
+	# against a sight line nobody is drawing from, and every past decoration-fade fix (the capsule
+	# width, the dither copies) was about making the fade correct FOR THE PLAYER, not about running it
+	# unconditionally.
+	#
+	# So: the instant `_camera` is not `get_viewport().get_camera_3d()`, stop probing and snap every
+	# faded prop back to fully solid in THIS SAME FRAME with no ease - a tween here is exactly the
+	# "faded back in" artifact this guard exists to remove, and a solid prop costs nothing to hold
+	# solid every frame after. `_probe_timer` is zeroed rather than left to run down while blocked, so
+	# the moment gameplay gets the camera back the next probe fires immediately - the same or a faster
+	# hand-back than the un-guarded cadence gave, never slower.
+	if _camera == null or get_viewport().get_camera_3d() != _camera:
+		if not _faded.is_empty():
+			for id: int in _faded:
+				_force_solid(_faded[id] as Dictionary)
+			_faded.clear()
+		_probe_timer = 0.0
+		return
 	_probe_timer -= delta
 	if _probe_timer <= 0.0:
 		_probe_timer = PROBE_INTERVAL
@@ -1658,6 +1681,19 @@ func _restore_fade_originals(e: Dictionary) -> void:
 		if bool(sw["live"]) and _slot_holds_copy(sw):
 			_set_slot(sw["g"] as GeometryInstance3D, int(sw["slot"]), int(sw["surf"]), sw["restore"] as Material)
 	e.erase("swaps")
+
+
+## Snaps one fade entry fully solid immediately - no ease, no probe - for the cutscene-camera guard
+## in `_update_occluder_fade`. Clears the Forward+ transparency directly (the normal per-frame loop
+## is what does that the rest of the time, and the guard returns before reaching it) and restores any
+## Compatibility dither copies through `_restore_fade_originals`, the same path a natural fade-out
+## uses once `t` reaches 0.
+func _force_solid(e: Dictionary) -> void:
+	var meshes: Array = e.get("meshes", [])
+	for g: Variant in meshes:
+		if is_instance_valid(g):
+			(g as GeometryInstance3D).transparency = 0.0
+	_restore_fade_originals(e)
 
 
 ## Swaps whose slot still holds our copy, for `--fade-debug` and the test probe.

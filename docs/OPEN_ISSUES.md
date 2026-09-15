@@ -1886,3 +1886,63 @@ file a new weak ETag per deploy), engine 10.25 MB and pck 13.9 MB over the wire.
   re-downloaded 13.9 MB on every visit. Pass requests through with fetch(request).
 * **Trap 2:** a worker URL that changes per build swapped workers while the page loaded and broke boot once ("Can't find
   variable: Engine"). Keep the worker URL constant; put the version in the request, not the worker.
+
+## 60. [2026-09-15] The engine cache stopped after two fails: WebKit's Cache Storage costs memory on every visit
+
+The streaming fix (entry 59's held-back cache) FAILED its critic twice. Measured in the WKWebView harness on the Mac:
+* WebKit's cache.put of a streamed body holds the WHOLE body in memory, and re-reading the engine from the HTTP cache
+  arrives as one 39.5 MB chunk; any worker JavaScript that reads the download costs +12 to +45 MB at 6-12 MB/s.
+* Moving the hashing into the page brought a first download at phone speeds (3-24 MB/s) to +4 to +8 MB, but every
+  later visit served from the cache hashes the 39.5 MB engine again: +25 to +45 MB and 0.13-0.2 s of CPU on the Mac on
+  EVERY launch - a cost on every play session to save bytes only on updates. Not shipped; the live site still ships the
+  cache switched off (ASTRO_ENGINE_CACHE=off), and the project's tools/web/ files were restored to that shipped version.
+* **Confirmed on the live site:** GitHub Pages gives an UNCHANGED file a new weak ETag on every deploy
+  (index.wasm W/"6aa76602-25aec03" -> W/"6aa89d98-25aec03", byte-identical in git), and it sends
+  access-control-allow-origin: *. So same-repo HTTP caching can never keep the engine across deploys, but a file served
+  from a site that is NOT redeployed keeps its ETag and revalidates with a tiny 304.
+Next step, if the user agrees: host the engine in a second GitHub Pages repo under an immutable versioned folder, which
+needs no service worker, no hashing and no extra memory.
+
+## 61. [2026-09-15] The meeting camera failed two Opus critics on gates that averaged or guessed
+
+K2 (the meeting, finale_meeting.gd) stopped after two FAILs. Neither fail was a bad camera solver; both were gate wording:
+* **An average hid a wrong picture.** Shot S ("crowd one half, astronaut and rocket the other") was tested as the MEAN
+  head x against the middle (0.47 passed) with a 55° side-on tolerance. Three heads (x 0.52-0.62) stood on the rocket's
+  half. A composition gate must test every item that shows, not a mean. Same family as entry 33's cancelling regions.
+* **A fallback broke the gate it served.** When no P or PA candidate passed cover, the solver fell back to W's framing,
+  which put Bolt's head in the pill rect and dropped the speaker share to 0.11-0.19 (gate 0.18). A fallback may relax
+  only the soft score, never the shot's own hard gates.
+* **A budget written before a measurement.** §7 allowed the meeting "+62 draws (friends <= 60)". One friend measured
+  about 58 draws, so five friends are +288 draws and +2.9 ms by their models alone. The gate now measures the meeting's
+  own overhead over the same friends as plain visitors (PHASE5_SPEC §0 "Round 3 rulings").
+* **A stall blamed on the newest code.** 89-97 ms frames 2.2-2.9 s after every Commons load repeated in a no-meeting
+  control. Always run the control before assigning a stall to the feature under test. Diagnosed as its own heat item.
+
+## 62. [2026-09-15] Three first-draw stalls at every Commons arrival, and why a bigger warm-up is not the answer
+
+An Opus diagnosis found three stalls, each proven by an A/B that removed only that thing (3 runs each, Compatibility,
+2556x1179, day; the smallest effect those runs could show was about 3 ms). An Opus cross-check re-ran them and confirmed:
+* **A, 0.7 s before touchdown, once per process (+18-28 ms):** the rocket's rivets draw for the first time.
+  `rocket_model.gd:1363` sets `visibility_range_end = 15`, so the rivets are culled out of the warm-up's far views. A 2 cm
+  copy in front of the camera did NOT warm them (37-42 ms); an in-place copy with the range cleared did (17.5-18.2).
+* **B, at touchdown, on EVERY visit (+16-21 ms):** the pad's DustRing (a GPUParticles3D) emits for the first time.
+* **C, about 6.8 s after load, on EVERY visit (+65-75 ms):** the clothes-store mannequin turns "happy" and
+  `astronaut_model.gd:530` restarts its sparkles (a GPUParticles3D) for the first time.
+* **Why not warm them all:** copying every world particle into the warm-up removed B and C on the first visit only, and
+  cost +0.45-0.6 s of load (2025-2142 ms became 2568-2734, ranges apart). The rocket's descent keeps playing during the
+  longer warm-up, so the player sees 0.1-0.5 s less of the landing. On a second visit B and C came back (34.6 and
+  84.6-84.8 ms), which points to a per-instance first-emit cost, not a once-per-process shader compile (not proven).
+* **Also found, not isolated:** Fen's arrival has a 159+170+96 ms stall inside RocketModel (hull meshes hidden 88-97,
+  flame and smoke hidden 146-176; the rivet fix does not help); Zorp has a 56-62 ms frame about 1.06 s after touchdown.
+* Heat wave 1 already moved collectible sparkles to CPUParticles3D; the same move is the first thing to test for B and C.
+* **Fixed the same day (HEAT-ARR2, Opus builder and critic):** the dust ring, the astronaut sparkles and the rocket's
+  smoke and flame licks became CPUParticles3D with the same settings, and the warm-up adds in-place copies of meshes with
+  a visibility range. Critic's numbers (3 base vs 3 delivered, under the lock): A 41-46 -> 19-22 ms; B 18-28 and C 18-27
+  ms on the first AND second visit, day and 21:00 (C was 86-96); warm-up 1967 -> 1963 ms mean; touchdown -0.004 s. The
+  look matched frame by frame on both renderers. So the per-visit cost was the GPU particle systems, and moving them to
+  the CPU fixed it with no warm-up at all, where warming them had cost half a second and still failed on visit 2.
+* **Two more lessons from that job:** a real journey arrival (space_travel) never runs the warm-up - SceneRouter skips
+  it - so stall A only ever hit go_to_planet hops; and `collectible.gd:155` builds its glow-disc StandardMaterial3D fresh
+  in every scene, which compiles again on each visit: a 78-89 ms frame 0.6 s into the descent on the second and later
+  hub arrivals (keeping one material alive across the scene change removed it). Zorp keeps a 37-50 ms frame at the camera
+  hand-back 1.9 s after touchdown in the old build too; cause unknown.

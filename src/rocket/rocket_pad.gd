@@ -217,7 +217,7 @@ var _mast_halo: MeshInstance3D
 var _marker: Node3D
 var _marker_mat: ShaderMaterial
 var _compass: PadCompass
-var _dust: GPUParticles3D
+var _dust: CPUParticles3D
 var _interactable: Interactable
 var _player: Player
 var _ground_r := 16.0
@@ -733,7 +733,15 @@ func _build_hose() -> void:
 
 
 func _build_dust() -> void:
-	_dust = GPUParticles3D.new()
+	# CPUParticles3D, not GPUParticles3D (HEAT-ARR2, docs/OPEN_ISSUES.md 62 stall B). The GPU version
+	# stalled the touchdown frame on EVERY visit: real journey zorp -> hub, Compatibility, 2556x1179,
+	# worst frame at touchdown 39.8-50.7 ms on the first visit and 39.4-42.7 on the second (3 runs);
+	# this CPU version 18.3-20.5 / 18.3-19.6. Same settings one for one (the mapping
+	# CPUParticles3D.convert_from_particles uses; showcase/heat-arr2_parity_run.gd diffs them), except
+	# fixed_fps 0: the GPU node ran at 30 fps INTERPOLATED, a CPU node at 30 fps is not interpolated.
+	# Why the GPU system paid again per visit is not proven; a proven sibling: collectible.gd's glow
+	# disc, a StandardMaterial3D built per scene, recompiles on every visit unless one is kept alive.
+	_dust = CPUParticles3D.new()
 	_dust.name = "DustRing"
 	_dust.amount = 56
 	_dust.lifetime = 1.9
@@ -743,29 +751,26 @@ func _build_dust() -> void:
 	_dust.emitting = false
 	_dust.position = Vector3(0.0, DECK_Y + 0.05, 0.0)
 	_dust.visibility_aabb = AABB(Vector3(-9.0, -3.0, -9.0), Vector3(18.0, 8.0, 18.0))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
-	pm.emission_ring_axis = Vector3.UP
-	pm.emission_ring_radius = 1.35
-	pm.emission_ring_inner_radius = 0.5
-	pm.emission_ring_height = 0.05
-	pm.direction = Vector3(0.0, 0.34, 0.0)
-	pm.spread = 82.0
-	pm.flatness = 0.82
-	pm.initial_velocity_min = 3.4
-	pm.initial_velocity_max = 6.4
-	pm.gravity = Vector3.ZERO
-	pm.damping_min = 1.6
-	pm.damping_max = 2.8
-	pm.scale_min = 0.9
-	pm.scale_max = 1.7
+	_dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	_dust.emission_ring_axis = Vector3.UP
+	_dust.emission_ring_radius = 1.35
+	_dust.emission_ring_inner_radius = 0.5
+	_dust.emission_ring_height = 0.05
+	_dust.direction = Vector3(0.0, 0.34, 0.0)
+	_dust.spread = 82.0
+	_dust.flatness = 0.82
+	_dust.initial_velocity_min = 3.4
+	_dust.initial_velocity_max = 6.4
+	_dust.gravity = Vector3.ZERO
+	_dust.damping_min = 1.6
+	_dust.damping_max = 2.8
+	_dust.scale_amount_min = 0.9
+	_dust.scale_amount_max = 1.7
 	var grow := Curve.new()
 	grow.add_point(Vector2(0.0, 0.4))
 	grow.add_point(Vector2(0.4, 1.05))
 	grow.add_point(Vector2(1.0, 1.35))
-	var grow_t := CurveTexture.new()
-	grow_t.curve = grow
-	pm.scale_curve = grow_t
+	_dust.scale_amount_curve = grow
 	# Warm mid-grey, fully opaque at the head. A near-white puff at 0.5 alpha simply did not exist
 	# against the deck; this one has to be visibly darker than what it rolls across.
 	var grad := Gradient.new()
@@ -773,14 +778,11 @@ func _build_dust() -> void:
 	grad.set_color(1, Color(0.50, 0.46, 0.42, 0.0))
 	grad.add_point(0.07, Color(0.78, 0.72, 0.62, 1.0))
 	grad.add_point(0.60, Color(0.60, 0.56, 0.50, 0.72))
-	var grad_t := GradientTexture1D.new()
-	grad_t.gradient = grad
-	pm.color_ramp = grad_t
-	_dust.process_material = pm
+	_dust.color_ramp = grad
 	var puff := QuadMesh.new()
 	puff.size = Vector2(1.35, 1.35)
 	puff.material = RocketModel.make_puff_material(Color("#a9997c"), Color("#5f5748"), 0.82, 0.95)
-	_dust.draw_pass_1 = puff
+	_dust.mesh = puff
 	_pad_root.add_child(_dust)
 
 

@@ -454,7 +454,7 @@ var _elbows: Array[Node3D] = []
 var _hands: Array[Node3D] = []
 var _carry_anchor: Node3D
 var _carry_mesh: MeshInstance3D
-var _sparkles: GPUParticles3D
+var _sparkles: CPUParticles3D
 var _antenna_mat: ShaderMaterial
 var _lamp_mat: ShaderMaterial
 var _jet_mats: Array[ShaderMaterial] = []
@@ -463,6 +463,8 @@ var _jet_nozzles: Array[Node3D] = []
 var _puffs: JetPuffs
 
 static var _star_tex: ImageTexture
+## The sparkles' draw material, ONE for every astronaut model in the process (`_sparkle_material`).
+static var _sparkle_mat: StandardMaterial3D
 
 
 func _init() -> void:
@@ -1761,8 +1763,13 @@ func _jet_nozzle(parent: Node3D, pos: Vector3, m_dark_metal: ShaderMaterial, m_a
 	_jet_nozzles.append(nz)
 
 
-func _make_sparkles() -> GPUParticles3D:
-	var gp := GPUParticles3D.new()
+func _make_sparkles() -> CPUParticles3D:
+	# CPUParticles3D, not GPUParticles3D (HEAT-ARR2, docs/OPEN_ISSUES.md 62 stall C). The GPU version
+	# stalled the first "happy" of every visit - the player's landing hop and the clothes-store
+	# mannequin: real journey zorp -> hub, worst frame 83-88 ms on the first and second visit (3 runs);
+	# CPU, with the draw material kept for the whole process (`_sparkle_material`), 19.1-28.3 ms.
+	# Same settings one for one except fixed_fps 0 - see rocket_pad.gd `_build_dust`.
+	var gp := CPUParticles3D.new()
 	gp.name = "Sparkles"
 	gp.emitting = false
 	gp.one_shot = true
@@ -1771,45 +1778,46 @@ func _make_sparkles() -> GPUParticles3D:
 	gp.explosiveness = 0.85
 	gp.local_coords = false
 	gp.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 4, 4))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.45
-	pm.direction = Vector3(0, 1, 0)
-	pm.spread = 80.0
-	pm.initial_velocity_min = 0.8
-	pm.initial_velocity_max = 2.0
-	pm.gravity = Vector3.ZERO
-	pm.damping_min = 1.5
-	pm.damping_max = 2.5
-	pm.angular_velocity_min = -180.0
-	pm.angular_velocity_max = 180.0
+	gp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	gp.emission_sphere_radius = 0.45
+	gp.direction = Vector3(0, 1, 0)
+	gp.spread = 80.0
+	gp.initial_velocity_min = 0.8
+	gp.initial_velocity_max = 2.0
+	gp.gravity = Vector3.ZERO
+	gp.damping_min = 1.5
+	gp.damping_max = 2.5
+	gp.angular_velocity_min = -180.0
+	gp.angular_velocity_max = 180.0
 	var sc := Curve.new()
 	sc.add_point(Vector2(0.0, 0.3))
 	sc.add_point(Vector2(0.25, 1.0))
 	sc.add_point(Vector2(1.0, 0.0))
-	var sct := CurveTexture.new()
-	sct.curve = sc
-	pm.scale_curve = sct
-	pm.scale_min = 0.6
-	pm.scale_max = 1.2
+	gp.scale_amount_curve = sc
+	gp.scale_amount_min = 0.6
+	gp.scale_amount_max = 1.2
 	var grad := Gradient.new()
 	grad.set_color(0, Color("#fff6c8"))
 	grad.set_color(1, Color("#ffe27a"))
-	var gt := GradientTexture1D.new()
-	gt.gradient = grad
-	pm.color_ramp = gt
-	gp.process_material = pm
+	gp.color_ramp = grad
 	var quad := QuadMesh.new()
 	quad.size = Vector2(0.16, 0.16)
+	quad.material = _sparkle_material()
+	gp.mesh = quad
+	return gp
+
+
+static func _sparkle_material() -> StandardMaterial3D:
+	if _sparkle_mat != null:
+		return _sparkle_mat
 	var mat := MaterialLib.flat_unlit(Color.WHITE, true).duplicate() as StandardMaterial3D
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_texture = _get_star_texture()
 	mat.billboard_keep_scale = true
-	quad.material = mat
-	gp.draw_pass_1 = quad
-	return gp
+	_sparkle_mat = mat
+	return mat
 
 
 ## Small 4-point sparkle texture generated in code (shared).

@@ -11,6 +11,27 @@ extends Interactable
 const SHARD_COLOR := Color("#ffe27a")
 const SHARD_SPARKLE := Color("#ffd166")
 
+## Ground glow-disc material, shared per colour for the process (heat item 1,
+## docs/OPEN_ISSUES.md): collectible.gd used to build a fresh StandardMaterial3D per instance,
+## so the shader compiled again on every visit - 78-89 ms on a hub arrival frame. One material
+## per colour, alive for the process, the same pattern as PlanetPropMeshes.sparkle_material's
+## _mat_cache. Nothing below may write a per-instance value into a cached entry.
+static var _disc_mat_cache: Dictionary = {}
+
+static func _disc_material(sparkle_col: Color) -> StandardMaterial3D:
+	var key := sparkle_col.to_html()
+	if _disc_mat_cache.has(key):
+		return _disc_mat_cache[key]
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow.albedo_color = Color(sparkle_col.r, sparkle_col.g, sparkle_col.b, 0.11)
+	glow.disable_receive_shadows = true
+	glow.albedo_texture = PlanetPropMeshes.soft_dot_texture()
+	_disc_mat_cache[key] = glow
+	return glow
+
 var kind: String = "stardust_shard"
 var spawn_id: String = ""
 var planet_id: String = "home"
@@ -152,14 +173,7 @@ func _build_visual() -> void:
 	dm.size = Vector2(0.8, 0.8)
 	dm.orientation = PlaneMesh.FACE_Y
 	disc.mesh = dm
-	var glow := StandardMaterial3D.new()
-	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	glow.albedo_color = Color(sparkle_col.r, sparkle_col.g, sparkle_col.b, 0.11)
-	glow.disable_receive_shadows = true
-	glow.albedo_texture = PlanetPropMeshes.soft_dot_texture()
-	disc.material_override = glow
+	disc.material_override = _disc_material(sparkle_col)
 	disc.position.y = 0.03
 	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(disc)

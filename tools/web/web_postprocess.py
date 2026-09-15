@@ -51,7 +51,9 @@ def main():
         if not os.path.isfile(p):
             sys.exit("missing %s" % p)
 
-    enabled = os.environ.get("ASTRO_ENGINE_CACHE", "on").strip().lower() != "off"
+    # Off unless asked for: the user dropped the engine cache on 2026-09-15 ("Skip it for now") after it failed two
+    # critics on WebKit memory (docs/OPEN_ISSUES.md 60). ASTRO_ENGINE_CACHE=on brings it back.
+    enabled = os.environ.get("ASTRO_ENGINE_CACHE", "off").strip().lower() == "on"
     engine_hash = sha256_file(wasm_path)
     pck_path = os.path.join(out, "index.pck")
     if not os.path.isfile(pck_path):

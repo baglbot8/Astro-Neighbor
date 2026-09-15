@@ -486,6 +486,82 @@ def part_fitted():
     return {"a": part_fitted_a, "b": part_fitted_b, "c": part_fitted_c}[PART_FITTED_TAKE]()
 
 
+# --------------------------------------------------------------------------- finale (Phase 5)
+# docs/PHASE5_SPEC.md §5 "Sound" / §2 "Send-off" and "Gift". STYLE_GUIDE "Sound identity": no
+# mallet, glockenspiel or bell for any of the four - so no I.marimba/I.vibraphone/I.glockenspiel/
+# I.bell/I.music_box anywhere below. All four are non-positional (finale_launch.gd plays them
+# through AudioManager.play_sfx / its own AudioStreamPlayer, never play_sfx_at), so they are
+# stereo, like the game's other jingles. Each is loudness-matched (S.loudness_k, no fitted gain -
+# the shared -3 dBFS peak-normalise in render() already does the levelling that matters; these are
+# checked, not tuned) against an existing shipped SFX named in its docstring.
+
+def finale_impact():
+    """Plays 0.4 s after `CrashFx.flash()` hides the rocket (finale_launch.gd IMPACT_SFX_T) - the
+    asteroid taking the hit. A soft low thoom: a rounded sub punch (20 ms attack, no click) under a
+    swell of low-passed noise, like the boom of far-off thunder - not a snare crack or a mallet hit.
+    <=1.5 s. Loudness matched to `rocket_land` (both are the game's one-shot 'impact' sounds)."""
+    n = S.n_samples(1.45)  # 0.15 s over the longest dry decay so the plate tail settles before the cap
+    t = S.times(n)
+    thoom = S.sine(70.0 * np.exp(-t / 0.22) + 32.0, n) * S.env_perc(n, 0.20, 0.02) * 1.3
+    sub = S.sine(30.0, n) * S.env_perc(n, 0.25, 0.03) * 0.5
+    body = S.lowpass(S.noise(n, 250), 220.0, 0.8) * S.env_perc(n, 0.18, 0.015) * 0.9
+    air = S.bandpass(S.noise(n, 251), 900.0, 0.6) * S.env_perc(n, 0.15, 0.05) * 0.18
+    y = S.lowpass(thoom + sub + body, 900.0) + air
+    return _rev(S.soft_clip(y, 0.75), 0.22, 0.55, tone=3500.0)
+
+
+def finale_shower():
+    """One wave of the meteor shower (finale_launch.gd WAVE_T, played 3x at 12.5/14.5/16.5 s): §4
+    'an airy high shimmer that swells per wave over a resolving pad'. A slow-swelling sine cluster
+    (octaves + a detuned third, no glockenspiel) over a soft pad that opens on a suspended chord and
+    settles onto a warm one, as if the sky calms after each pass. Loudness matched to
+    `friendship_up` (the game's other airy shimmer)."""
+    n = S.n_samples(3.2)  # covers both chords' dur+release (1.65 s, 2.85 s) plus reverb settle
+    t = S.times(n)
+    swell = S.adsr(n, 0.75, 0.45, 0.5, 1.1)
+    shimmer = (S.sine(2600.0, n) + 0.7 * S.sine(2600.0 * 1.5, n, 0.15)
+               + 0.5 * S.sine(2600.0 * 2.0, n, 0.3)
+               + 0.35 * S.sine(2600.0 * 3.0 * 1.003, n, 0.5)) * swell * 0.17
+    dust = S.highpass(S.noise(n, 260), 8000.0, 0.9) * swell * 0.10
+    y = _at(shimmer + dust, 0.0, n)
+    y += _at(_warm_chord("[D4,G4,A4]", 0.55, 0.28), 0.05, n)        # Dsus - open, unresolved
+    y += _at(_warm_chord("[C4,E4,G4,B4]", 0.9, 0.38), 0.9, n)       # settles onto Cmaj7, warm
+    return _rev(y, 0.28, 0.55, tone=9000.0)
+
+
+def finale_hero_star():
+    """One hero star crossing the upturned faces (finale_launch.gd HERO_T, 15-18 s): §4 'a filtered
+    swish, pitched per star'. This file is the base voice; `_hero_sfx()` pitches it per star with
+    its own AudioStreamPlayer.pitch_scale (STEPS), so nothing here should be a fixed, struck note -
+    a continuous bandpassed noise sweep with a soft sine glide underneath, no mallet or twinkle.
+    <=1.2 s. Loudness matched to `shooting_star` (the closest existing 'star' sound; only its level
+    is reused, not its glockenspiel twinkle, which this file deliberately has none of)."""
+    n = S.n_samples(1.1)
+    sweep = S.sweep_lowpass(S.highpass(S.noise(n, 270), 1200.0), 8500.0, 1400.0, 0.55) \
+        * S.adsr(n, 0.08, 0.25, 0.5, 0.35) * 0.34
+    glide = S.sine(S.glide_freq(1800.0, 700.0, n, 0.85), n) * S.adsr(n, 0.05, 0.3, 0.5, 0.4) * 0.10
+    shimmer = S.highpass(S.noise(n, 271), 9000.0, 0.8) * S.adsr(n, 0.1, 0.3, 0.5, 0.3) * 0.08
+    y = sweep + glide + shimmer
+    return _rev(y, 0.4, 0.85, tone=9500.0)
+
+
+def skiff_reveal():
+    """The gift's tarp sliding off the skiff (finale_gift.gd, forthcoming): §5 'a tarp whoosh into a
+    warm two-chord pad'. A fluttering, tremolo'd broadband sweep (cloth pulled off, not a smooth
+    door-swoosh) into two pad chords - an open, unresolved one and a warm one it lands on - built
+    from `_warm_chord`'s saw+sub pad, never a struck note. <=4 s. Loudness matched to `part_fitted`
+    (the closest existing 'whoosh into a chord' reveal)."""
+    n = S.n_samples(3.85)  # 0.15 s under the cap, over both chords' dur+release (2.2 s, 3.55 s)
+    whoosh_n = S.n_samples(0.9)
+    flutter = 1.0 + 0.35 * S.lfo(11.0, whoosh_n) + 0.18 * S.lfo(23.0, whoosh_n, phase0=0.3)
+    tarp = S.sweep_lowpass(S.highpass(S.noise(whoosh_n, 280), 500.0), 4200.0, 900.0, 0.35) \
+        * flutter * S.adsr(whoosh_n, 0.05, 0.35, 0.4, 0.35) * 0.5
+    y = _at(tarp, 0.0, n)
+    y += _at(_warm_chord("[F3,A3,C4,G4]", 0.6, 0.5), 0.55, n)        # Fadd9 - open, unresolved
+    y += _at(_warm_chord("[C3,E3,G3,C5]", 1.1, 0.55), 1.4, n)        # lands on C major, warm
+    return _rev(y, 0.22, 0.5, tone=7500.0)
+
+
 # name -> (generator, stereo?, loop?)
 SFX = {
     "footstep_grass_0": (lambda: footstep_grass(0), False, False),
@@ -525,6 +601,10 @@ SFX = {
     "text_advance": (text_advance, True, False),
     "shooting_star": (shooting_star, True, False),
     "part_fitted": (part_fitted, True, False),
+    "finale_impact": (finale_impact, True, False),
+    "finale_shower": (finale_shower, True, False),
+    "finale_hero_star": (finale_hero_star, True, False),
+    "skiff_reveal": (skiff_reveal, True, False),
 }
 
 

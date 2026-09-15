@@ -154,6 +154,11 @@ your choice ("Send her" or "Give me a moment") → the empty rocket breaks the g
 one shot, seen from the ground → your friends' gift: a small ship (the skiff) → every world open, Planet stats back.
 Plus the first heat-and-lag fixes, and a dev menu that reaches every state for testing.
 
+**Status 2026-09-15:** every Phase 5 job has passed an independent critic after build rounds 1-5 (K2 needed three
+lead re-diagnoses, recorded in `docs/PHASE5_SPEC.md` §0 and `docs/OPEN_ISSUES.md` 61); follow-ups added on the way:
+the send-off's skip asks first, the camera rig stops fading props under cutscene cameras, and the Commons arrival
+stalls were fixed by moving the pad dust, astronaut sparkles and rocket smoke to CPU particles (`OPEN_ISSUES` 62).
+
 **Changed 2026-09-14** (the user: "start working on Phase 5 now. Update dev tools in the Settings to allow for proper
 testing of the new features. Continue to challenge heat and lag and address any issues there."). The design is
 `docs/PHASE5_SPEC.md`. Departures from the first plan: the send-off stays in the Commons scene like the crash intro
