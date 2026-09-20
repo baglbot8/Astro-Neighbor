@@ -94,6 +94,8 @@ func _ready() -> void:
 	# placed decorations, space trash) and before planet_loaded, so the visitor is there from the landing.
 	if ResourceLoader.exists(VISITOR_SYSTEM_PATH):
 		load(VISITOR_SYSTEM_PATH).attach(self)
+	if ResourceLoader.exists("res://src/campaign/norm_system.gd"):  # Norm (docs/NORM_SPEC.md §2), after the visitor's rules
+		load("res://src/campaign/norm_system.gd").attach(self)
 	# Phase 5 lead prework (docs/PHASE5_SPEC.md §1/§8). Guarded: the game boots and plays with no
 	# finale.gd present, on every world.
 	# Guard the LOAD too, not only the file: a finale.gd whose dependency (FinaleState) is missing fails to

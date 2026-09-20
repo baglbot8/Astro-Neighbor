@@ -12,9 +12,11 @@ extends ChibiModel
 ##   1. ONE EYE. A single 0.112 m eyeball on ONE thick central trunk. Every other neighbour has
 ##      exactly two (Zorp two matched stalks, Pip long+short, Pop two close-set, Mayor Orbit two on
 ##      goggle lenses, Bolt and DJ Nova two on a faceplate).
-##   2. A TALL HEAD — 0.550 x 0.660 x 0.500 at n 3.2. Not the tallest-to-widest ratio the first
-##      build tried (see HEAD_SEMI_GRIG's R3.3 note) but still the tallest head in the cast, and a
-##      standing stone with a face, which ties him to his planet.
+##   2. A TALL HEAD — 0.550 x 0.660 x 0.500 at n 2.3, a rounded oval (see the 2026-09-15 ROUND 2 note
+##      on HEAD_N_GRIG below — round 1 of this same change deleted the capital block but left the
+##      exponent at the old boxy 3.2, and a critic caught the flat top that left behind). Not the
+##      tallest-to-widest ratio the first build tried (see HEAD_SEMI_GRIG's R3.3 note) but still the
+##      tallest head in the cast, and a standing stone with a face, which ties him to his planet.
 ##   3. AN UNDER-BITE. Four blunt near-square teeth hang from the upper jaw and TWO tusks stand up
 ##      from the lower one, so the two rows interlock the wrong way round. Everyone else's mouth is
 ##      a single top row of points. Plus a TWO-lobed mitt against three-or-zero fingers.
@@ -22,10 +24,13 @@ extends ChibiModel
 ##      of the cast wears cloth (Zorp's scarf, the twins' aprons, the Mayor's waistcoat).
 ##   5. A LAGGING EYE-TRACK. The trunk arrives a beat after the head turns; nothing else in the cast
 ##      has a delayed feature, and on one huge eye it reads instantly as thought.
-##   6. A CAPITAL. One continuous chamfered block of cut stone ringing the top of the head, with the
-##      dome and the eye trunk still rising above it — see `_build_capital`. Every other crown in the
-##      game is a ROW of small parts (antennae, stalks, horns, cups, spikes); his is a single
-##      quarried block, so it shares no primitive with anyone.
+##   6. ===== FORMER TRAIT, REMOVED 2026-09-15 ===== used to be A CAPITAL: one continuous chamfered
+##      block of cut stone ringing the top of the head. The user looked at the cast lineup and said
+##      "remove that flat square at the top of Grig's head? It should just be a rounded oval" — so
+##      `_build_capital` and its slab are GONE and the head is now the plain superellipsoid crown on
+##      its own, the same primitive `_add_head_shell` gives everyone else. See the tombstone at the
+##      top of the "head detail" section below for the full removal note (what it was, why it read as
+##      a flat square, and why it is not coming back on a whim).
 ##   7. CRACKED CRAZE AND NOTHING ELSE. His skin runs `sd_skin` with the spot term switched fully
 ##      OFF, so he is cell walls only where Zorp is blobs only — see SURF_HEAD.
 ##
@@ -33,9 +38,10 @@ extends ChibiModel
 ## dark RIM PLATE bedded under the stone capital. The user asked what that line across the middle of
 ## his face was supposed to be and asked for two nostril holes in its place, so the rim is gone, the
 ## lower face is one uninterrupted crazed field, and the nose is two sunk black slots in raised stone
-## lips. `_build_capital` records what the rim was, how it was identified and what still separates
-## the block from the head without it; `_build_nostrils` records the holes and the two "the mesh is
-## not the extent you asked for" traps that decide their primitives.
+## lips. The capital tombstone under "head detail" below records what the rim was and how it was
+## identified (the capital it was bedded under is now ALSO gone, see the same tombstone);
+## `_build_nostrils` records the holes and the two "the mesh is not the extent you asked for" traps
+## that decide their primitives.
 ##
 ## The STRATA BANDS that used to ring the head went with it. They never rendered, they cost 330
 ## triangles of buried geometry, and after this change they are one "fix" away from redrawing the
@@ -76,22 +82,44 @@ const FOOT := Color("#5a4f45")
 const WEDGE := Color("#8b8578")       ## the cutting wedge at his hip
 
 # ---------------------------------------------------------------------------------- head shape
-## A head nearly twice as tall as it is wide with flat chamfered side planes. `head_y` puts the chin
-## at 1.1010 - 0.4300 = 0.6710, which is EXACTLY Zorp's chin line (0.8963 - 0.2250), so the shared
-## shoulder and collar geometry still meets it.
+## A head nearly twice as tall as it is wide, a ROUNDED OVAL — not flat-sided, see the ROUND 2 note
+## on `HEAD_N_GRIG` just below. `head_y` puts the chin at 1.1010 - 0.4300 = 0.6710, which is EXACTLY
+## Zorp's chin line (0.8963 - 0.2250), so the shared shoulder and collar geometry still meets it.
 ## R3.3 — REBALANCED. The first build was 490 x 860 mm, nearly twice as tall as wide, and it read as
 ## a vertical loaf with a small mouth floating on a large blank field — the exact complaint the user
 ## made about Zorp ("a lot of open space ... shrink that open space down more"). 550 x 660 keeps him
 ## clearly the TALLEST head in the cast, which is his silhouette, without the blank slab.
 const HEAD_SEMI_GRIG := Vector3(0.2750, 0.3300, 0.2500)
-const HEAD_N_GRIG := 3.2
+## ROUND 2, 2026-09-15 — LOWERED 3.2 -> 2.3. The change just before this one deleted the capital
+## block (a "flat square at the top of Grig's head" the user asked to have removed) but left this
+## exponent untouched, and a critic measured what that left behind: a rounded BOX, not an oval — the
+## top 2% of the head's height (i.e. the band from 96% to 100% of the way from chin to crown) spanned
+## 49-52% of the head's own width in a silhouette render, dead flat, against 28% for a true ellipse
+## (n 2) and the critic's own theoretical number for the shipped 3.2: `[1 - 0.96^n]^(1/n)` gives
+## 51.9% at n 3.2, matching the 49-52% measurement almost exactly. That formula is the whole story of
+## this constant: it is the fraction of the head's half-width still standing at 4% of the way down
+## from the crown, and it is monotonically INCREASING in n — a higher exponent packs more of the
+## curvature into a narrower band right at the pole, which is exactly what "flat top" means on a
+## superellipsoid. Solving it back down: n 2.4 -> 37.2%, n 2.3 -> 35.0%, n 2.2 -> 32.8%. 2.3 was
+## picked as the critic's suggested-range midpoint (2.2-2.4) — comfortably under the 40% ceiling,
+## and closer to a true oval's 28% than to the rejected box's 52%, while still reading as slightly
+## more definite than a bare ellipse, which is the "standing stone" trait #2 in the class header
+## asks for. Re-measured after the change on both renderers, front/3-4/side, surfaces-off silhouette:
+## see the grig2 comparison sheet. This ALSO makes the tessellation note below more conservative than
+## it was — n 2.3 spreads its curvature more evenly than 3.2 did, so `HEAD_SEGS_GRIG` (tuned for the
+## harder case) has more facet margin now than it needs, not less.
+const HEAD_N_GRIG := 2.3
 ## Holds the chin where it was: 1.1010 - 0.4300 = 0.6710, so 0.6710 + 0.3300.
 const HEAD_Y_GRIG := 1.0010
-## Tessellation. n 3.2 is exactly Zorp's proven exponent, so the DEFAULT (44, 22) would not facet —
-## but Zorp's head is 0.45 m tall and this one is 0.86 m, so the same 13 latitude rings would stretch
-## to 66 mm bands down the tall front plane. 38 x 26 resolves to 23 x 16 after ChibiModel.DETAIL and
-## costs 782 tris against the default's 728. Do NOT raise `head_n` past 3.2 without raising these
-## again: above ~3.2 the curvature packs into a narrow chamfer band and the shell renders as a box.
+## Tessellation. Tuned when `HEAD_N_GRIG` was 3.2 — Zorp's proven exponent, where the DEFAULT (44, 22)
+## would not facet, but Zorp's head is 0.45 m tall and this one is 0.86 m, so the same 13 latitude
+## rings would stretch to 66 mm bands down the tall front plane. 38 x 26 resolves to 23 x 16 after
+## ChibiModel.DETAIL and costs 782 tris against the default's 728. `HEAD_N_GRIG` has since dropped to
+## 2.3 (see its own note above), which spreads curvature more evenly and so needs LESS tessellation to
+## avoid faceting than the number below was built for — this is now a safety margin, not a floor. Do
+## NOT raise `head_n` back toward 3.2+ without re-checking these: above ~3.2 the curvature repacks
+## into a narrow chamfer band and the shell renders as a box again, which is the bug this whole note
+## exists to prevent a repeat of.
 const HEAD_SEGS_GRIG := Vector2i(38, 26)
 
 # ---------------------------------------------------------------------------------- the one eye
@@ -273,7 +301,8 @@ func _build_geometry() -> void:
 	_add_arms(SMOCK, SKIN, 2, SURF_LIMB, SURF_CLOTH)
 	_add_legs(SKIN_DEEP, FOOT, SURF_LIMB)
 	_add_head_shell(SKIN, SURF_HEAD)
-	_build_capital()
+	# No `_build_capital()` call — REMOVED 2026-09-15, see the tombstone under "head detail" below.
+	# The head is now the bare `_add_head_shell` oval with nothing capping its crown.
 
 	# `blush: false`, `nose: false` and `brows: false` are switches on `_add_face`. Passing a
 	# TRANSPARENT colour instead does not work — the toon material is opaque, so an alpha-0 blush
@@ -290,8 +319,9 @@ func _build_geometry() -> void:
 	_build_stalk()
 	_build_mouth()
 	# After the mouth, because the nostrils are placed RELATIVE to it — the blank field they sit in
-	# is bounded below by the grin cavity's top edge and above by the capital's base, and both of
-	# those numbers are derived in `_build_nostrils`' comment from constants the two owners declare.
+	# is bounded below by the grin cavity's top edge and above by the bare head's own crown curvature
+	# (the capital that used to bound it above is gone — see the tombstone under "head detail" below),
+	# and the lower number is derived in `_build_nostrils`' comment from constants the mouth declares.
 	_build_nostrils()
 	_build_tally_collar()
 	_build_wedge()
@@ -411,7 +441,8 @@ func _adopt(n: Node3D, pivot: Node3D, origin: Vector3) -> void:
 ##    two-line edit away from becoming visible — at the exact moment the user has looked at this
 ##    character and asked for the ONE horizontal line on his face to be taken off. Leaving a loaded
 ##    version of the rejected mark sitting in the file, behind a comment that reads like a to-do, is
-##    worse than deleting it. `_build_capital` has the identification.
+##    worse than deleting it. The capital tombstone below has the identification (and is now itself
+##    a tombstone, for the same reason: the block it identified is gone too).
 ##
 ## WHAT WOULD HAVE BEEN LOST AND IS KEPT HERE. The mechanics live in `_se_slab` and do not need
 ## repeating. The JUDGEMENT does, because nothing else in the codebase records it: the working
@@ -429,99 +460,35 @@ func _adopt(n: Node3D, pivot: Node3D, origin: Vector3) -> void:
 
 
 # --------------------------------------------------------------------------------- the capital
-## THE CAPITAL — R4's answer to "every alien has the same crown". A thick chamfered block of cut
-## stone that the head widens into near the top, with the head's own dome and eye trunk still rising
-## above it. A quarried thing on a creature who cuts stone for a living and whose head is already a
-## standing stone.
+## ===== TOMBSTONE: THE CAPITAL, REMOVED 2026-09-15. ===== It used to be R4's answer to "every alien
+## has the same crown": a thick chamfered `rounded_box` block, `CAPITAL_SLAB` = (0.536, 0.124, 0.488)
+## at head-local y 0.238, that the head widened into near the top, with the head's own dome and eye
+## trunk still rising above it — built by a one-line `_mi(rounded_box(...), ..., "CapitalSlab")` in a
+## `_build_capital()` this section used to hold. GONE, on the user's direct instruction after looking
+## at the cast lineup: "remove that flat square at the top of Grig's head? It should just be a rounded
+## oval." That is exactly what the block was — the rest of this file's own case for it (silhouette
+## overhang of 87 mm at the block's top face, a cornice under the dome, a topology nobody else in the
+## cast shares) was true and is now moot: the read the user is naming is the same overhang, and he
+## does not want it. The head is a plain `_add_head_shell` superellipsoid crown now, the same
+## primitive every other neighbour ships, with nothing capping it.
 ##
-## ===== IT USED TO HAVE A DARK RIM PLATE UNDER IT, AND THAT PLATE WAS "THE LINE ON HIS FACE". =====
-## The user asked what the line in the middle of Grig's face was supposed to be, and said to make
-## that part of the face the same as the rest of the lower face with two nostril holes instead. The
-## line was `CapitalRim`: a `rounded_box(0.564, 0.026, 0.514)` in SKIN_DEEP at head-local y 0.168,
-## bedded under the slab. It is deleted. Three measurements identified it, and they are recorded
-## because "which line did he mean" was the risky half of this change, not the removal:
-##   1. IT WAS THE ONLY HARD HORIZONTAL ON HIM THAT ACTUALLY DREW. The strata bands never rendered
-##      (see their tombstone) and `crown_seam` is false, so the shell below the block is one
-##      uninterrupted crazed field. There was nothing else on the head it could have been.
-##   2. IT PROTRUDED PAST THE BLOCK ON BOTH SIDES, which is its own fingerprint: half-width 0.282
-##      against the slab's 0.268. In a zoomed portrait crop it reads as a drawn line with rounded
-##      ends sticking out either end of the pale block — unmistakably this part and not the slab.
-##   3. AT THE CAMERA THE PLAYER ACTUALLY USES IT SAT AT THE MIDDLE OF THE FACE. Measured off a
-##      6.5 m / 28 deg render: head crown at screen y 327, chin at 402, the rim at 364 — 49% of the
-##      way down. At that distance the slab's only other separator from the head is smooth-versus-
-##      crazed, which is gone by ~4 m, so the head reads as ONE tan mass with a brown band clamped
-##      round its middle and no visible reason for it. At 2 m the block still reads as a cap and the
-##      band reads as its underside; the "what IS that?" reading is specifically a gameplay reading,
-##      which is exactly why it took a --gameplay render to see what the user was seeing.
+## WHAT WAS BEDDED UNDER IT, FOR ANYONE WHO GOES LOOKING: a dark `CapitalRim` slab (`rounded_box(0.564,
+## 0.026, 0.514)` in SKIN_DEEP at head-local y 0.168) used to run under this block as "the line across
+## Grig's face" and was deleted in the change just before this one, once nostril holes took its place.
+## Removing the block it was bedded under changes nothing about that earlier call.
 ##
-## WHAT REMOVING IT COSTS, STATED PLAINLY, BECAUSE POINT 2 BELOW USED TO ARGUE THE OPPOSITE. The rim
-## was half of how this block separated from a head of its own colour. What is left is the half the
-## same paragraph calls the real read: silhouette. The junction still works without it — the slab's
-## bottom face is 0.240 half-wide after its bevel against a head that is 0.2629 there, so the
-## underside is entirely INSIDE the shell; the bevel crosses the head surface at about y 0.186 and
-## reaches full width by y 0.204. So the head flares continuously into the block with no gap, no
-## floating edge and no pinch, and nothing else had to move. If the block ever reads as a shapeless
-## smooth patch at 6.5 m, the honest answer is a capital pass with its own review — NOT putting the
-## rim back, which is the thing the user asked to have taken off.
+## COST AND CLEARANCE. -782 tris off his budget (see the class header's "Seven traits" list, which
+## drops this as a distinguishing trait). `marker_clearance()` did not reference the block (it is
+## `head_y + STALK_TIP.y + EYEBALL_R`, all eye-trunk geometry) and is unaffected. The eye trunk's base
+## (0.257) and tip (0.560) both still clear the bare head crown (0.330) with room to spare, so the
+## "trunk rises through the block" clearance note that used to live here has nothing left to clear.
 ##
-## WHY A BLOCK AND NOT A RING OF HORNS. A ring of four short banded horns was drafted for him and was
-## rejected twice over. First on variety: Mayor Orbit already wears horns and Pip and Fen were both
-## being given crown ROWS, so a fifth row of small repeated cones is the eyestalk problem rebuilt
-## with a new part number — at 8 m a row of nubs and a row of spikes and a row of stems are one
-## shape. Second on the hard-vocabulary cap: horns plus his existing lid ridge plus the new tusks is
-## three, and the cap is two. So his crown is ONE CONTINUOUS PIECE, which is a topology nobody else
-## in the cast has at all — every other crown in the game is a row of small parts.
-##
-## WHY `rounded_box` AND NOT `superellipsoid`. A flat superellipsoid cannot make a slab. Its vertex
-## rows sit at fixed latitudes and collapse onto the top plane within a few centimetres of the axis,
-## so it renders as a shallow double cone; the strata tombstone above has the full measurement, and
-## it is why those bands were invisible. `rounded_box` places every vertex as `n*r + sign(n)*(half-r)`,
-## so the flat faces are exactly flat and the corner radius is exactly the bevel — which is what
-## "chamfered with a hard rim" means, and it is immune to the ring count. It is also rectangular in
-## plan, which agrees with the head: at head_n 3.2 the horizontal cross-section is a rounded square.
-##
-## THE THREE THINGS THE FIRST BUILDS GOT WRONG, ALL FOUND BY RENDERING, NONE BY ARITHMETIC:
-##   1. A THIN WIDE SLAB IS A PLANK. 0.598 across by 0.070 thick is 8.5:1, and the head at that
-##      height is only 0.380 wide, so it read as a shelf cantilevered out of nothing. The shipping
-##      block is 0.536 by 0.124 — 4.3:1 — and its BASE is flush with the head (0.268 against the
-##      head's 0.263 at y 0.176) so it grows out of the shell instead of being stuck on it.
-##   2. THE SAME COLOUR *AND* THE SAME TEXTURE AS THE HEAD MERGES; THE SAME COLOUR ALONE DOES NOT.
-##      Carrying SURF_HEAD onto the slab let the craze run straight over it and the eye read one
-##      object. But a CONTRASTING pale dressed-stone tone was worse: under the gameplay camera's
-##      28-degree downward pitch the top face is fully exposed and a large bright plane up there is
-##      the single brightest thing on him, which R2.6 exists to prevent. Shipping answer: the head's
-##      OWN skin tone, SMOOTH and unpatterned. The texture break separates the two forms at
-##      conversation range; the OVERHANG alone carries it at 6.5 m, now that the rim is gone. That
-##      is a thinner margin than this paragraph originally claimed and it is deliberate — see the
-##      rim note at the top. Do not answer a weak read here with a second dark horizontal.
-##   3. IT RINGS THE TOP OF THE HEAD, IT DOES NOT CAP IT. Seated as a cap, with its top face the
-##      highest thing on the skull, it read as a mortarboard from every gameplay angle — and a hat is
-##      Mayor Orbit's. Dropped so it spans 0.176-0.300 against a crown at 0.330, the dome and the eye
-##      trunk still stand above it, and a horizontal that has head above it is a cornice, not a brim.
-##
-## THE OVERHANG IS THE READ. Surface detail cannot carry identity at the 7.4 m gameplay camera — the
-## library's own header puts a 10% albedo change at ~1.5% on screen — so this has to be silhouette.
-## The head is 0.181 half-wide at the block's top face and the block is 0.268, so it stands 87 mm
-## proud there and breaks the outline from every angle. THAT 87 MM IS NOW THE WHOLE CASE. It used to
-## be backed by a wider (0.282) rim plate giving a light-over-dark-over-crazed profile; with the rim
-## deleted the block is carried by overhang and by the top face's exposure under the 28-degree
-## camera, and by nothing else.
-##
-## CLEARANCE: the block's top is 0.300, the eye trunk's base is 0.257 and its tip 0.560, so the trunk
-## rises THROUGH the block and out of the head's crown — intended, and it gives the lagging eye-track
-## somewhere to hinge. `marker_clearance()` is unchanged: 1.673 still dwarfs the block's 1.301.
-const CAPITAL_SLAB := Vector3(0.536, 0.124, 0.488)
-const CAPITAL_SLAB_Y := 0.238                       ## 0.176-0.300, against a crown at 0.330
-const CAPITAL_SLAB_BEVEL := 0.028
-
-## ONE MESH. It used to build a `CapitalRim` first — see the rim note at the top of this section for
-## what that was, how it was identified as the line the user objected to, and why it is not coming
-## back. The slab's own numbers are untouched: nothing about the block had to move to close the gap
-## the rim left, because the rim was never load-bearing on the junction, only on the read.
-func _build_capital() -> void:
-	# NO surface opts: the block is a DRESSED face against a weathered one. See point 2 above.
-	_mi(rounded_box(CAPITAL_SLAB, CAPITAL_SLAB_BEVEL, 18), _toon(SKIN, _matte({"rim": 0.03, "spec": 0.03})),
-		_head, Vector3(0.0, CAPITAL_SLAB_Y, 0.0), "CapitalSlab")
+## IF ANYONE PUTS A CROWN DETAIL BACK ON THIS HEAD: it is a design change needing its own approval,
+## the same way the strata bands above do — the user has now rejected two different hard shapes
+## capping this head (three horizontal bands, then one block) for the same reason both times: a flat
+## man-made mark clamped on top of an otherwise rounded, weathered stone read as machined, not carved.
+## The lead the same paragraph would give: if this head ever needs a crown accent again, make it
+## something that follows the oval's OWN curvature rather than something that caps or bands it flat.
 
 
 ## The grin, dropped to the bottom of the tall face, four blunt square uppers and two upward tusks.
@@ -537,8 +504,8 @@ func _build_mouth() -> void:
 
 
 # ==================================================================================== the nose
-## TWO NOSTRIL HOLES, and until this change he had no nose at all. The user asked for them in place
-## of the rim plate that used to cross his face (`_build_capital` has the identification). "Nostril
+## TWO NOSTRIL HOLES, added when he still had no nose at all. The user asked for them in place of the
+## rim plate that used to cross his face (the capital tombstone above has the identification). "Nostril
 ## HOLES" is the whole brief, so this is built to read as two things sunk INTO the head rather than
 ## as two marks painted on it — which on an opaque closed shell that cannot be cut is entirely a
 ## matter of standing something in front of something dark.
@@ -563,9 +530,10 @@ func _build_mouth() -> void:
 ## anchored per MeshInstance. SURF_HEAD runs sd_skin at surface_scale 2.2 = 7 * 2.2 = 15.4 cells/m,
 ## a 65 mm cell. The lip is 100 mm across, so carrying SURF_HEAD onto it would land about ONE AND A
 ## HALF cells on the whole part — a coin flip between an invisible interior and a solid dark donut,
-## decided by the hash and not by anything anyone can tune. Smooth SKIN is the precedent this character
-## already ships (the capital slab, same `_matte` family), and the material library's own header puts
-## a 10% albedo change at ~1.5% on screen at 7.4 m, so at gameplay the lip is pure silhouette and the
+## decided by the hash and not by anything anyone can tune. Smooth SKIN in the same `_matte` family is
+## already how his other small dressed-stone parts shade (the wedge haft, the tally slabs' own faces),
+## and the material library's own header puts a 10% albedo change at ~1.5% on screen at 7.4 m, so at
+## gameplay the lip is pure silhouette and the
 ## smooth/crazed difference does not exist. The BORE keeps the mouth cavity's exact material family —
 ## `{"spec": 0.0, "rim": 0.0, "shade": 0.05}`, no `_matte` — so his two dark openings shade
 ## identically instead of the small one catching a rim light and reading as a bead. NO alpha anywhere
@@ -577,12 +545,14 @@ func _build_mouth() -> void:
 ## pair of eyes and put the generic animal face straight back" — and on a CYCLOPS whose one real eye
 ## is up on a trunk off the head entirely, a second pair on the face is not a blemish, it is a
 ## different creature. Three separate things fight it and ALL THREE have to survive any tuning:
-##   1. THEY ARE LOW, NOT CENTRED. The blank field runs from the capital's base (y 0.176) to the top
-##      of the grin cavity (y -0.076: mouth centre -0.1204 plus GRIN_SIZE.y 0.026 * MOUTH_SPREAD.y
-##      1.70). Its midpoint is y 0.050 and these sit at y 0.013 — 89 mm above the mouth against
-##      163 mm below the block, so they group with the MOUTH rather than floating where eyes live.
-##      Measured on the 6.5 m render, that is 70% of the way down the head, against the deleted
-##      rim's 49%. This is the mitigation that is doing the most work; give it up last.
+##   1. THEY ARE LOW, NOT CENTRED. The blank field runs from well up the bare crown's own curvature
+##      (the capital that used to bound it at y 0.176 is gone — see its tombstone under "head detail")
+##      to the top of the grin cavity (y -0.076: mouth centre -0.1204 plus GRIN_SIZE.y 0.026 *
+##      MOUTH_SPREAD.y 1.70). These sit at y 0.013, just 89 mm above the mouth, so low in that field
+##      that they still group with the MOUTH rather than floating where eyes live, which was true
+##      before the capital went and remains true now that the field above them is taller. Measured on
+##      the 6.5 m render, that is 70% of the way down the head, against the old rim's 49%. This is the
+##      mitigation that is doing the most work; give it up last.
 ##   2. THEY ARE SQUASHED FLAT. 76 x 38 mm, a 2:1 SLOT. Eyes in this game are round-ish (his own
 ##      pupil is 0.088 x 0.092, i.e. slightly TALLER than wide). A 2:1 slot is not an eye shape, and
 ##      this is the mitigation the second build got wrong: at 1.6:1 the close-up read as a pair of
@@ -595,9 +565,9 @@ func _build_mouth() -> void:
 ## lower. Making them SMALLER is the last resort — the user asked for holes and said nothing about
 ## subtlety, so the failure mode to avoid is "I cannot see them".
 ##
-## ANIMATION: NONE, DELIBERATELY. These are rigid head geometry and ride `_head` exactly like the
-## capital. They are NOT added to `_animate_extras`, which already carries two named cast-unique
-## traits (the lagging eye-track and the tally swing); a third first-order filter in there is budget
+## ANIMATION: NONE, DELIBERATELY. These are rigid head geometry, parented straight under `_face`/
+## `_head` with no filter of their own. They are NOT added to `_animate_extras`, which already carries
+## two named cast-unique traits (the lagging eye-track and the tally swing); a third first-order filter is budget
 ## spent on something nobody asked for, and a flaring nostril is not in Grig's character. Nor are
 ## they appended to `_eyes` / `_eye_ovals` / `_eye_happy` / `_eye_round` / `_eye_size` / `_brows`.
 ## They are not eyes and `_apply_face`, which rewrites all five arrays every frame, must never see
@@ -619,15 +589,21 @@ const NOSTRIL_PITCH := 3.0          ## deg -> y = +0.0134 (see the two-eyes note
 ## Torus inner/outer radius -> tube radius 0.008, centre radius 0.042.
 const NOSTRIL_LIP := Vector2(0.034, 0.050)
 ## Vertical squash, applied as a node scale to BOTH parts so the lip and the hole stay concentric.
-## 0.50 makes the hole a 2:1 SLOT, and that ratio is a two-eyes mitigation before it is a style
-## choice — see point 2 of the note above. It was 0.64 in the first build and the close-up read as a
-## pair of eyes; flattening it is what broke that.
-const NOSTRIL_SQUASH := 0.50
+## CHANGED 2026-09-15 from 0.50 to 0.28 — the user, after the 2:1 slot shipped: "shrink his nostrils
+## to thin slits." 0.28 makes the hole a 3.6:1 SLIT, against the 2:1 SLOT this replaces and the 1.6:1
+## the second build got wrong and read as eyes (see point 2 below). Squashing further, rather than
+## shrinking `NOSTRIL_BORE`, is deliberate: `NOSTRIL_BORE` is already the third of three sizes tried
+## and the smallest of them read as two faint dashes at the gameplay camera (see its own comment) — so
+## "thin slits" is answered by getting FLATTER at the same horizontal footprint, not smaller outright,
+## which keeps the part legible at range while making it unambiguously a slit up close. Re-measured on
+## both renderers at 2.6 m for this change (see the grig2 comparison sheet).
+const NOSTRIL_SQUASH := 0.28
 ## The lip's DEPTH scale, and it is deliberately NOT NOSTRIL_SQUASH. The squash runs on the mesh's
-## Z (up the face) and the standoff on its Y (out of the face), so flattening the hole into a slot
+## Z (up the face) and the standoff on its Y (out of the face), so flattening the hole into a slit
 ## with one number would flatten the lip's crest by the same factor and take the depth cue with it —
-## at squash 0.50 the crest would drop from 8.0 mm to 6.0 mm proud for no reason anyone asked for.
-## Keeping the two separate is what lets the slot get flatter WITHOUT the hole getting shallower.
+## at squash 0.28 the crest would drop from 8.0 mm to 5.6 mm proud for no reason anyone asked for (it
+## was already the 0.50-squash case's 6.0 mm before this change tightened the slit further).
+## Keeping the two separate is what lets the slit get flatter WITHOUT the hole getting shallower.
 const NOSTRIL_LIP_DEPTH := 0.75
 ## The lip PLANE off the shell. DO NOT TIDY THIS TO ZERO. At 0 the lip z-fights the shell and the
 ## bore's cap is coplanar with an opaque surface; at a negative value both are inside a solid and
@@ -636,13 +612,15 @@ const NOSTRIL_LIP_DEPTH := 0.75
 ## so 2 mm clears everywhere on the part with room to spare and never floats: the tube's back reaches
 ## 4.0 mm INTO the tangent plane and is buried by 2.1 mm even at the lip's widest point.
 const NOSTRIL_PROUD := 0.002
-## Bore radius, horizontal; vertical is this times NOSTRIL_SQUASH. 76 x 38 mm of hole per side.
-## SIZED FROM RENDERS, NOT FROM TASTE, AND IT TOOK THREE. 60 x 36 mm measured 7 x 4 px at the 6.5 m
-## camera and read as two faint dashes rather than as holes. 68 x 43.5 mm was legible at gameplay but
-## its close-up read as EYES — round enough, ringed by a pale lip, sitting in a blank field. This is
-## the third: WIDER than the version that was too eye-like and FLATTER than it, so it gains screen
-## area (9 x 4.5 px at gameplay) while losing the eye shape. Do not shrink it back, and do not make
-## it rounder, without re-reading BOTH a portrait and a --gameplay capture.
+## Bore radius, horizontal; vertical is this times NOSTRIL_SQUASH. 76 x 21 mm of hole per side as of
+## the 2026-09-15 squash change (was 76 x 38 mm at 0.50 squash). THE HORIZONTAL NUMBER IS SIZED FROM
+## RENDERS, NOT FROM TASTE, AND IT TOOK THREE. 60 mm wide measured 7 px at the 6.5 m camera and read
+## as two faint dashes rather than as holes. 68.5 mm was legible at gameplay but at the OLD 0.64 squash
+## its close-up read as EYES — round enough, ringed by a pale lip, sitting in a blank field. 76 mm is
+## the third: WIDER than the version that was too eye-like, which is what still keeps it legible now
+## that the squash has gone flatter still. Do not shrink THIS number, and do not make the part rounder,
+## without re-reading BOTH a portrait and a --gameplay capture — the squash is the dial for "thin
+## slit"; this radius is the dial for "still visible at range", and the two do different jobs.
 ## The cap is 4 mm wider than the lip's opening horizontally and 2.0 mm taller vertically, so no
 ## shell shows through the gap between them from any angle.
 const NOSTRIL_BORE := 0.038

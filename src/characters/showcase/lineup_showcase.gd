@@ -43,11 +43,14 @@ const DEFAULT_HOUR := 10.5
 ## check, the face-metric gate and the silhouette pass until it is added here. Registering the id
 ## in NpcModels.make() is necessary but not sufficient.
 const ORDER: Array[String] = ["zorp", "bolt", "pip", "pop", "stella", "mayor_orbit", "dj_nova",
-	"fen", "grig", "vela"]
+	"fen", "grig", "vela", "norm"]
 const LABELS := {
 	"zorp": "Zorp", "bolt": "Bolt", "pip": "Pip", "pop": "Pop",
 	"stella": "Stella", "mayor_orbit": "Mayor Orbit", "dj_nova": "DJ Nova",
 	"fen": "Fen", "grig": "Grig", "vela": "Vela",
+	## Norm is not a neighbour on a world of his own: he turns up on other people's worlds (docs/NORM_SPEC.md).
+	## He is in the line-up so cast checks can compare him with the two other astronauts (the player and Stella).
+	"norm": "Norm",
 }
 
 var _models: Array[CharacterModel] = []

@@ -1,8 +1,12 @@
-[gd_scene load_steps=5 format=3 uid="uid://b0astronpc0060"]
+[gd_scene load_steps=6 format=3 uid="uid://b0astronpc0060"]
 
 [ext_resource type="Script" path="res://src/characters/npc.gd" id="1"]
-[ext_resource type="Script" path="res://src/characters/models/fen_model.gd" id="2"]
+[ext_resource type="Script" path="res://src/characters/models/fen_vine_model.gd" id="2"]
 [ext_resource type="Script" path="res://src/core/interactable.gd" id="3"]
+
+[sub_resource type="CapsuleShape3D" id="Capsule_body"]
+radius = 0.5
+height = 1.12
 
 [sub_resource type="SphereShape3D" id="Sphere_talk"]
 radius = 0.9
@@ -20,6 +24,10 @@ walk_speed = 2.2
 
 [node name="Model" type="Node3D" parent="."]
 script = ExtResource("2")
+
+[node name="Body" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.56, 0)
+shape = SubResource("Capsule_body")
 
 [node name="TalkArea" type="Area3D" parent="."]
 collision_layer = 16

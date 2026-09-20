@@ -278,6 +278,10 @@ has passed its checks.
 
 ## Cast redesign, second pass (asked 2026-09-15)
 
+**Installed 2026-09-19** together with Norm: Pip's saucer, Pop in apricot orange, the floating DJ Nova, Fen with
+his petal collar and curling vines, and Grig's rounded oval head with slit nostrils. DJ Nova's line became "My
+headphones cost more than my hover jets."
+
 After the first comparison sheets the user asked for four changes:
 * **Colours:** "Pop orange dj bluer is fine" - Pop's fur goes warm orange so the saucer alien Pip is the only green
   one; DJ Nova's shell moves toward blue so it no longer shares Zorp's purple.
@@ -288,8 +292,14 @@ After the first comparison sheets the user asked for four changes:
   it's more like a huge collar (except for petals blocking the face)" - more petals, set at an angle from the neck
   like a big collar round the face, never over it; arms and legs are long vines that end in pointy tips that curl up.
 * Pip (the saucer) and DJ Nova's shape are accepted as built.
+* **DJ Nova's colour stays as recoloured** (the user, after the second lineup: "keep nova as they are now"). The shell
+  moved only to about H246, 20 degrees from Zorp, because Grig's blue smock holds the blue range; the shapes already differ.
 
 ## The mystery neighbour (asked 2026-09-15; built after Phase 5 ships)
+
+The build contract is `docs/NORM_SPEC.md` (2026-09-19).
+The user picked **look A** on 2026-09-19 ("Let's go with A"): a pale teal near-miss of the player's suit with a crooked
+round helmet; the lead added a polish pass so the rags read at game distance and the broken visor glass never reads as teeth.
 
 The tentacle astronaut, in the user's words: *"personality-wise he should try to pretend to be a human but obviously
 sounds like he's not. I'm thinking he could be a mystery neighbor that shows up randomly on planets sometimes and gives

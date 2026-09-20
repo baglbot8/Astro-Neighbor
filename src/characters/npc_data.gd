@@ -487,7 +487,7 @@ const DATA := {
 			"Bass is just a hug you can hear.",
 			"I wrote a track about a comet. It slaps.",
 			"120 beats per minute. Every single time.",
-			"My headphones cost more than my legs.",
+			"My headphones cost more than my hover jets.",
 			"Silence? Never met her. Sounds fake.",
 			"I remix the planet's hum on Fridays.",
 			"You ever dance in low gravity? Life-changing.",

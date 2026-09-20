@@ -32,6 +32,9 @@ extends PlanetBody
 @export var accent_color: Color = Color("#5b7cff")
 @export var wander_radius_m: float = 9.0
 @export var walk_speed: float = 2.2
+## The marker's glyph: "!" for every neighbour (the default, drawn exactly as before), "?" is opt-in
+## (Norm's scene, docs/NORM_SPEC.md §4). Read once, when the marker is built in `_ready`.
+@export var marker_glyph: String = "!"
 
 const IDLE_MIN := 2.0
 const IDLE_MAX := 6.0
@@ -827,6 +830,9 @@ func _favor_system() -> FavorSystem:
 ## unlit-ish toon yellow with a dark outline (no emission to bloom), a 6.3 cm gap, and it is
 ## billboarded around the NPC's up axis so it never presents edge-on on the curved planet.
 func _build_marker() -> void:
+	if marker_glyph == "?":
+		_build_question_marker()
+		return
 	_marker = Node3D.new()
 	_marker.name = "FavorMarker"
 	_marker.visible = false
@@ -855,6 +861,62 @@ func _build_marker() -> void:
 		mi.position = Vector3(0.0, y, 0.0)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_marker.add_child(mi)
+	_marker.scale = Vector3.ONE * _body_scale
+	_marker.position = Vector3(0.0, _marker_h * _body_scale, 0.0)
+	add_child(_marker)
+
+
+## The opt-in "?" (NORM_SPEC §4): the "!"'s materials, outline offset, size and bob, drawn as a hook of
+## short rounded bars round an arc, a short stem, and the "!"'s own dot, merged into ONE fill mesh and ONE
+## outline mesh (two draws, where the "!" takes four).
+func _build_question_marker() -> void:
+	_marker = Node3D.new()
+	_marker.name = "FavorMarker"
+	_marker.visible = false
+	var mat := MaterialLib.toon(Color("#ffcc33"), {"shade": 0.14, "rim": 0.0, "spec": 0.0})
+	var outline := MaterialLib.toon(Color("#6b5232"), {"shade": 0.05, "rim": 0.0, "spec": 0.0})
+	var stroke := 0.07
+	var depth := 0.060
+	var r := 0.028
+	# [length, centre x, centre y, angle (rad, about +Z)]
+	var bars: Array = []
+	var centre := Vector2(0.0, 0.128)
+	var radius := 0.058
+	var a0 := deg_to_rad(-90.0)
+	var a1 := deg_to_rad(165.0)
+	var segs := 9
+	var seg_len := radius * (a1 - a0) / float(segs)
+	for i in segs:
+		var a := a0 + (a1 - a0) * (float(i) + 0.5) / float(segs)
+		var c := centre + Vector2(cos(a), sin(a)) * radius
+		bars.append([seg_len + stroke * 0.55, c.x, c.y, a + PI * 0.5])
+	# The stem, from the hook's bottom down to where the "!"'s stem ends, then the "!"'s own dot.
+	bars.append([0.07, 0.0, 0.055, PI * 0.5])
+	var fill_st := SurfaceTool.new()
+	var line_st := SurfaceTool.new()
+	fill_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	line_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for b: Array in bars:
+		var xf := Transform3D(Basis(Vector3(0.0, 0.0, 1.0), float(b[3])), Vector3(float(b[1]), float(b[2]), 0.0))
+		fill_st.append_from(ChibiModel.rounded_box(Vector3(float(b[0]), stroke, depth), r, 12), 0, xf)
+		line_st.append_from(ChibiModel.rounded_box(Vector3(float(b[0]) + 0.026, stroke + 0.026, depth), r + 0.010, 12), 0,
+			Transform3D(xf.basis, xf.origin + Vector3(0.0, 0.0, -0.012)))
+	var dot := Vector3(0.085, 0.085, 0.060)
+	fill_st.append_from(ChibiModel.rounded_box(dot, 0.030, 12), 0, Transform3D(Basis.IDENTITY, Vector3(0.0, MARKER_DOT_Y, 0.0)))
+	line_st.append_from(ChibiModel.rounded_box(dot + Vector3(0.026, 0.026, 0.0), 0.040, 12), 0,
+		Transform3D(Basis.IDENTITY, Vector3(0.0, MARKER_DOT_Y, -0.012)))
+	var back := MeshInstance3D.new()
+	back.name = "GlyphOutline"
+	back.mesh = line_st.commit()
+	back.material_override = outline
+	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marker.add_child(back)
+	var mi := MeshInstance3D.new()
+	mi.name = "Glyph"
+	mi.mesh = fill_st.commit()
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marker.add_child(mi)
 	_marker.scale = Vector3.ONE * _body_scale
 	_marker.position = Vector3(0.0, _marker_h * _body_scale, 0.0)
 	add_child(_marker)

@@ -54,18 +54,26 @@ something else has to give it up.
 
 | slot (cap) | holders | how they differ from each other |
 |---|---|---|
-| **eyestalks** (2) | Grig, Fen | Grig: ONE, a cyclops on a 0.560 m trunk. Fen: THREE, graded 0.407/0.319/0.240 m and swept across the crown |
-| **wide toothy grin** (2) | Grig, Fen | Grig: an under-bite (`row_sign: -1`) with a corner tusk. Fen: four blunt upper teeth, no lower row |
+| **eyestalks** (2) | Grig | ONE, a cyclops on a 0.560 m trunk, now rising from a rounded oval head. Fen gave his three up in the 2026-09-15 redesign |
+| **wide toothy grin** (2) | Grig, Pop | Grig: an under-bite (`row_sign: -1`) with a corner tusk. Pop: a crescent smile with a top row of small rounded points |
 | **`sd_skin`** (2, opposite) | Zorp, Grig | Zorp `surface_scales` 0.0 / `spot_radius` 0.74 — smooth with big soft blobs. Grig `surface_scales` 1.35 / `spot` 0.0 — dry craze, no spots at all |
-| **`sd_scales`** (kind 8) | Fen | true overlapping shingles; a different SILHOUETTE, not a different speckle |
-| **`sd_foliage`** (fur) | Pip | `surface_scale` 2.6 / strength 0.42, plus real fur fringe geometry |
-| **no surface at all** (exactly 1) | **Pop** | the deliberate blank that makes everyone else's pattern read as a choice |
-| **the single closed arc** (1) | **Zorp** | a volumetric 110 mm lip, earned by being a solid rather than an ink line |
+| **`sd_scales`** (kind 8) | Fen | on the flower bud only; a different SILHOUETTE, not a different speckle |
+| **`sd_foliage`** (fur) | Pop | plus real fur fringe geometry on the cheeks, shoulders and tiers; Pip gave it up |
+| **no surface at all** (exactly 1) | **Pip** | the deliberate blank — though Bolt and Mayor Orbit also carry none (OPEN_ISSUES 37, older than this table) |
+| **the single closed arc** (1) | Bolt, Mayor Orbit | two, against a cap of one, and both older than the redesign; Zorp's arc is gone (he has no mouth now) |
 | **lashes** (≤1) | **nobody** | zero across the cast |
-| **hard vocabulary** (≤2 each) | Fen: none · Vela: none · Zorp: none | ruling 2's elder clause is satisfied by **Fen** |
+| **hard vocabulary** (≤2 each) | Grig: 2 (lid ridge, tusks) · Mayor Orbit: 1 (brow ridges) · everyone else: 0 | ruling 2's elder clause is satisfied by **Fen**, who has none |
+| **floating, no legs** | Pip (saucer), DJ Nova (egg robot) | ruling 4 holds: neither is written as female anywhere in `npc_data.gd` |
+| **tentacles** | Zorp (a beard of four thick curls, no mouth), Norm (one big coral tentacle out of a cracked visor, plus small ones through the suit) | different colour family, different place, different count |
 
-Closed mouths, by KIND (ruling 6): Zorp = the one arc · Pop = a straight lipless bar ·
-Vela = `mouth: false`, none at all · Grig = an under-bite.
+Closed mouths, by KIND (ruling 6): Zorp = none, a tentacle beard · Fen = a straight lipless bar ·
+Vela = `mouth: false`, none at all · Grig = an under-bite · DJ Nova = a light strip that moves when it talks ·
+Bolt = a screen smile · Mayor Orbit = a drawn smile.
+
+**Updated 2026-09-19** after the cast redesign (Fen the plant, Pip in a saucer, Pop the fuzzy monster, DJ Nova the
+floating robot, Grig's oval head) and Norm, the mystery neighbour. Norm is an astronaut like the player and Stella;
+he is kept apart by his ragged mismatched suit, the crack in his visor and the tentacle in his silhouette.
+Still over budget from before: Stella at 8176 triangles (cap 6000). Every redesigned neighbour is 5070-5770.
 
 ## The other differentiators, which are free
 
@@ -105,6 +113,6 @@ These cost no triangles and no slots, and they are the first place to reach befo
 
 ## Still unclaimed (see OPEN_ISSUES 37)
 
-* **Tentacles / horns around the head** — the one trait the user named that nobody shipped.
-  `_add_tendril_ring` and `_add_horn` both exist and have **zero call sites**.
+* ~~**Tentacles / horns around the head**~~ — claimed on 2026-09-14 by Zorp's tentacle beard and on 2026-09-19 by
+  Norm's visor tentacle.
 * **A character that reads as YOUNG.** Costs no geometry; nobody stands on that axis.

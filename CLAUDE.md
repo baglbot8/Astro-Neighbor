@@ -140,6 +140,9 @@ returns the conclusion, not the dump.
   and the hub is not the real hub (2026-09-13, `docs/OPEN_ISSUES.md` 55).
 - Never run `tools/gen/audio/build_all.py` while other builders are working — it regenerates every
   asset.
+- `showcase/characters_lineup.tscn -- --stats` prints the triangle counts and then **keeps running**.
+  Pass `--quit-after 3` before the `--`. Two forgotten headless runs ran for 2 and 20 hours and added
+  noise to other agents' frame timings (2026-09-15 and 2026-09-19).
 
 ## Shipping
 

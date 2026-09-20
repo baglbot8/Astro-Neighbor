@@ -104,6 +104,11 @@ const INTRO_DIRECTOR_PATH := "res://src/onboarding/intro_director.gd"
 ## quoted verbatim from that section.
 const FINALE_STATE_PATH := "res://src/campaign/finale_state.gd"
 
+## The mystery neighbour, docs/NORM_SPEC.md §7 "Dev menu" — every method name below is quoted
+## verbatim from that section. By path only, guarded the same way as every other optional system
+## here, so this file parses and the menu opens whether NSYS has landed yet or not.
+const NORM_SYSTEM_PATH := "res://src/campaign/norm_system.gd"
+
 ## HOOKS's four Phase 5 files (docs/BUILD_PLAN.md), reached the same guarded way as everything else.
 ## `player.gd`/`camera_rig.gd` are core files always present — the guard here is on the METHOD
 ## (`dev_teleport`, `dev_mark_met`, ...), not the file, exactly like `_hook_target`'s own doc explains.
@@ -766,6 +771,23 @@ func _build_story_tab(list: VBoxContainer) -> void:
 		_hook_row(finale, str(row["label"]), FINALE_STATE_PATH, str(row["method"]), [], "",
 			"Go", str(row["confirm"]), true)
 
+	var norm := _section("Story", "norm", "Norm (docs/NORM_SPEC.md §7)")
+	_hook_row(norm, "Today", NORM_SYSTEM_PATH, "debug_today", [], "", "Check")
+	_hook_row(norm, "Bring here", NORM_SYSTEM_PATH, "debug_bring_here", [], "", "Go")
+	_hook_row(norm, "Send away", NORM_SYSTEM_PATH, "debug_send_away", [], "", "Go")
+	if _hook_available(NORM_SYSTEM_PATH, "debug_set_wins"):
+		var wins_row := _row(norm, "Set wins 0-3")
+		var wins_seg := SegmentedControl.new()
+		wins_seg.setup(["0", "1", "2", "3"], 0)
+		wins_seg.selected.connect(func(i: int) -> void: _set_norm_wins(i))
+		wins_seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		wins_row.add_child(wins_seg)
+	else:
+		_add_note(norm, "Set wins — needs %s: debug_set_wins" % NORM_SYSTEM_PATH.get_file())
+	_hook_row(norm, "Give rewards", NORM_SYSTEM_PATH, "debug_give_rewards", [], "", "Go")
+	_hook_row(norm, "Reset", NORM_SYSTEM_PATH, "debug_reset", [], "", "Go",
+		"Clear every norm_ save key (wins, statues, today's visit, seen questions)?")
+
 
 func _fit_next_part() -> void:
 	var n := GameState.rocket_part_count()
@@ -840,6 +862,20 @@ func _set_story_done(on: bool) -> void:
 	GameState.story_done = on
 	EventBus.campaign_changed.emit()
 	_finish_action("Story finished: %s" % str(on))
+
+
+## The Norm wins stepper (docs/NORM_SPEC.md §7) goes through `_hook_target` rather than
+## `_hook_row`, same as `_set_rocket_parts`/`_preview_finish`, because it drives a SegmentedControl
+## rather than a plain button — the row itself is only built when the hook is available
+## (`_hook_available` check at the call site), so this is never reached with the file missing.
+func _set_norm_wins(n: int) -> void:
+	var target: Variant = _hook_target(NORM_SYSTEM_PATH, "debug_set_wins")
+	if target == null:
+		_finish_action("Set wins: not available right now.", "warn")
+		return
+	var result: Variant = target.call("debug_set_wins", n)
+	var text: String = result if result is String and (result as String) != "" else "Wins: %d" % n
+	_finish_action(text)
 
 
 # ============================================================================= actions: cutscenes

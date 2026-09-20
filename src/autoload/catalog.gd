@@ -24,6 +24,16 @@ func _ready() -> void:
 				var list: Array = script.new().get_items()
 				for it in list:
 					register(it)
+	# Norm's rewards (NORM_SPEC.md §6) must be registered before DecorationManager restores a saved
+	# game, or a placed bronze/silver/gold/statue is dropped on load with no refund (the same failure
+	# mode world.gd's own comment describes for project items). Catalog is an autoload, so this runs
+	# well before any world scene's DecorationManager spawns - loaded by path since NGIFT's file is
+	# a separate builder's deliverable and must not be `preload`d here.
+	var norm_rewards_path := "res://src/campaign/norm_rewards.gd"
+	if ResourceLoader.exists(norm_rewards_path):
+		var norm_script: Variant = load(norm_rewards_path)
+		if norm_script is GDScript and (norm_script as GDScript).has_method("ensure_items_registered"):
+			(norm_script as GDScript).call("ensure_items_registered")
 
 func _register_builtin() -> void:
 	register({"id": "stardust_shard", "name": "Stardust Shard", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "Glittering dust that fell from a passing comet.", "icon_color": "#ffe27a"})
@@ -69,7 +79,11 @@ func random_reward_decoration(rng: RandomNumberGenerator = null) -> Dictionary:
 	# Project items (Phase 2: each carries "project": npc_id) are one neighbour's fix, never a reward.
 	# The draw favours "common", so without this a project's fix was the likeliest favor reward - with
 	# the campaign off too (measured by builder E's critic: fixer_in_reward_pool=true).
-	var pool: Array = items_of_kind("decoration").filter(func(d): return str(d.get("project", "")) == "")
+	# Norm's trophies/statue (NORM_SPEC.md §6) carry "source": "norm" for the same reason: he hands
+	# them out himself for a right quiz answer, so they must never also fall out of a neighbour's
+	# favour. Same shape as "project" on purpose - one exclusion key per giver, both additive filters.
+	var pool: Array = items_of_kind("decoration").filter(func(d):
+		return str(d.get("project", "")) == "" and str(d.get("source", "")) == "")
 	if pool.is_empty():
 		return {}
 	var candidates: Array = pool.filter(func(d): return GameState.item_count(d["id"]) < 3)

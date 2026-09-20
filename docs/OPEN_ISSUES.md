@@ -1946,3 +1946,48 @@ An Opus diagnosis found three stalls, each proven by an A/B that removed only th
   in every scene, which compiles again on each visit: a 78-89 ms frame 0.6 s into the descent on the second and later
   hub arrivals (keeping one material alive across the scene change removed it). Zorp keeps a 37-50 ms frame at the camera
   hand-back 1.9 s after touchdown in the old build too; cause unknown.
+
+## 63. [2026-09-19] Pop's orange: a gate the lead invented, and one that fought another gate
+
+POPFIX (Pop's fur from brown to the user's "orange") failed two critic rounds without changing a colour in round 2,
+because two of the lead's checklist items could not be met by colour at all:
+* **"The dark shade swatch under 8% of the close-up"** was the lead's own number, taken from a critic's aside. The
+  swatch is the toon shader's shadow band on the fur fins; a diagnostic that swapped the fin tips to flat cyan left it
+  unchanged (13-14% on Forward+), and on Compatibility, the phone's renderer, it is under 3%. Dropped.
+* **"No swatch above S 0.60" against "dE >= 15 from Grig's head"**: in this hue range every colour that pulled the 6-9%
+  shadow swatch from S 0.61 to 0.59 also pulled Pop to dE 13.2-15.1 from Grig (raising V alone, which fixes "reads
+  brown", fell to dE 3.5). Accepted at S 0.61 on that one shadow swatch, the same ruling as the gold trophy (S 0.64,
+  where the ground in the same frame measures 0.60-0.61). The lit fur renders #cc9056, H29 S0.57-0.59 V0.80, and the
+  lead judged the before/after frames: orange, not brown.
+Lesson: a checklist number needs a measurement behind it and a check that it does not fight the other gates. Ask the
+builder for the trade-off curve before the second round, not after.
+
+## 64. [2026-09-19] Installing the new cast: what the finale camera did with new heads, and a statue that crashed check.sh
+
+The cast redesign (Fen the plant, Pip in a saucer, Pop the fuzzy monster, DJ Nova the floating robot, Grig's oval head)
+and Norm went into the project together. Two things the install turned up:
+* **`norm_statue.gd` failed `check.sh` the moment `norm_model.gd` existed.** Its baking branch is gated on the model
+  file being present, so it only ran once the look was installed, and then it assigned a null `ARRAY_INDEX` from an
+  unindexed surface (`norm_statue.gd:219`). A guarded read with an empty `PackedInt32Array` fallback fixed it. Lesson: a
+  code path gated on a file that does not exist yet is untested code; build the gate's other side into the checklist.
+* **The meeting's side-on shot now falls back to the wide shot in 9 of 12 layouts** (it was 5 of 12). Cause: the solver's
+  head-box ESTIMATE reads Fen's petal collar and DJ Nova's fins as cover (0.31-0.33), while the rendered cover of the
+  same frames is at most 0.12. No gate fails; the ending just uses fewer side-on shots. Accepted for now (a fix means a
+  per-model head box, or a Head node for the models that lack one).
+
+## 65. [2026-09-19] A bug report with no frame behind it, and the real bug the hunt found
+
+The Norm integration runner reported "an extreme, indistinct close-up (huge blue/pink shapes filling frame), 2 of 2
+attempts" when talking to Norm from very near. An Opus diagnosis could not reproduce it and then checked the runner's
+own output: only two frames in six runs have Norm's box open, and both are ordinary two-shots (his helmet 14% of frame
+height); a colour scan of all ~150 frames found at most 1.6% coral anywhere. The runner had also "stood close" by
+teleporting the player onto Norm's exact position, which physics then resolves. The A/B (Norm vs Zorp, 3 runs each)
+measured the camera arm at 6.76-6.79 m against 6.41-6.89 m: no difference, with a smallest detectable effect of 0.4 m.
+* **Rule from this:** a bug report must name the frame or log line that shows it. "I saw it twice" without a path cost
+  a full diagnosis round.
+* **The hunt was still worth it:** the critic's own walk-in probe (a real walk, not a teleport) found that Norm's
+  tentacle passes through the player's helmet at the 0.69 m stop, in most close talks - his collider is radius 0.40 while
+  his model reaches 1.31-1.39 m out, where the other neighbours overhang by about 0.55 m. Fixed separately.
+* Also found and fixed on the way: `player.gd`'s `_on_land()` forced the model into "land" over an ACTIVE emote, so any
+  emote interrupted by a hop never reported finishing (the watchdog warning). DJ Nova's new floating collider on the
+  event-space dance floor is what started nudging the player airborne mid-dance; the bug was the player's, not hers.

@@ -793,6 +793,16 @@ func _on_land(airtime: float) -> void:
 	_jumping = false
 	if not was_real:
 		return
+	# DJDANCE (2026-09-19): a stray physics bump during an active emote (e.g. clipping an NPC's
+	# collider — measured with DJ Nova's new floating hover collider on the event-space dance floor,
+	# 0.20s+ of unintended air time is enough) must not steal the model out of "dance"/"wave"/etc.
+	# `_select_state()` only resumes once `_emote` clears, so once this forces the model to "land" it
+	# can never fire "land"'s own transition back to idle/walk, the emote's `emote_finished` never
+	# arrives, and the watchdog in `_physics_process` clears it with "never reported finishing"
+	# instead. A REAL jump can't happen mid-emote anyway (jumps are gated on `_emote == ""` where they
+	# start), so skipping the landing pose here only affects this stray-bump case.
+	if _emote != "":
+		return
 	_land_timer = LAND_TIME
 	_model.set_state("land")
 	_dust_land.restart()
