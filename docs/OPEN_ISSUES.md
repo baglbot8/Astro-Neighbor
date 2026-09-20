@@ -2056,3 +2056,22 @@ back to 106; proven by an A/B in both directions, plus a runtime control that hi
 mid-way through; and a quantity DIVIDED by a scale explodes instead of shrinking, so it needs the scale it was designed
 for, not the live one. Also: this shipped because the palette and luma gates in this project are run on showcase scenes
 and empty worlds. A "decorated planet" frame belongs in the checks that run before a release.
+
+## 69. [2026-09-20] Autosave, a backup save and recovery - and why the guard is an allowlist
+
+The game only saved when the player chose "Save game" (or at the finale's checkpoints), in one file, written in place.
+On a phone the browser can kill a background tab at any moment, so a session could vanish and a half-written file would
+take the save with it. `save_manager.gd` now autosaves on the events that matter plus a slow timer, writes through a
+temp file and a rename, keeps the previous good save as `.bak`, and on load falls back to the tmp or the bak with one
+short line to the player. Measured by the critic: 20 SIGKILLs through play left 19 valid saves and one artifact of the
+test shape, worst loss 20 s; 50 kills during a save-every-frame loop left 47 valid main files, 0 corrupt, a `.bak`
+always present, and the 3 that landed between the renames recovered from tmp; a write costs 0.9-3.5 ms.
+* **The guard had to be an allowlist.** Round 1 used a blocklist of dev flags, and the critic showed a Director run that
+  did not match any of them would autosave over a real save. Autosave is now ON only when the process names no scene
+  beyond the main one and carries no user arg at all, with `--allow-autosave` as the explicit opt-in. It fails CLOSED:
+  a lost test write costs nothing, a lost player save costs the session. Future builders driving real play from a
+  Director must pass `--allow-autosave` or their autosave tests will silently do nothing (also in CLAUDE.md).
+* **Proven in the served build, not the editor** (the lesson from entry 46): the web export was served over local HTTP
+  and driven in a browser - it prints "autosave: on (interactive session)", writes in 0.9-3.5 ms, and a real page reload
+  resumed the session. Still unproven: the iOS tab-HIDE path. The browser pane keeps background tabs "visible", so
+  `visibilitychange` never fired there; only `pagehide` was exercised. A real device would settle it.

@@ -130,6 +130,10 @@ returns the conclusion, not the dump.
 - `TouchControls.debug_stick` / `debug_widget` **silently do nothing unless the run also passes
   `--ui=mobile`** — the whole TouchControls node is inactive otherwise, and `_pointer_down` just
   returns false with no warning. Two blank test runs were lost to this (2026-09-12 ring critic).
+- **Autosave is off in every agent run, on purpose** (2026-09-20). `save_manager.gd` autosaves only when the process
+  names no scene beyond the main one and passes no user arg, so any Director, probe or dev run writes nothing. A run
+  that genuinely needs autosave must pass `--allow-autosave`; `--no-autosave` always wins. This does not replace the
+  rule below.
 - **Agent runs never use the user's real save folder.** Test in a scratch copy with `config/name`
   renamed (user:// follows the name) and hash the real save before and after. A run through the title
   with `--new-game` deletes the save (`title_screen.gd:89`); the user's desktop save was lost this
