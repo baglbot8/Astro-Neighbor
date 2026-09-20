@@ -117,8 +117,28 @@ func _add_contact_shadow() -> void:
 	var ab := _visual_aabb()
 	var rx: float = minf(footprint, maxf(absf(ab.position.x), absf(ab.end.x)))
 	var rz: float = minf(footprint, maxf(absf(ab.position.z), absf(ab.end.z)))
+	# ORTHONORMALIZED, and it has to be. contact_shadow_quad() reads base_xf's SCALE to convert the
+	# world-metre penumbra into the parent's local units (`rx += BLOB_PENUMBRA / sx`). That is
+	# correct for a caller whose transform is at rest — and this one is NOT: DecorationManager._pop()
+	# sets the item to scale 0.02 on the frame it spawns, and the deferral above lands inside that
+	# tween. Handing the live transform over gave sx = 0.02, so 0.30 / 0.02 = 15.0 was added to a
+	# 0.55 half-extent; when the tween returned the item to scale 1 those 15.55 local units became
+	# 15.55 WORLD METRES, a black quad wider than the 12 m planet, laid flat over everything.
+	# Measured, Compatibility, home, 12:00, one fixed camera, 12 items placed one per second (3 runs
+	# each, same build, this expression switched): mean frame luma 92.0 with no items; 73.4 with the
+	# live transform, 93.6 with this one. Hiding ONLY the decorations' ContactShadow quads in the
+	# 12-item frame recovers 22.4% of the light on the broken build and 1.1% on this one — 1.1% is
+	# what a contact shadow is supposed to cost. Worst blob half-extent 15.880 m -> 0.837 m. Night
+	# 22:00 and zorp behave the same. Forward+ never saw any of it: contact_shadow_quad() returns
+	# null there, and its 0/1/6/12/20-item frames are identical either way (<0.06 luma).
+	# No fitted constant: the item RESTS at scale 1 (only _pop ever scales the root), so an
+	# orthonormal basis is its real resting scale, not a tuned one. Proof rather than assertion —
+	# the twelve blobs this now builds are the same numbers, to three decimals, that
+	# DecorationManager.restore() has always built, because that path spawns with pop = false.
+	# The deferral still has to stay: orthonormalizing does not move the origin, so the blob still
+	# needs the frame to learn where the manager put it.
 	_contact_shadow = PlanetProps.contact_shadow_quad(rx, rz,
-		PlanetProps.planet_under(self), global_transform)
+		PlanetProps.planet_under(self), global_transform.orthonormalized())
 	if _contact_shadow != null:
 		add_child(_contact_shadow)
 

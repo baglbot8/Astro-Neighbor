@@ -21,7 +21,8 @@ extends Node
 ##     timeline or capture gains a stranger).
 ##   * WHICH DAY (`is_norm_day`): day d's raw roll, seeded by hash(["astro_norm", d]), hits with RAW_CHANCE;
 ##     a hit is VOID when day d-1 was itself a Norm day. That rule alone makes a hit on d-1 and d impossible,
-##     and a stationary rate P = p (1 - P), so p = 1/3 gives exactly 1 day in 4 (the spec's "1 day in 4").
+##     and a stationary rate P = p (1 - P), i.e. P = p / (1 + p). RAW_CHANCE is 4/7 since 2026-09-19, so
+##     P = 4/11 = 1 day in 2.75 (measured 1 in 2.685 over days 1-400; see RAW_CHANCE for why it moved).
 ##     Pure: a function of the day number alone, never of the save, the clock or where anyone stands.
 ##   * WHICH WORLD (`world_for_day`): a seeded pick (hash(["astro_norm_world", d])) from WORLDS that pass
 ##     CampaignData.planet_in_range, and, before the story is done, whose neighbour this save has met
@@ -88,8 +89,18 @@ const K_MET := "norm_met"
 const K_TODAY := "norm_today"
 const ALL_KEYS: Array[String] = [K_LAST_DAY, K_DONE_DAY, K_WINS, K_STATUES, K_SEEN_Q, K_MET, K_TODAY]
 
-## The raw per-day hit chance. With the "void after a Norm day" rule the rate is p / (1 + p) = 1/4.
-const RAW_CHANCE := 1.0 / 3.0
+## The raw per-day hit chance. With the "void after a Norm day" rule the effective rate is exactly
+## p / (1 + p) (see "WHICH DAY"), so the raw chance for a wanted rate P is p = P / (1 - P).
+##
+## WAS 1/3 -> 1 day in 4. At the 25-minute day (environment.gd DAY_LENGTH_SEC 1500, 2026-09-19) that
+## MEASURED 1 day in 3.92 over days 1-400 and 1 day in 4.00 over 4000 days, end to end through
+## `here_today` on a story-done save - 98 real minutes between Norms. (The earlier "extra gating pulls
+## it below the raw chance" reading was wrong: nothing gates it further; 1 in 4 is what 1/3 asks for.)
+## The lead's ruling: one day in 2.5 to 3.0. 4/7 is the exact inversion of the middle of that band,
+## P = 4/11 = 1 day in 2.75, with no free parameter. MEASURED at 4/7 the same way: 1 day in 2.685
+## (67 real minutes) over days 1-400, 1 day in 2.784 (70 real minutes) over 4000 days, never two days
+## running, never home.
+const RAW_CHANCE := 4.0 / 7.0
 ## Spot search (see "WHERE HE STANDS").
 const SPOT_POINTS := 2000
 const FAR_DEG := 90.0

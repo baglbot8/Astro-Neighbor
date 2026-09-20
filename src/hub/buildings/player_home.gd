@@ -263,16 +263,87 @@ func _on_door(player: Node3D) -> void:
 		"Home sweet home. Boots off, helmet on the hook.",
 		"The porthole looks straight out at Zorp's world.",
 	], "astro", HOME_ACCENT)
-	var choice: int = await ask("Anything else?", ["Save game", "Just looking"])
-	if choice == 0:
-		var ok: bool = SaveManager.save_game()
-		if ok:
-			toast("Saved!", "stardust")
-			AudioManager.play_sfx("quest_complete", -6.0)
+	# A LOOP, like the mailbox's: with two things to do at the door ("Save game" and, until the
+	# planet is at its biggest, "Make my planet bigger") a single question would make the player walk
+	# back to the door to do the second one.
+	while true:
+		var opts: Array = ["Save game"]
+		var grow_idx := -1
+		if not GameState.home_size_at_max():
+			grow_idx = opts.size()
+			# 33 characters at the widest price, inside the 60 a phone line holds.
+			opts.append("Make my planet bigger (%d scrap)" % GameState.home_size_cost())
+		opts.append("Just looking")
+		var choice: int = await ask("Anything else?", opts)
+		if choice == 0:
+			var ok: bool = SaveManager.save_game()
+			if ok:
+				toast("Saved!", "stardust")
+				AudioManager.play_sfx("quest_complete", -6.0)
+			else:
+				toast("Could not save.", "warn")
+		elif choice == grow_idx and grow_idx >= 0:
+			if await _grow_flow():
+				break   # the planet just moved: close the box so the player can look at it
 		else:
-			toast("Could not save.", "warn")
+			break
 	AudioManager.play_sfx("door_close", -8.0)
 	end_flow()
+
+
+# ----------------------------------------------------------------------- make my planet bigger
+## STYLE_GUIDE R2.11 / docs/OPEN_ISSUES.md 66. The pieces have been in the game since R2.11 and
+## nothing ever wrote to them: PlanetData.HOME_RADII is the table of sizes, GameState.home_planet_size
+## is the saved index into it, and Planet.regrow() moves the live world onto the new ground. This is
+## the one place that spends the scrap and pulls the lever.
+##
+## Returns true when the planet actually grew, which closes the door menu so the first thing the
+## player sees afterwards is their bigger world rather than another dialogue box.
+func _grow_flow() -> bool:
+	var cost := GameState.home_size_cost()
+	var next_level := GameState.home_planet_size + 1
+	var from_m := PlanetData.home_radius_for_level(GameState.home_planet_size)
+	var to_m := PlanetData.home_radius_for_level(next_level)
+	if not GameState.can_afford_scrap(cost):
+		await say(_who(), [
+			"Pushing the ground out costs %d scrap." % cost,
+			"I have %d. Not yet, then." % GameState.scrap,
+			"Shards and space junk both pay in scrap.",
+		], "astro", HOME_ACCENT)
+		return false
+	var lines: Array = [
+		"I could push the ground out a bit.",
+		"From %d metres of world to %d." % [int(from_m), int(to_m)],
+		"More room for trees, plants and my things.",
+		"It costs %d scrap. I have %d." % [cost, GameState.scrap],
+	]
+	if next_level >= GameState.home_size_max():
+		lines.append("That is as big as this planet gets.")
+	await say(_who(), lines, "astro", HOME_ACCENT)
+	var yes: int = await ask("Grow the planet for %d scrap?" % cost, ["Yes please", "Not now"])
+	if yes != 0:
+		return false
+	if not GameState.grow_home():
+		toast("Could not grow the planet.", "warn")
+		return false
+	AudioManager.play_sfx("quest_complete", -3.0)
+	var r := _regrow_planet()
+	toast("Your planet grew to %d metres!" % int(to_m if r <= 0.0 else r), "scrap")
+	return true
+
+
+## Grows the LIVE world to the size GameState now holds. Guarded on "home" because `regrow()` frees
+## and rebuilds the collectibles, and on any world with neighbours that could drop a favour's
+## fetch target (favor_system only ever spawns those on an NPC's own planet, never here).
+func _regrow_planet() -> float:
+	var p := get_tree().get_first_node_in_group("planet") as Planet
+	if p == null or p.data == null or p.data.id != "home":
+		return 0.0
+	return p.regrow()
+
+
+func _who() -> String:
+	return str(GameState.player_style.get("name", "Astro"))
 
 
 func _on_mail(player: Node3D) -> void:

@@ -33,13 +33,20 @@ extends Node
 ##    ResourceLoader.exists then load().call()), never by class_name, exactly like world.gd's own
 ##    ProjectSystem hookup: a build missing that file must still run every other favour untouched.
 ## 2. OCCASIONALLY - once a neighbour clears the gate above and has no active favour, whether they
-##    have one TODAY is a coin flip seeded only by (npc_id, day_count): `FAVOR_CHANCE` (a Phase 6
-##    pacing number, start 0.5). The flip is a `RandomNumberGenerator` seeded with `hash()` of the two
-##    - never the system's live `_rng` - so it reads the same after a save and a fresh-process reload
-##    on the same day (`_day_roll_passes`), and it never lands on two game days running: a day right
-##    after one that had an offer (accepted or declined - both write `last_favor_day`) never rolls at
-##    all (`_day_eligible`). This applies to every neighbour, gated or not - a Commons neighbour keeps
-##    "now and then", not "every talk", per CORE_LOOP.
+##    have one TODAY is a coin flip seeded only by (npc_id, day_count): `FAVOR_CHANCE` (a pacing
+##    number, 0.85 since the lead's ruling of 2026-09-19; it was 0.5). The flip is a
+##    `RandomNumberGenerator` seeded with `hash()` of the two - never the system's live `_rng` - so it
+##    reads the same after a save and a fresh-process reload on the same day (`_day_roll_passes`), and
+##    it never lands on two game days running: a day right after one that had an offer (accepted or
+##    declined - both write `last_favor_day`) never rolls at all (`_day_eligible`). This applies to
+##    every neighbour, gated or not - a Commons neighbour keeps "now and then", not "every talk", per
+##    CORE_LOOP.
+##    WHEN IN THE DAY (added 2026-09-19 with the 1500 s day): a favour that passed the flip does not
+##    appear at midnight with every other neighbour's. Each (npc, day) also draws a deterministic
+##    SLOT - one of OFFER_SLOTS_PER_DAY quarter-days, 6 game hours / 6.25 real minutes each
+##    (`_offer_slot_for`) - and the offer only stands from that slot to the end of the day. Same
+##    number of favours, spread through the day instead of in one lump, which is what turns "any of
+##    the five has something" from one lump every 28.7 real minutes into one every ~13 (measured).
 ## 3. MINI-GAME FAVOURS - once ProjectSystem.played_minigames() lists a neighbour's game (their project
 ##    step is past, or the story is over), about one in three of their favours (`PLAY_FAVOR_CHANCE`) is
 ##    "play" instead of fetch/bring/deliver: play their game again, on their own world, then talk to
@@ -82,9 +89,17 @@ const NODE_NAME := "FavorSystem"
 ## Loaded by path, never by class_name (see the header) - a build missing ProjectSystem simply never
 ## gates or offers a "play" favour, exactly as world.gd falls back for it today.
 const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
-## Phase 6 pacing number (docs/CORE_LOOP.md "Visits and favours"): chance an eligible, ungated
-## neighbour has a favour on a given game day. Free to retune; nothing else depends on the value.
-const FAVOR_CHANCE := 0.5
+## Pacing number (docs/CORE_LOOP.md "Visits and favours"): chance an eligible, ungated neighbour has
+## a favour on a given game day. Free to retune; nothing else depends on the value.
+## 0.5 -> 0.85 on 2026-09-19 (lead ruling, after the day went from 600 s to 1500 s). A neighbour is
+## locked out the day of an offer and the day after, so the mean gap for one named neighbour is
+## 1 + 1/FAVOR_CHANCE game days: 3.0 days at 0.5 (74.6 real minutes, too rare at the new day length),
+## 2.18 days at 0.85. MEASURED over 200 and 20000 game days, not derived - builder report 2026-09-19.
+const FAVOR_CHANCE := 0.85
+## Quarter-days. Which one a neighbour's favour turns up in is drawn deterministically per (npc, day)
+## by `_offer_slot_for`, so the five neighbours' offers are spread through the day instead of all
+## standing from midnight. 4 slots x 6 game hours = 6.25 real minutes each at DAY_LENGTH_SEC 1500.
+const OFFER_SLOTS_PER_DAY := 4
 ## Phase 6 pacing number: share of a neighbour's favours, once their mini-game is unlocked, that ask
 ## to play it again instead of an ordinary fetch/bring/deliver errand.
 const PLAY_FAVOR_CHANCE := 1.0 / 3.0
@@ -604,14 +619,41 @@ static func _day_roll_passes(npc_id: String, day: int) -> bool:
 	return rng.randf() < FAVOR_CHANCE
 
 
-## Combines §1 and §2: whether `npc_id` would have a favour to offer today, ignoring whether one is
-## already active (callers check that separately - `can_offer`, `has_marker`).
+## The quarter-day the clock is in right now, 0-3 (0 = midnight to 06:00). Clamped, so a frozen or
+## out-of-range showcase clock still answers slot 0 or 3 rather than an index nothing matches.
+static func _current_slot() -> int:
+	var hours_per_slot := 24.0 / float(OFFER_SLOTS_PER_DAY)
+	return clampi(int(clampf(GameState.time_of_day, 0.0, 24.0) / hours_per_slot), 0, OFFER_SLOTS_PER_DAY - 1)
+
+
+## Which quarter-day this neighbour's favour turns up in on `day`, 0-3. Deterministic from (npc, day)
+## with its own seed string, exactly like `_day_roll_passes`, so it survives a save and a reload on
+## the same day and never moves an offer the player has already seen standing.
+## ALREADY CHECKED, do not "fix" it: the first draw off a freshly seeded generator is a permutation
+## of the seed itself, so this looked like it might give every neighbour the same slot on a given day
+## - the one failure that would defeat the whole point of a slot. Measured over 2000 game days and
+## 90000 neighbour pairs: two neighbours share a slot 25.1% of the time, which is what independent
+## draws give, and the four slots take 24.9 / 25.0 / 24.8 / 25.3 % of all offers over 20000 days.
+## Warming the generator with a throwaway `randi()` moved neither number (25.0%, 24.8/25.2/24.9/25.1)
+## and was dropped rather than kept as a tweak with no measured effect (2026-09-19).
+static func _offer_slot_for(npc_id: String, day: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("%s:%d:slot" % [npc_id, day])
+	return rng.randi_range(0, OFFER_SLOTS_PER_DAY - 1)
+
+
+## Combines §1 and §2: whether `npc_id` would have a favour to offer right now, ignoring whether one
+## is already active (callers check that separately - `can_offer`, `has_marker`). The day roll decides
+## WHETHER, the slot decides FROM WHEN: before the neighbour's slot of the day there is no offer yet,
+## from it until midnight there is.
 func _would_offer_today(npc_id: String) -> bool:
 	if _project_unfinished(npc_id):
 		return false
 	if not _day_eligible(npc_id):
 		return false
-	return _day_roll_passes(npc_id, GameState.day_count)
+	if not _day_roll_passes(npc_id, GameState.day_count):
+		return false
+	return _current_slot() >= _offer_slot_for(npc_id, GameState.day_count)
 
 
 # ============================================================================= minigame favours (§3)

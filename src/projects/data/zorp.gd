@@ -202,7 +202,7 @@ static func definition() -> Dictionary:
 						"All three! Zorp knew you could do it. Zorp knew!",
 					],
 					"tomorrow": [
-						"Enough searching for today! Come back tomorrow.",
+						"Enough searching for today! Rest a few hours!",
 					],
 				},
 			},
@@ -226,7 +226,7 @@ static func definition() -> Dictionary:
 						"IT'S GLOWING! Oh look, look, it is really glowing!",
 					],
 					"tomorrow": [
-						"Already lit today! Come see it shine tomorrow.",
+						"Already lit today! Come see it shine in a bit!",
 					],
 				},
 			},

@@ -175,7 +175,7 @@ static func definition() -> Dictionary:
 						"I will assemble the regulator tonight. Efficient.",
 					],
 					"tomorrow": [
-						"Assembly takes one night. Come back tomorrow.",
+						"Assembly takes a few hours. Return then. Confirmed.",
 					],
 				},
 			},
@@ -199,7 +199,7 @@ static func definition() -> Dictionary:
 						"Installed. All three machines: green. Confirmed.",
 					],
 					"tomorrow": [
-						"Already installed today. Admire it tomorrow instead.",
+						"Already installed today. Admire it again shortly.",
 					],
 				},
 			},

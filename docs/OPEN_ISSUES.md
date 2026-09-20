@@ -1991,3 +1991,68 @@ measured the camera arm at 6.76-6.79 m against 6.41-6.89 m: no difference, with 
 * Also found and fixed on the way: `player.gd`'s `_on_land()` forced the model into "land" over an ACTIVE emote, so any
   emote interrupted by a hop never reported finishing (the watchdog warning). DJ Nova's new floating collider on the
   event-space dance floor is what started nudging the player airborne mid-dance; the bug was the player's, not hers.
+
+## 66. [2026-09-19] The money economy, measured for the first time: three things broken, not mistuned
+
+An Opus read-only pass measured earning and spending in the engine (its structured report was lost to a JSON parse
+failure and these numbers were recovered from its transcript; the full table is gone, the findings are not):
+* **Collectibles pay no stardust at all.** No world's `collectible_kind` list includes `stardust_shard`: across the
+  seven worlds it counted 66 pickups, 26 of them scrap and 0 shards, so `collectible.gd`'s `add_stardust(8, 15)` is dead
+  code. The Town Hall even tells the player "stardust regrows overnight. Sweep the hills!", which is false.
+* **Scrap is about 50x oversupplied.** The only sink in the game is 40 scrap (five rocket parts at 8 each). Home alone
+  drops 24-48 a day and all worlds together 78-156, plus up to 100 from trash. Every part is affordable on day one, and
+  after the story the scrap pill counts up forever with nothing to spend it on.
+* **There is no big upgrade.** `HOME_RADII` has levels 12/14/16/18 m, but nothing in shipping code ever writes
+  `home_planet_size` - only a test probe does.
+* Money is not starved: about 876 stardust per game-day after the story, and 56% of that is selling the decorations
+  friends give you (mean price 370, 148 back at SELL_RATIO 0.4) rather than playing the game.
+* The 25-minute day cuts income about 40%, which the measurement called the right direction.
+The agent's own first pick: sell the planet-size upgrade for scrap at the home mailbox - it fixes the dead currency, the
+missing goal and the post-story void in one menu entry.
+
+## 67. [2026-09-20] A 25-minute day moved everything that was keyed to "a day"
+
+The user asked for longer days so daily things feel special. The day went 600 -> 1500 s (environment.gd) and the DAY
+builder's audit listed all 20 behaviours keyed to `day_count`. Four of them needed the lead to rule, and each fix was
+measured against the OLD code run through the same harness (the control that makes the numbers comparable):
+* **Story steps** were one per neighbour per game day: the floor per neighbour went 30 -> 75 real minutes. Now a step
+  unlocks 12 game hours (720 game minutes, about 12.5 real minutes) after the last one was completed, stamped as a
+  rolling clock instead of a day bucket - which also killed an old exploit where finishing at 23:59 opened the next step
+  0.02 real minutes later. Floor back to 37.5 real minutes per neighbour.
+* **Favours** went 29.8 -> 74.6 real minutes per neighbour. FAVOR_CHANCE 0.5 -> 0.85 plus four offer slots through the
+  day (they all used to stand from midnight): measured over 2000 game days, a named neighbour every 54 min, somebody
+  with an offer every 14, and the share of the day when at least one offer is waiting went 35% -> 63%.
+* **Norm** measured 1 day in 3.96 (99 real minutes) because gating pulls the raw chance down; RAW_CHANCE 1/3 -> 4/7
+  brings the effective rate to one day in 2.5-3.0.
+* **Visitors were only ever rolled when home LOADED**, so standing at home through a rollover meant nobody came. They
+  now walk in over the horizon during play. Two bugs fell out of that: the on-camera test was a frustum-volume test that
+  reached through a 12 m planet (it now walks the sight line against the terrain), and the entry search cost 12-20 ms
+  every second while a visitor waited (the ring is now built once per arrival and the sweep is resumable inside a 200 us
+  budget: worst frame 0.85 ms). The spot was also the SAME square every day for 27 days; a day-seeded shuffle over the
+  legal squares gives 22 distinct spots in 30 days.
+* Two texts had quietly become false: the neighbours' "come back tomorrow" lines (the wait is now half a game day) and
+  the visitor pointer, which announced "Zorp 18 m" on the frame he spawned off-camera.
+**Lessons:** a cadence keyed to a day is a cadence keyed to a number nobody re-reads when the day length changes - audit
+them together. And when a ruling gives a target, say which accounting it is in: "35-45 minutes per neighbour" measured
+as steps x gate is 37.5, but as elapsed clock from step 1 to step 3 it is 25.0, and only one of those can be the target.
+
+## 68. [2026-09-20] Decorating made the phone screen go dark - a deferred call reading a mid-animation scale
+
+Found by accident while measuring the planet upgrade, and it was live on the site: on Compatibility (the phone's
+renderer) every decoration the player placed darkened the WHOLE scene, permanently, until the world reloaded. Measured
+at home, noon, mean frame luma 0-255: 107 with none, 84 with one, 47 with six, 37 with twelve. Forward+ read 104-106
+throughout - a renderer-only bug, which is why desktop review never saw it.
+
+Three ordinary things conspired:
+* `decoration_manager.gd:390` sets the new item's scale to 0.02 for the pop-in animation.
+* `deco_item.gd:63` adds the contact shadow with `call_deferred`, so it runs one idle frame later - while the item is
+  still at 0.02.
+* `planet_props.gd:630` widens the shadow blob by `BLOB_PENUMBRA / basis.x.length()`, i.e. 0.30 / 0.02 = 15.0 local
+  units. When the tween returns the item to scale 1, those become 15.55 WORLD metres of black quad on a 12 m planet.
+The fix is one expression: pass `global_transform.orthonormalized()` (deco_item.gd:135). Blob 15.550 m -> 0.756 m, luma
+back to 106; proven by an A/B in both directions, plus a runtime control that hid only the ContactShadow nodes (37 ->
+106) and only the GroundGlow quads (no change).
+**Lessons:** a deferred call reads whatever state exists a frame later - never hand it a transform that an animation is
+mid-way through; and a quantity DIVIDED by a scale explodes instead of shrinking, so it needs the scale it was designed
+for, not the live one. Also: this shipped because the palette and luma gates in this project are run on showcase scenes
+and empty worlds. A "decorated planet" frame belongs in the checks that run before a release.

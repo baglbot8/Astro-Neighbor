@@ -330,6 +330,26 @@ Rules (the user's where quoted above; lead defaults otherwise, open to change):
   silly goal of its own. A wrong answer gives a funny line and he leaves; he comes back another day with new
   questions. No stardust penalty.
 
+## Pacing, finding people, and money (asked 2026-09-19)
+
+After the lead's honest review of the shipped game, the user picked three of the six things in it:
+* **A day becomes 25 real minutes** (it was 10). At 10 minutes a "once a day" thing happened every 10 minutes:
+  a visitor every ~20, a favour several times an hour, Norm every ~40. Longer days make them feel like events again.
+  Every day-keyed cadence is being re-tuned around the new length; visitors move to one per day so home stays alive.
+* **An off-screen pointer to the visitor only.** Planets are balls, so someone on the far side is missed completely.
+  It reuses the rocket pad's own pip (`pad_compass.gd`). Norm does NOT get one - he already has his landing hint.
+* **Money gets measured and balanced.** Nobody has ever measured what an hour earns against what things cost.
+Not taken for now (still open, from the same review): autosave and a backup save file; a post-story goal to collect
+and show off; more lines per neighbour.
+
+**Where it landed (measured, 2026-09-20):** a day is 25 real minutes; a story step unlocks 12 game hours after the last
+one (37.5 real minutes per neighbour, was 30 before the change and 75 straight after it); somebody has a favour every
+14 real minutes and a named neighbour every 54; a visitor comes every day and can walk in while you stand at home, in
+one of 22 spots over 30 days; Norm comes one day in 2.5-3. Money: a sweep of all seven worlds pays 409 stardust a game
+day, selling friends' gifts fell from 56% of income to 14% (SELL_RATIO 0.4 -> 0.15), and scrap finally buys something -
+the home planet grows 12 -> 14 -> 16 -> 18 m for 450 / 950 / 1700 scrap (about 1.5 h to the first, 10 h to the last).
+First decoration about 3-5 minutes in. Still open: scrap has nothing to buy again after about 10 hours.
+
 ## Open questions
 
 - **What is in the post-story game** besides decorating and friendship? Not decided.

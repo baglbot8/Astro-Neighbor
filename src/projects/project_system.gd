@@ -18,9 +18,15 @@ extends Node
 ##   * A project STARTS the first time you talk to that neighbour while CampaignData.gates_on().
 ##     Gates off (an old save, a finished story, a Director run without "--campaign") = inert: every
 ##     call returns false and nothing is drawn, so today's favors run exactly as before.
-##   * ONE STEP PER NEIGHBOUR PER GAME DAY (CORE_LOOP "Changed after the build plan"). Completing a
-##     step writes GameState.project_step_day[npc] = GameState.day_count; the next step is only ASKED
-##     once day_count is greater. Until then the neighbour says the completed step's "tomorrow" lines.
+##   * ONE STEP PER NEIGHBOUR PER HALF GAME DAY (lead ruling 2026-09-19, after the day went from 600
+##     to 1500 s: at one step per whole day a neighbour's three steps cost 75 real minutes instead of
+##     30). Completing a step writes the GAME CLOCK in game minutes into
+##     GameState.project_step_day[npc] (`_clock_minutes`); the next step is only ASKED once
+##     STEP_GATE_MINUTES (720 = 12 game hours = 12.5 real minutes) of game time have passed. Until
+##     then the neighbour says the completed step's "tomorrow" lines.
+##     ROLLING, NOT A BUCKET: the gate counts from the moment the last step was finished, so waiting
+##     at the clock can never unlock two steps back to back (finishing at 23:59 does NOT unlock the
+##     next step at 00:00, which the old day-number rule allowed). See `step_unlocked`.
 ##   * Friendship per step (GameState.add_friendship), EventBus.project_step_completed per step, and
 ##     EventBus.project_completed(npc, part_id) when the last step's talk hands over the part as a bag
 ##     item (the gift the bench needs to fit it).
@@ -34,8 +40,8 @@ extends Node
 ## ONE EXCEPTION TO "returns true while a project is active": when a delivery gift addressed to this
 ## neighbour is in the bag, this runs its own lines and then returns FALSE, so conversation.gd's
 ## FIRST favor branch - the delivery - opens the gift in the same talk. Without it a Commons
-## neighbour's "deliver a gift to Bolt" favor stalls for the whole project (three game days, 30 real
-## minutes or more). That branch is exclusive (conversation.gd `if ... elif`), so no favor OFFER can
+## neighbour's "deliver a gift to Bolt" favor stalls for the whole project (three story steps, 37.5
+## real minutes or more). That branch is exclusive (conversation.gd `if ... elif`), so no favor OFFER can
 ## follow. It depends on conversation.gd keeping the delivery branch first.
 ##
 ## ================================================================================= DEFINITION SCHEMA
@@ -149,9 +155,9 @@ extends Node
 ##              THE "!": shown over the NAMED neighbour for as long as the link is live, and hidden
 ##              over this step's own neighbour meanwhile - their "progress" lines should say where to
 ##              go (`wants_marker`).
-##              THE DAY: completing the link counts as THIS PROJECT'S OWN neighbour's step for the day
+##              THE GATE: completing the link stamps THIS PROJECT'S OWN neighbour's step clock
 ##              (`GameState.project_step_day[<this project's "npc">]`), exactly like any other step -
-##              it never spends the NAMED neighbour's own day lock.
+##              it never spends the NAMED neighbour's own half-day gate.
 ##   "find"     "count": 3             how many markers to visit.
 ##              "planet": "bolt"       (optional) which world the markers are on; default the
 ##                                     neighbour's own planet (NpcData "planet").
@@ -218,7 +224,13 @@ extends Node
 ##   asked    the neighbour has introduced `step` (its markers / ring are live)
 ##   markers  directions the system chose for find markers, saved so they never move between loads
 ##            and a later place step can aim at one
-## GameState.project_step_day[npc_id] = the game day of the neighbour's last completed step.
+## GameState.project_step_day[npc_id] = the GAME CLOCK, in whole game minutes since day 0 midnight
+##   (day_count * 1440 + time_of_day * 60), of the neighbour's last completed step - NOT a day index
+##   any more (lead ruling 2026-09-19; game_state.gd's own comment on the field still says "day
+##   index" and is for the lead to amend, this builder does not own that file). An int on purpose:
+##   GameState.from_dict runs `_ints()` over this dictionary, so a float would be truncated on the
+##   first save/load round-trip. Values written before the ruling - and by dev_menu.gd:1177, which
+##   still writes a day index - are read back as day indices by `step_unlocked`; see its legacy branch.
 ##
 ## ================================================================================= TEST-ONLY HOOK
 ## "--project-def=/absolute/path/def.gd" (a USER arg, after the "--") loads one extra definition from
@@ -238,6 +250,13 @@ const MINIGAME_OWNER_PREFIX := "project:"
 ## A finished three-step project alone should make the neighbour a "pal" (FavorSystem.TRUST_PAL = 15):
 ## 15 / 3 steps = 5 per step.
 const FRIENDSHIP_PER_STEP := 5
+## The story pacing gate (lead ruling 2026-09-19). One game day is 1440 game minutes and
+## environment.gd:38 DAY_LENGTH_SEC = 1500 s, so one game minute is 1.0417 real seconds and
+## STEP_GATE_MINUTES = 720 (half a game day) is 12.5 real minutes between a neighbour's steps:
+## 3 steps x 12.5 = 37.5 real minutes for a whole project, where one step per whole day cost 75.
+## Both numbers are measured, not derived - see the builder report of 2026-09-19.
+const GAME_MINUTES_PER_DAY := 1440
+const STEP_GATE_MINUTES := 720
 ## Auto-placed find markers. Each one needs this much free, level ground around it
 ## (Planet.find_free_dir clearance) so the beacon's 0.46 m base plate sits flat.
 const MARKER_CLEARANCE_M := 0.9
@@ -248,7 +267,7 @@ const MARKER_RESERVED_GAP_M := 1.0
 const MARKER_CANDIDATES := 32
 const MARKER_TRIES := 600
 ## Fallback lines when a definition leaves one out.
-const DEFAULT_TOMORROW: Array = ["That is enough for one day. Come back tomorrow!"]
+const DEFAULT_TOMORROW: Array = ["That's enough for today. Come back in a few hours!"]
 const DEFAULT_PART_AGAIN: Array = ["You lost it? Good thing I made a spare."]
 ## `debug_spot_report` samples the place ring on this grid (metres).
 const SPOT_SAMPLE_STEP_M := 0.35
@@ -576,11 +595,28 @@ static func has_active_project(npc_id: String) -> bool:
 	return not st.is_empty() and not bool(st["done"])
 
 
-## True when the neighbour may introduce their next step today (CORE_LOOP: one step per game day).
+## The game clock in whole game minutes, monotonic across day rollovers: day 1 09:30 = 1 * 1440 + 570.
+## Whole minutes (not a float) because GameState._ints() truncates floats in `project_step_day` on
+## every save/load; one game minute is 1.04 real seconds, fine enough for a 12-game-hour gate.
+static func _clock_minutes() -> int:
+	return GameState.day_count * GAME_MINUTES_PER_DAY + int(clampf(GameState.time_of_day, 0.0, 24.0) * 60.0)
+
+
+## True when the neighbour may introduce their next step yet: half a game day (STEP_GATE_MINUTES =
+## 12 game hours = 12.5 real minutes) of game time since their last step finished. Rolling from that
+## moment, so there is no clock to camp on - unlike the old "day_count is greater" rule, which let a
+## step finished at 23:59 unlock the next one a minute later at 00:00.
+## LEGACY / DEV VALUES: a stored number that cannot be a clock - anything <= GameState.day_count,
+## which a real clock (>= 1440) only ever is after 1440 game days - is a DAY INDEX, written by a save
+## from before 2026-09-19 or by dev_menu.gd's "set step day" tool. Those keep the old whole-day rule
+## for that one step; every step completed afterwards writes a clock and uses the half-day gate.
 static func step_unlocked(npc_id: String) -> bool:
 	if not GameState.project_step_day.has(npc_id):
 		return true
-	return GameState.day_count > int(GameState.project_step_day[npc_id])
+	var stamp := int(GameState.project_step_day[npc_id])
+	if stamp <= GameState.day_count:
+		return GameState.day_count > stamp
+	return _clock_minutes() >= stamp + STEP_GATE_MINUTES
 
 
 ## Every mini-game the story has unlocked, for the Commons replay board (docs/CORE_LOOP.md "Replays
@@ -783,7 +819,7 @@ func _complete(runner: DialogueRunner, npc: NPC, d: Dictionary, i: int) -> void:
 	(st["days"] as Array).append(GameState.day_count)
 	st["step"] = i + 1
 	st["asked"] = false
-	GameState.project_step_day[npc_id] = GameState.day_count
+	GameState.project_step_day[npc_id] = _clock_minutes()
 	GameState.add_friendship(npc_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
 	_clear_step_world(npc_id, i)
 	_met_cache.erase(npc_id)
@@ -918,7 +954,7 @@ func _finish_link(runner: DialogueRunner, actor: NPC, owner_id: String, d: Dicti
 	(st["days"] as Array).append(GameState.day_count)
 	st["step"] = i + 1
 	st["asked"] = false
-	GameState.project_step_day[owner_id] = GameState.day_count
+	GameState.project_step_day[owner_id] = _clock_minutes()
 	GameState.add_friendship(owner_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
 	var given: Dictionary = {}
 	var hand_over: Dictionary = step.get("hand_over", {})
@@ -1618,7 +1654,7 @@ func _dev_complete_step_silent(npc_id: String, d: Dictionary, j: int, st: Dictio
 				given[item_id] = int(given.get(item_id, 0)) + n
 	(st["days"] as Array).append(GameState.day_count)
 	GameState.add_friendship(npc_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
-	GameState.project_step_day[npc_id] = GameState.day_count
+	GameState.project_step_day[npc_id] = _clock_minutes()
 	EventBus.project_step_completed.emit(npc_id, j)
 	return given
 

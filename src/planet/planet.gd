@@ -1199,6 +1199,181 @@ func reseat_local(local_pos: Vector3) -> Vector3:
 	var d := local_pos.normalized()
 	return d * height_at(d)
 
+# ================================================================================ live resize
+## The nodes under /root/World that must NOT be walked by the re-seat below. `Planet` rebuilds its
+## own children; `Environment` is sky, sun and fog (and is retuned separately); `HUD`/`Onboarding`
+## are 2D; `CameraRig` re-derives its position from the player every frame, and leaving it alone is
+## what makes the ground visibly rise instead of the whole view sliding out with it.
+const RESEAT_SKIP: Array[String] = ["Environment", "HUD", "CameraRig", "Onboarding"]
+## Handled by name after the rebuild instead of by the generic move, because each has a better
+## answer than "slide it outwards": DecorationManager.restore() re-runs the exact code path a save
+## reload uses (so the live world and a reloaded world are identical), and the rocket pad's deck is
+## a mesh SAGGED to the old curvature (RocketMeshLib.sag), which is 0.24 m wrong at 12 m -> 18 m, so
+## it is rebuilt rather than moved.
+const RESEAT_REBUILD: Dictionary = {
+	"Decorations": "restore",
+	"Rocket": "res://src/rocket/rocket_pad.tscn",
+	"TrashField": "res://src/planet/trash_system.tscn",
+}
+
+## GROWS (or shrinks) this planet to the size `PlanetData.effective_radius` reports RIGHT NOW,
+## in place, with no scene reload — the "expand your planet" upgrade (STYLE_GUIDE R2.11,
+## GameState.home_planet_size). Returns the new radius, or 0.0 when nothing had to change.
+##
+## Three steps, in this order, because each needs the one before it:
+##   1. Write down where everything standing on the planet is, as a DIRECTION plus a HEIGHT ABOVE
+##      THE OLD GROUND. That pair is the only thing worth preserving: the direction is what the
+##      player chose, and the height above ground is what "sitting on it" / "sunk into it" means.
+##      This is `reseat_local` generalised from a saved local position to a live world node.
+##   2. Throw the ground, the water, the props and the collectibles away and build them again at
+##      the new radius. Everything in a .tres is authored against PlanetData.REFERENCE_RADIUS and
+##      `_setup_terrain` recomputes `_vscale`/`_ascale` from `radius`, so the relief, the craters,
+##      the plateaus and the scatter count all rescale on their own.
+##   3. Put step 1's list back down on the new ground, and hand the three nodes in RESEAT_REBUILD
+##      to their own rebuild instead.
+func regrow() -> float:
+	var want := PlanetData.effective_radius(data)
+	if is_equal_approx(want, radius):
+		return 0.0
+	var seats := _collect_seats()
+
+	radius = PlanetData.resolve_size(data)
+	for n: Node in [surface_mesh, water_mesh, props_root, collectibles_root,
+			get_node_or_null("SurfaceCollision")]:
+		if n != null and is_instance_valid(n):
+			# remove_child FIRST: queue_free alone leaves the node (and its name) in place until the
+			# end of the frame, so `_build` would add "Surface" a second time and Godot would
+			# silently rename it "Surface2" — and every later lookup by name would find the corpse.
+			remove_child(n)
+			n.queue_free()
+	surface_mesh = null
+	water_mesh = null
+	props_root = null
+	collectibles_root = null
+	ground_material = null
+	# `_setup_terrain` clears the reserved / crater / plateau / flat lists but NOT the prop
+	# bookkeeping, which only ever grows via `register_prop`. Left alone, the second scatter would
+	# see the first scatter's props as occupied ground and bake their contact pools twice.
+	_prop_dirs.clear()
+	_prop_radii.clear()
+	_ao_cells.clear()
+	_setup_terrain()
+	_build()
+
+	# STARGROW (docs/OPEN_ISSUES.md): `_build()` -> `PlanetProps.populate()` -> `_collectibles()`
+	# recreates every ordinary collectible not already picked today, and each new Collectible's own
+	# `_ready()` re-spawns this world's 5 "stardust_pickup" companions that are missing (see
+	# `Collectible._ensure_stardust_companions()`), so a partial sweep already comes back correctly.
+	# But when EVERY ordinary collectible on this world is already picked today, `_collectibles()`
+	# creates none, no `_ready()` ever runs, and the companions are never touched — normally
+	# `EventBus.planet_loaded` (emitted once at the end of `world.gd`'s own build) catches exactly
+	# this via `Collectible._on_world_planet_loaded()`'s "world stayed empty" safety net, but a live
+	# `regrow()` never emits that signal, so the 5 pickups stayed gone until the next real load.
+	# MEASURED (tests/stargrow_probe.gd, headless, home planet, all 8 day-1 collectibles picked then
+	# grown 12m->14m): regrow left 0 of 5 stardust pickups where a fresh reload under the identical
+	# day/pick state had 5. Calling the same idempotent spawn function `_on_world_planet_loaded` uses
+	# — rather than emitting `planet_loaded` itself, which would also re-run every OTHER system's
+	# arrival/restore logic (favor_system, project_system, HUD banners, norm_system, ...) that treats
+	# that signal as "a whole new world just loaded" — fixes this with no such side effect: it is a
+	# no-op wherever an ordinary collectible's `_ready()` already did the job (checks
+	# `was_picked_today()` and `coll_root.has_node(...)` before creating anything), so the partial-pick
+	# case above is unaffected. RE-MEASURED same probe: regrow now matches a fresh reload, 5-for-5,
+	# in both the partial-pick and all-picked cases, on day 1 and after a day rollover.
+	if collectibles_root != null:
+		Collectible._spawn_missing_companions(collectibles_root, self, data.id)
+
+	_apply_seats(seats)
+	_rebuild_attached()
+	_retune_environment()
+	return radius
+
+
+## Direction + height-above-ground for everything standing on this planet, measured against the
+## ground it is standing on NOW (call before the rebuild).
+func _collect_seats() -> Array:
+	var out: Array = []
+	var world := get_parent()
+	if world == null:
+		return out
+	for child in world.get_children():
+		if child == self or RESEAT_SKIP.has(child.name) or RESEAT_REBUILD.has(child.name):
+			continue
+		_collect_seats_from(child, out)
+	return out
+
+
+func _collect_seats_from(n: Node, out: Array) -> void:
+	var n3 := n as Node3D
+	if n3 != null and n3.is_inside_tree():
+		var p := n3.global_position - global_position
+		var dist := p.length()
+		# Near the surface = a real object standing on the planet: record it and STOP, because its
+		# own children are positioned relative to it and come along for free. Anything else is a
+		# bare container sitting at the world origin (World/Buildings, World/NPCs, ...) — or, above
+		# the far bound, something that is not on the ground at all — so walk into it instead.
+		if dist > radius * 0.5 and dist < radius * 2.0:
+			out.append({"node": n3, "dir": p / dist, "above": dist - height_at(p / dist)})
+			return
+	for c in n.get_children():
+		_collect_seats_from(c, out)
+
+
+func _apply_seats(seats: Array) -> void:
+	for s: Dictionary in seats:
+		var n: Node3D = s["node"]
+		if not is_instance_valid(n) or not n.is_inside_tree():
+			continue
+		var dir: Vector3 = s["dir"]
+		var above: float = s["above"]
+		if n is PlanetBody:
+			# Goes through the body's own API so `up`, `up_direction` and `velocity` end up
+			# consistent — a CharacterBody3D left standing 2 m inside the new ground with its old
+			# velocity is how you get a body shot through the crust on the next physics tick.
+			(n as PlanetBody).planet = self
+			(n as PlanetBody).place_on_planet(dir, -n.global_transform.basis.z, above)
+			continue
+		var xf := n.global_transform
+		xf.origin = global_position + dir * (height_at(dir) + above)
+		n.global_transform = xf
+
+
+## The three nodes that rebuild themselves rather than being slid outwards (see RESEAT_REBUILD).
+func _rebuild_attached() -> void:
+	var world := get_parent()
+	if world == null:
+		return
+	for node_name: String in RESEAT_REBUILD:
+		var old := world.get_node_or_null(NodePath(node_name))
+		if old == null:
+			continue
+		var how: String = RESEAT_REBUILD[node_name]
+		if not how.begins_with("res://"):
+			if old.has_method(how):
+				old.call(how)
+			continue
+		if not ResourceLoader.exists(how):
+			continue
+		var idx := old.get_index()
+		world.remove_child(old)
+		old.queue_free()
+		var fresh: Node = load(how).instantiate()
+		fresh.name = node_name
+		world.add_child(fresh)
+		world.move_child(fresh, idx)
+
+
+## environment.gd caches `planet_radius` once in its own `_ready` and drives the horizon limb, the
+## night life and the ring off that copy every frame. `PlanetData.resolve_size` already moved
+## `data.radius`, but nothing re-reads it, so the sky would keep the old world's horizon.
+func _retune_environment() -> void:
+	var world := get_parent()
+	if world == null:
+		return
+	var env := world.get_node_or_null("Environment")
+	if env != null and "planet_radius" in env:
+		env.set("planet_radius", radius)
+
+
 func up_at(world_pos: Vector3) -> Vector3:
 	var d := world_pos - global_position
 	if d.length_squared() < 0.000001:

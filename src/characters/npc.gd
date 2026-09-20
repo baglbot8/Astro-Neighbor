@@ -71,6 +71,10 @@ const FORCED_SLIDE_MAX_TICKS := 30
 ## once within 0.06 m, and a single physics tick's travel at `walk_speed` can't push the final rest
 ## distance over 0.1 m (see `_tick_stroll`).
 const STROLL_ARRIVE_M := 0.06
+## VISFIND (2026-09-19, the lead's review): points at today's visitor from anywhere on the planet.
+## Guarded like every other optional system in this codebase (world.gd's hooks) so a build without the
+## file still runs. See visitor_compass.gd's header for why this is the attach point.
+const VISITOR_COMPASS_PATH := "res://src/campaign/visitor_compass.gd"
 
 enum State { IDLE, WANDER, TALKING, STROLL }
 
@@ -141,6 +145,7 @@ func _ready() -> void:
 	_ensure_collision()
 	_ensure_interactable()
 	_build_marker()
+	_ensure_visitor_compass()
 	_state_timer = _rng.randf_range(IDLE_MIN, IDLE_MAX)
 	_slide_always = OS.get_cmdline_user_args().has("--npc-slide-always")
 	_next_forced_slide = _rng.randi_range(FORCED_SLIDE_MIN_TICKS, FORCED_SLIDE_MAX_TICKS)
@@ -220,6 +225,24 @@ func _ensure_interactable() -> void:
 	_interactable.require_facing = false
 	if not _interactable.interacted.is_connected(_on_interacted):
 		_interactable.interacted.connect(_on_interacted)
+
+
+## Only today's visitor gets the "which way" pip. `visit_host` is set by three different systems
+## (visitor_system.gd for the crash-site visit, norm_system.gd for Norm, finale_meeting.gd for the
+## finale's gathered neighbours) so `is_visitor()` alone is not enough -- `has_method("record")` is the
+## duck-typed tell for "this is really visitor_system.gd's kind of host" (norm_system.gd and
+## finale_meeting.gd have no such method), and npc_id "norm" is excluded outright besides. No change to
+## visitor_system.gd or world.gd needed: this node's own life (spawned and freed by visitor_system.gd)
+## is the compass's life too, so a reload, the visit ending or the visitor leaving all clean up for free.
+func _ensure_visitor_compass() -> void:
+	if not is_visitor() or npc_id == "norm" or not ResourceLoader.exists(VISITOR_COMPASS_PATH):
+		return
+	if not visit_host.has_method("record"):
+		return
+	var compass: Node = (load(VISITOR_COMPASS_PATH) as GDScript).new()
+	compass.name = "VisitorCompass"
+	add_child(compass)
+	compass.call("attach", self)
 
 
 # ============================================================================= public API

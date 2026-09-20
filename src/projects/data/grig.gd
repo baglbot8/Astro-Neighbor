@@ -178,7 +178,7 @@ static func definition() -> Dictionary:
 						"Water, under my own steps. I did not expect that.",
 					],
 					"tomorrow": [
-						"Enough walking for today. Dowse again tomorrow.",
+						"Enough walking for today. Dowse again in a few hours.",
 					],
 				},
 			},
@@ -196,7 +196,7 @@ static func definition() -> Dictionary:
 						"Seen Zorp yet? His hollow is close. Go.",
 					],
 					"tomorrow": [
-						"No seed yet? Fine. Try Zorp again tomorrow.",
+						"No seed yet? Fine. Try Zorp again in a few hours.",
 					],
 					"with": [
 						"Oh! A pouch for Grig? I have just the one!",
@@ -224,7 +224,7 @@ static func definition() -> Dictionary:
 						"My driest step has a garden now. Correctly placed.",
 					],
 					"tomorrow": [
-						"Already planted today. Come see it grow tomorrow.",
+						"Already planted today. Come see it grow later.",
 					],
 				},
 			},

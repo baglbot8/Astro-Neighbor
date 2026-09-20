@@ -90,6 +90,59 @@ var home_planet_name: String = "Little Orbit"
 ## Zorp, Bolt and the hub keep the radius in their own .tres. Resolved by PlanetData.resolve_size().
 var home_planet_size: int = 0
 
+## SCRAP PRICE of each step up PlanetData.HOME_RADII: [0]->[1], [1]->[2], [2]->[3]. Scrap, because
+## past the five rocket parts (40 scrap) the campaign's building currency has no sink at all while
+## the worlds keep dropping it (docs/OPEN_ISSUES.md 66).
+##
+## MEASURED 2026-09-20 in the engine, `godot --headless res://src/world/world.tscn --
+## --planet=home --director=res://tests/director/grow_income.json` (grow_probe.gd `income` builds
+## all seven worlds and counts the scrap the scatter ACTUALLY places — the .tres files understate
+## it, because planet_props appends 5 stardust pickups per world on top of `collectible_count`):
+##   home 8 + hub 8 + zorp/bolt/fen/grig/vela 2 each = 26 scrap pickups a game day
+##   x 4.5 (mean of Collectible's randi_range(3, 6))  = 117 scrap a game day
+##   environment.gd DAY_LENGTH_SEC 1500 s             = 2.40 game days a real hour
+##                                                    = 281 scrap/real hour from a full sweep
+##   + home's trash, one piece per 900 s x 7.0 mean   =  28 scrap/real hour
+##   TOTAL 309 scrap a real hour.
+## (117/day matches the 78-156 a day docs/OPEN_ISSUES.md 66 measured, which is the same full-sweep
+## player: 26 pickups x 3 to 26 x 6.)
+## Priced at 1.5 / 4.5 / 10 hours CUMULATIVE against that 309/hour — round(hours x 309), no fitted
+## constant and no free parameter:
+##   level 1   450 scrap    1.5 h            (the brief's 1-2 h)
+##   level 2   950 scrap    4.5 h cumulative
+##   level 3  1700 scrap   10.0 h cumulative (the brief's 8-12 h to the top)
+## A player who only works home and the hub earns 201/hour (16 pickups + trash), which stretches
+## those to 2.2 h and 15.4 h. Re-measure with `income` before moving these: the day length and the
+## collectible mix have both moved this month.
+const HOME_SIZE_COSTS: Array[int] = [450, 950, 1700]
+
+## Highest index `home_planet_size` can reach.
+func home_size_max() -> int:
+	return PlanetData.HOME_RADII.size() - 1
+
+func home_size_at_max() -> bool:
+	return home_planet_size >= home_size_max()
+
+## Scrap price of the NEXT step up, or 0 when the planet is already as big as it gets.
+func home_size_cost() -> int:
+	if home_size_at_max() or home_planet_size >= HOME_SIZE_COSTS.size():
+		return 0
+	return HOME_SIZE_COSTS[home_planet_size]
+
+func can_grow_home() -> bool:
+	return not home_size_at_max() and can_afford_scrap(home_size_cost())
+
+## Pays for one step up and takes it. Data only — the world is grown by `Planet.regrow()`, which the
+## caller runs next so the player watches the ground move; nothing here touches the scene.
+## Returns false, having changed nothing, when the planet is at its biggest or the scrap is short.
+func grow_home() -> bool:
+	if not can_grow_home():
+		return false
+	if not spend_scrap(home_size_cost()):
+		return false
+	home_planet_size += 1
+	return true
+
 ## Arbitrary flags: "intro_done", "tutorial_decorate_seen", etc.
 var flags: Dictionary = {}
 

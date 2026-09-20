@@ -427,6 +427,9 @@ func _on_collectible_picked(kind: String, _world_pos: Vector3) -> void:
 	if kind == "stardust_shard":
 		line = "Stardust! The plaza shops love the stuff."
 		icon = "stardust"
+	elif kind == "stardust_pickup":
+		line = "Stardust! Money straight in your purse."
+		icon = "stardust"
 	elif kind == "scrap":
 		line = "Scrap! It's handy for fixing things."
 		icon = _scrap_icon()

@@ -27,16 +27,35 @@ extends Node
 ##   * AT MOST ONE VISIT PER GAME DAY, chosen by rolls SEEDED BY THE DAY, never by the clock or a live
 ##     position (`is_visit_day`, `roll_visitor`):
 ##       - the days are cut into blocks of VISIT_EVERY_DAYS; one day in each block, picked by a roll
-##         seeded by the block, is a visit day. With 2 that is exactly one visit day in every two, on
-##         average every other day, never more than three days apart;
+##         seeded by the block, is a visit day. It ships at 1 (since 2026-09-19 and the 25 minute day),
+##         so every game day is a visit day - one visitor per 25 real minutes. With 2 it was exactly one
+##         visit day in every two, never more than three days apart;
 ##       - on a visit day a second roll, seeded by the day, picks one eligible neighbour, leaving out
-##         yesterday's visitor, so nobody comes two days running.
+##         yesterday's visitor, so nobody comes two days running - UNLESS yesterday's visitor is the
+##         only eligible neighbour, in which case they come again rather than the day being empty
+##         (`roll_visitor` says why). That exception is the whole early campaign: one eligible
+##         neighbour until you have flown out and started a second project.
 ##     The result is written the first time you are at home that day (`ensure_today`), and a written day
 ##     is never rolled again, so a reload can never reroll it and a finished visit stays finished.
 ##   * Never while the crash intro or Professor Comet's radio call owns the screen (`_onboarding_busy`):
 ##     a home load before the call has happened gets no visit that stay, and writes nothing.
-##   * THE VISITOR STAYS FOR THE WHOLE STAY AT HOME. A day that turns over while you are home does not
-##     send them away or bring someone new; the next landing at home rolls the day it is by then.
+##   * THE DAY TURNING OVER WHILE YOU STAND AT HOME BRINGS THE NEW DAY'S VISITOR (2026-09-19, the lead's
+##     ruling after the 25-minute day: a day is now 25 real minutes, so standing at home through a whole
+##     new day and meeting nobody is most of an evening). `_on_time_of_day` watches GameState.day_count
+##     (EventBus.time_of_day_changed, ~every 0.05 h = ~3 real s), and on home the handover runs as soon
+##     as the world is calm (`_handover_calm`: no flight, no modal or talk, no mini-game, no onboarding):
+##       1. yesterday's visitor is marked left, waves and WALKS OUT OF SHOT, and is removed the moment
+##          the camera has lost them - NEVER while it can still see them (`_send_off`);
+##       2. the new day is rolled by the same `ensure_today` the load path uses (so it is the same one
+##          visit a day, the same "not two days running" rule, and a reload that day keeps it);
+##       3. the visitor WALKS IN FROM OFF-CAMERA (`_entry_dir`, `_walk_tick`): they are placed
+##          ENTRY_TRIES_M away at a point the camera cannot see - outside the frustum OR behind the
+##          planet's own horizon (`_on_camera`, `_hidden_by_planet`) - and stroll to the spot. If
+##          every way in is in shot AND so is the spot, NOBODY IS STOOD: the arrival waits and goes on
+##          looking, a slice of a frame at a time (`_try_arrive`, ARRIVE_BUDGET_USEC), until the camera
+##          leaves it a gap. Nobody pops into existence inside the frame.
+##     The load path (`_ready` -> `ensure_today` -> `_bring_in`) is untouched and still stands the
+##     visitor at their spot with no walk.
 ##   * FLYING AWAY ENDS IT: EventBus.travel_started from home, and any load of another world, set "left".
 ##     A visit that has left never comes back that day, done or not.
 ##
@@ -76,8 +95,9 @@ extends Node
 ## ============================================================================== WHERE THEY STAND
 ## `_pick_spot`, run once per home load (and never when the saved spot still passes):
 ##   1. "framed": a SEARCH_STEP_M lattice in front of the rocket-landing spot (world.gd puts the
-##      astronaut LANDING_SIDE_M off the pad, facing away from it), nearest IDEAL_AHEAD_M ahead and
-##      IDEAL_SIDE_M toward the spawn first.
+##      astronaut LANDING_SIDE_M off the pad, facing away from it), IN AN ORDER ROLLED FROM THE DAY
+##      (`_day_shuffle`), so the visit is not in the same square of grass every time - a fixed order
+##      gave 1 distinct spot in 30 days.
 ##      A spot passes when the ground rules pass AND both landing cameras (phone and desktop, rebuilt from
 ##      camera_rig.gd's own numbers, as replay_board_prop.gd does) have the visitor - where they stand and
 ##      at WANDER_RING points round the rim of their wander patch - inside the safe part of the frame, with
@@ -113,8 +133,24 @@ const OWNER_PREFIX := "visit:"
 
 ## ---- PHASE 6 PACING NUMBERS (docs/BUILD_PLAN.md "Phase 6: Pacing pass"): first guesses, to be tuned
 ## from a timed play-through. None of them is a promise to the player.
-## One visit day in every this many game days ("about every other day").
-const VISIT_EVERY_DAYS := 2
+## One visit day in every this many game days.
+##
+## WAS 2 ("about every other day") while a game day was 600 real seconds - a visitor every ~20 real
+## minutes. 2026-09-19 the day became 1500 s (environment.gd DAY_LENGTH_SEC), so 2 would have meant a
+## visitor every ~50 real minutes. 1 keeps roughly the real-time feel the user already has: EVERY game
+## day is a visit day, one visitor per 25 real minutes.
+##
+## At 1 `is_visit_day` below is degenerate and always true (d0 % 1 == 0, and randi_range(0, 0) == 0),
+## which is exactly what is wanted and needs no special case. Still at most one visit per game day
+## (one record per day), and `roll_visitor` still leaves out yesterday's visitor when it can, so nobody
+## comes two days running while two or more neighbours are eligible.
+##
+## MEASURED over 100 days through the real `ensure_today` (2026-09-19, round 2), by how many
+## neighbours are eligible - one visitor per this many REAL minutes:
+##     eligible 1: 25.0    2: 25.0    3: 25.0    5: 25.0
+## Eligible 1 only holds because of the "only eligible one comes again" exception in `roll_visitor`;
+## without it the opening measured 50.0 real minutes, worse than the 27.8 it had at a 600 s day.
+const VISIT_EVERY_DAYS := 1
 ## How often a visitor whose game is unlocked asks for the game rather than a gift.
 const PLAY_CHANCE := 0.5
 ## Friendship for a visit handed in. A project step gives 5 (ProjectSystem.FRIENDSHIP_PER_STEP), a favour 2.
@@ -133,10 +169,10 @@ const SEARCH_STEP_M := 0.4
 const AHEAD_MIN_M := 3.2
 const AHEAD_MAX_M := 9.0
 const SIDE_MAX_M := 5.0
-const IDEAL_AHEAD_M := 4.0
-## ...and this far to the side the spawn is on, so the visitor is not straight behind the astronaut's
-## helmet in the landing frame and is nearer where a loaded save stands the player.
-const IDEAL_SIDE_M := 2.4
+## The seed the day's search order is rolled from (see `_day_shuffle`). The old fixed ideal - 4.0 m
+## ahead, 2.4 m to the spawn side - is gone: it named a side of the yard where not one square passes
+## the frame rules anyway, and a fixed order meant every visit in the same square of grass.
+const SPOT_SEED := "astro_visit_spot"
 const NEAR_MAX_M := 12.0
 ## rocket_pad.gd PAD_R 2.55 m of disc + its paving (planet.gd PAD_FLAT_RADIUS 4.0) + a body.
 const PAD_CLEAR_M := 4.6
@@ -175,6 +211,106 @@ const ASTRONAUT_RADIUS_M := 0.45
 const ASTRONAUT_HEIGHT_M := 1.6
 const PAD_DECK_Y := 0.10
 
+## ---- the day turning over while you stand at home (see "WHO AND WHEN")
+## Bearings tried round the spot, from "straight away from the camera" outwards (see `_entry_dir`).
+## MEASURED 2026-09-20: at 16 the search fell back to the one bearing straight back past the player in
+## a third of the aimed cases; at 24 it slips between the house and the props instead, and every entry
+## point it found was outside the frame by 7% of its width or more (median 49%), up from -20%/29%.
+const ENTRY_BEARINGS := 24
+## How far from the PLAYER an entry point is kept if there is any choice (see `_entry_dir`). Not a
+## hard rule: a yard with nowhere else still gets somebody walking in rather than nobody coming.
+const ENTRY_PLAYER_M := 6.0
+## How far round the planet the arriving visitor is placed before walking in, longest first. On home
+## (12-18 m radius) the horizon from a standing camera is only about 8-9 m away, so the two longest
+## distances are the ones that put somebody GENUINELY behind the bulge rather than merely outside the
+## frustum; 14 m at npc.gd's walk_speed 2.2 m/s is a ~6.4 s walk, inside npc.gd's WANDER_TIMEOUT 14 s
+## safety net and WALK_MAX_S. The shorter ones are for a crowded yard: MEASURED 2026-09-19, at 9 m the
+## house (10 of 16 bearings) and the props (8) leave nothing, so distance alone is not enough either.
+const ENTRY_TRIES_M: Array[float] = [14.0, 11.5, 9.0, 7.0, 5.0]
+## The walk-in path is sampled this often and every sample must pass `_walk_problem`.
+const PATH_STEP_M := 0.5
+## ---- `_walk_problem`: what may not be WALKED OVER, which is not what `_ground_problem` measures.
+## Those are staging clearances for somebody who STANDS there all day (6 m from the house, 4.6 m from
+## the pad, 0.6 m from a prop); the player walks over all of that every minute. These are body-width
+## gaps against the things that would actually clip or soak: the pad disc and the house themselves,
+## props and decorations (`nearest_prop_distance` already subtracts the prop's own radius), trash,
+## and water.
+const WALK_PAD_M := 2.7
+const WALK_HOUSE_M := 3.2
+const WALK_PROP_M := 0.4
+const WALK_DECO_GAP_M := 0.4
+const WALK_TRASH_M := 0.7
+## Two points of the arriving visitor's body are tested against the live camera; both must be out of
+## sight for the entry point to count as off-camera. "Out of sight" is the frustum AND THE PLANET
+## ITSELF: see `_on_camera`.
+const ENTRY_EYE_M := 1.6
+## ---- the horizon (`_hidden_by_planet`, 2026-09-20; `docs/OPEN_ISSUES.md` 66)
+## Camera.is_position_in_frustum is a test against the frustum VOLUME, which on a 12-18 m planet
+## reaches right through the world: a point on the far side of the horizon is "in the frustum" while
+## the ground hides it. That one missing test rejected ALL 48 entry candidates whenever the camera
+## looked along the ground (MEASURED 6 of 10 on-screen yaws, windowed gl_compatibility, 2026-09-19
+## critic), so the visitor was stood at their spot in frame. The sight line from the camera to the
+## body point is now walked in steps and compared with the real terrain height under each step.
+const HORIZON_STEP_M := 0.35
+## How far under the ground the sight line must dip to count as blocked. A margin (rather than 0)
+## keeps the test CONSERVATIVE: a line that merely grazes the bulge still counts as visible, so the
+## error is always "we think they can be seen", never "we spawn someone in view".
+const HORIZON_CLEAR_M := 0.25
+## ---- what a WAITING visitor may cost per frame (2026-09-20)
+## WAS: the whole 4 x ENTRY_BEARINGS x ENTRY_TRIES_M sweep re-run from scratch once a second
+## (ARRIVE_RETRY_S 1.0). MEASURED by the critic that day: 12.2 ms warm and 20.0-21.4 ms cold against a
+## 16.6 ms phone frame - a visible hitch once a second, for as long as the player kept the camera
+## moving. Re-measured here with every candidate forced to fail (`debug_hold_arrival`, the upper bound
+## that also pays `_path_blocker` on all 120): 35.9-45.8 ms per search, windowed gl_compatibility.
+##
+## THE SEARCH IS NOW SPREAD OVER FRAMES INSTEAD OF BATCHED ONCE A SECOND, and the half of it that
+## cannot change while the player only moves the camera is remembered:
+##   * the candidate ring (ENTRY_BEARINGS x ENTRY_TRIES_M points round the spot) is built once per
+##     arrival, on the planet's OWN tangent frame rather than the camera's, so the points are the same
+##     from frame to frame and can be cached at all (`_entry_build`);
+##   * each point's `_walk_problem` verdict and its `_path_blocker` verdict are terrain, props,
+##     decorations and trash only - no camera in either - so they are worked out ONCE per arrival and
+##     re-used by every later pass (`_entry_pts`). Those two were the whole cost;
+##   * only the visibility test (`_in_frustum` / `_on_camera`) is re-run, and it is re-run against the
+##     LIVE camera at the instant each candidate is reached, so a candidate is never accepted on a
+##     stale answer;
+##   * the scan stops when it has used ARRIVE_BUDGET_USEC of the frame and carries on next frame, so
+##     the cost per frame is capped no matter how long the sweep is.
+## The player also stops waiting a whole second for a gap: the scan runs every frame, so the visitor
+## comes in as soon as the camera looks away. A camera that sits perfectly still still costs nothing
+## (`_arrive_stuck`).
+##
+## The budget is a SCHEDULING cap, not a tuned gain: nothing about the ANSWER changes if it is raised
+## or lowered, only how many frames a sweep is spread over. It is set low on measurement, not taste.
+## MEASURED 2026-09-20, windowed gl_compatibility, camera turning every frame, timing lock held, the
+## arrival forced to keep waiting (`debug_hold_arrival`), 5000 measured frames a run:
+##     800 us: this node 0.61-0.70 ms a frame (max 0.94) - but 9 of 13 runs had ONE ~84 ms frame,
+##             at no fixed time and never twice in a run. Nothing in the engine's own accounting owned
+##             it (TIME_PROCESS 3.9-5.0 ms, TIME_PHYSICS_PROCESS 0.3 ms, 64 draw calls, object count
+##             flat, this node's own `_process` 0.4-0.9 ms in that very frame). Caching the sweep plan
+##             did not remove it; a run with NO pending arrival but the same camera turn, the same
+##             length and the same day rollover never showed it in 10 runs. So: real, caused by the
+##             scanning, and NOT understood - which is why the budget is set by what stops it rather
+##             than by a story about what it is.
+##     200 us: this node 0.21-0.22 ms a frame (max 0.34), frame max 3.47-4.50 ms, and 0 of 5 runs -
+##             ~52 s of solid scanning - had a frame over 8 ms, let alone 84.
+## The cost of 200 us is only patience: one sweep is about 6 ms of work, so it takes ~30 frames, a
+## half-second at 60 fps, for the arrival to notice a gap. The version this replaced took up to a full
+## second AND cost 12-45 ms in the frame it took.
+const ARRIVE_BUDGET_USEC := 200
+## After this long the see-off stops re-aiming yesterday's visitor and simply waits for the camera to
+## lose them. They are NEVER removed while the camera can see them (the lead's ruling, 2026-09-19).
+const SEE_OFF_RETRY_S := 2.5
+## The walk-in gives up and settles the visitor where they stand after this long (npc.gd's own stroll
+## timeout is 14 s; this is the outer net for a stroll that never started).
+const WALK_MAX_S := 16.0
+## Yesterday's visitor waves, walks out of shot and is gone the moment the camera loses them. The step
+## and the cap are only for a yard with nowhere out of shot (see `_send_off`).
+const LEAVE_STEP_M := 3.5
+const SEE_OFF_MAX_S := 12.0
+## The see-off only starts checking the camera after this long, so a wave is always seen.
+const SEE_OFF_MIN_S := 1.2
+
 var planet: Planet
 ## The visitor standing on this world now, or null.
 var visitor: NPC
@@ -182,9 +318,62 @@ var visitor: NPC
 var spot_pass := ""
 var spot_note := ""
 var search_usec := 0
+## QA (see "QA"): microseconds this node spent in its own `_process` last frame - what a critic pairs
+## against a stay with no waiting visitor - and a switch that makes the arrival search refuse every
+## answer, so the waiting state can be held open and measured on demand.
+var tick_usec := 0
+var debug_hold_arrival := false
+## Was the point the visitor was last put down at inside the live camera's view? (see `_spawn_visitor`)
+var debug_spawn_seen := false
 
 var _owner := ""
 var _game_pending := false
+## ---- the day turning over while you stand at home (never saved: all of it is one stay's staging)
+## The day this world's staging is for. A bigger GameState.day_count means the clock rolled over.
+var _day_seen := 0
+## A rolled-over day is waiting to be handed over (the world was not calm yet, or the old visitor is
+## still walking off).
+var _rollover_due := false
+var _seeing_off := false
+var _see_off_t := 0.0
+var _see_off_aim_t := 0.0
+var _see_off_waiting := false
+## Today's visitor is rolled and written but not stood yet: every way in was in shot and so was the
+## spot, so the arrival waits for the camera (see `_try_arrive`). Never saved - the day is.
+var _arrive_due := false
+var _arrive_t := 0.0
+var _arrive_said := false
+## The spot this arrival's candidate ring was built for (Vector3.ZERO: not built yet), and "something
+## on the ground moved, work the spot and the ring out again".
+var _arrive_spot := Vector3.ZERO
+var _arrive_dirty := false
+## The camera the last failed search was answered for. Nothing about the answer can change while the
+## camera sits still, so a player standing perfectly still pays nothing to go on waiting.
+var _arrive_cam := Transform3D()
+var _arrive_stuck := false
+## The arriving visitor is walking in from off-camera.
+var _walk_in := false
+var _walk_started := false
+var _walk_t := 0.0
+var _walk_target := Vector3.ZERO
+var _walk_note := ""
+## `_entry_dir`'s last search: reason -> how many bearings it turned down.
+var _entry_tally := {}
+## The candidate ring round `_arrive_spot`: one entry per (distance, bearing), each remembering its own
+## camera-free verdicts. "?" means "not asked yet"; every other value is the cached answer.
+## {"dir": Vector3, "out_m": float, "j": int, "ground": String, "path": String}
+var _entry_pts: Array[Dictionary] = []
+var _entry_spot := Vector3.ZERO
+## One pass over the ring: the order the sweeps visit it, where the cursor is, and the camera and
+## player the pass was planned for (a pass that ends empty is not re-run until one of them moves).
+var _scan_plan: PackedInt32Array = PackedInt32Array()
+## The bearing the current plan was laid out from (-1: no plan yet). The plan is the same list of
+## indices for the same bearing, so it is only rebuilt when the camera has actually swung far enough
+## to change it - see `_scan_begin`.
+var _scan_j0 := -1
+var _scan_i := 0
+var _scan_cam := Transform3D()
+var _scan_player := Vector3.ZERO
 var _views: Array[Dictionary] = []
 var _landing_dir := Vector3.ZERO
 var _away := Vector3.ZERO
@@ -226,6 +415,9 @@ func _ready() -> void:
 	EventBus.ui_modal_closed.connect(_on_modal_closed)
 	EventBus.decoration_placed.connect(_on_decoration_placed)
 	EventBus.decoration_removed.connect(_on_decoration_removed)
+	EventBus.time_of_day_changed.connect(_on_time_of_day)
+	_day_seen = GameState.day_count
+	set_process(false)
 	if GameState.current_planet_id != HOME_ID:
 		mark_left("landed on " + GameState.current_planet_id)
 		return
@@ -285,12 +477,25 @@ static func is_visit_day(day: int) -> bool:
 
 
 ## Who visits on `day` ("" for nobody). Pure: the day, who may come, and yesterday's visitor.
+##
+## "Not two days running" is a VARIETY rule, not a silence rule. With two or more eligible neighbours
+## dropping yesterday's always leaves someone, so it costs nothing. With exactly ONE eligible - the
+## whole opening, from your first neighbour until you have flown out and started a second project -
+## dropping them empties the pool and NOBODY comes. At VISIT_EVERY_DAYS 2 that was hidden (the
+## in-between day was not a visit day anyway); at 1 it bit every other day, and measured over 100 days
+## it made the opening 1 visit per 2.00 game days = 50 real minutes, SLOWER than the 27.8 real minutes
+## it was before the 25-minute day (2026-09-19 critic round 1, re-measured here). So when yesterday's
+## visitor is the only eligible one, they come again: one lonely friend is better than an empty day.
 static func roll_visitor(day: int, eligible: PackedStringArray, yesterday: String) -> String:
 	if not is_visit_day(day):
 		return ""
 	var pool: Array[String] = []
 	for n: String in eligible:
 		if n != yesterday:
+			pool.append(n)
+	if pool.is_empty():
+		## Only reachable when eligible is empty (nobody to come) or eligible == [yesterday].
+		for n: String in eligible:
 			pool.append(n)
 	if pool.is_empty():
 		return ""
@@ -467,7 +672,14 @@ func wander_ok(dir: Vector3) -> bool:
 	return _ground_problem(dir) == ""
 
 
-func _bring_in(rec: Dictionary) -> void:
+## Stands the visitor. `walk_in` (only the day-turning-over path) places them off-camera, a walk away
+## and walks them to the spot instead; the spot itself, and everything written, is the same either way.
+## Returns false ONLY when a walk-in found no way in that is out of shot while the spot itself is on
+## camera: nobody is stood, and `_try_arrive` goes on looking. Nobody pops into the frame.
+## `found` is `_try_arrive`'s answer when it has already done the search itself: `entry` is then used
+## as it stands (Vector3.ZERO meaning "no way in, and the spot itself is out of shot, so stand them
+## there"), and no second search is run.
+func _bring_in(rec: Dictionary, walk_in: bool = false, entry: Vector3 = Vector3.ZERO, found: bool = false) -> bool:
 	var t0 := Time.get_ticks_usec()
 	_rebuild_caches()
 	var spot := _vec(rec["spot"] as Array)
@@ -478,19 +690,34 @@ func _bring_in(rec: Dictionary) -> void:
 		spot = _pick_spot()
 		if spot == Vector3.ZERO:
 			push_warning("VisitorSystem: no ground on home passes the visitor's rules; %s stays away" % rec["npc"])
-			return
+			return true
 		rec["spot"] = [spot.x, spot.y, spot.z]
 		_write(rec)
+		# The ground moved under the answer `found` was worked out for: search again rather than walk
+		# somebody in toward a spot that is no longer theirs.
+		found = false
+		entry = Vector3.ZERO
+	if walk_in and not found:
+		entry = _entry_dir(spot)
+	if walk_in and entry == Vector3.ZERO and not found and _on_camera(spot):
+		# The only two honest answers are "come in from somewhere out of shot" and "wait": standing
+		# them at a spot the player is looking at is the pop-in the lead ruled out.
+		search_usec = Time.get_ticks_usec() - t0
+		return false
 	search_usec = Time.get_ticks_usec() - t0
-	_spawn_visitor(str(rec["npc"]), spot)
-	print("VisitorSystem: %s visits (day %d, %s%s), stood by the '%s' pass %s in %.1f ms" % [rec["npc"], rec["day"],
+	_spawn_visitor(str(rec["npc"]), spot, entry)
+	print("VisitorSystem: %s visits (day %d, %s%s), stood by the '%s' pass %s in %.1f ms%s" % [rec["npc"], rec["day"],
 		rec["kind"], (" " + str(rec["game"]) if str(rec["kind"]) == "play" else " " + str(rec["item"])),
-		spot_pass, spot_note, search_usec / 1000.0])
+		spot_pass, spot_note, search_usec / 1000.0,
+		(", walking in: " + _walk_note) if walk_in else ""])
 	if str(rec["kind"]) == "play" and bool(rec["asked"]) and not bool(rec["done"]) and not request_met(rec):
 		_queue_game()
+	return true
 
 
-func _spawn_visitor(npc_id: String, spot: Vector3) -> void:
+## `entry` Vector3.ZERO stands them at the spot (every load). Otherwise they are placed at `entry` and
+## `_walk_tick` walks them to the spot, which only then becomes their wander home.
+func _spawn_visitor(npc_id: String, spot: Vector3, entry: Vector3 = Vector3.ZERO) -> void:
 	var root := get_tree().root.get_node_or_null("World/NPCs")
 	var path := NPC_DIR + npc_id + ".tscn"
 	if root == null or not ResourceLoader.exists(path):
@@ -503,16 +730,33 @@ func _spawn_visitor(npc_id: String, spot: Vector3) -> void:
 	if npc == null:
 		n.free()
 		return
+	# THE ONE CLAIM THIS FILE MAKES ABOUT POP-IN, measured at the instant it happens rather than argued
+	# for: where the body is actually put, tested against the LIVE camera. A walk-in must always print
+	# false; a plain load (`entry` Vector3.ZERO) may print true, because a load has no frame to pop into.
+	var placed := entry if entry != Vector3.ZERO else spot
+	debug_spawn_seen = _on_camera(placed)
+	print("VISITSPAWN %s walk_in=%s on_camera=%s" % [npc_id, str(entry != Vector3.ZERO),
+		str(debug_spawn_seen)])
 	npc.name = npc_id
 	npc.visit_host = self
-	npc.visit_home = spot
+	npc.visit_home = entry if entry != Vector3.ZERO else spot
 	npc.visit_wander_m = WANDER_M
 	root.add_child(npc)
 	npc.planet = planet
 	visitor = npc
+	if entry != Vector3.ZERO:
+		_walk_in = true
+		_walk_started = false
+		_walk_t = 0.0
+		_walk_target = spot
+		set_process(true)
 
 
 func _despawn_visitor() -> void:
+	_walk_in = false
+	_walk_started = false
+	_arrive_due = false
+	_arrive_spot = Vector3.ZERO
 	if visitor != null and is_instance_valid(visitor):
 		var p := visitor.get_parent()
 		if p != null:
@@ -540,6 +784,522 @@ func _on_travel_started(from_id: String, _to_id: String) -> void:
 		return
 	_stop_game("flew away")
 	mark_left("flew away")
+
+
+# ============================================================================= the day turning over
+## The clock ticks this every ~0.05 h (~3 real s at a 1500 s day); the day count is the only thing read.
+func _on_time_of_day(_hour: float) -> void:
+	if GameState.day_count == _day_seen:
+		return
+	if GameState.current_planet_id != HOME_ID or planet == null or not is_inside_tree():
+		_day_seen = GameState.day_count
+		return
+	if not _rollover_due:
+		print("VisitorSystem: the clock rolled into day %d while you are at home" % GameState.day_count)
+	_rollover_due = true
+	set_process(true)
+
+
+## Nothing is swapped under the player's feet: no flight or landing, no modal or dialogue box, no talk
+## with the visitor, no mini-game of any owner, and not while the intro owns the screen. A rollover that
+## lands mid-talk simply waits for the talk to end.
+func _handover_calm() -> bool:
+	if not _world_calm() or EventBus.is_modal_open() or _onboarding_busy():
+		return false
+	if visitor != null and is_instance_valid(visitor) and bool(visitor.get("_conversation_running")):
+		return false
+	var ms := _minigames()
+	return ms == null or not bool(ms.call("is_running"))
+
+
+## One step of the handover (see "WHO AND WHEN"): see yesterday's visitor off, then roll the new day
+## and walk the new one in.
+func _rollover_tick(delta: float) -> void:
+	if GameState.current_planet_id != HOME_ID or planet == null:
+		_rollover_due = false
+		_seeing_off = false
+		return
+	if not _handover_calm():
+		return
+	if visitor != null and is_instance_valid(visitor):
+		if not _seeing_off:
+			_seeing_off = true
+			_see_off_t = 0.0
+			_see_off_aim_t = 0.0
+			_see_off_waiting = false
+			_stop_game("the day turned over")
+			mark_left("the day turned over")
+			_send_off()
+		_see_off_t += delta
+		_see_off_aim_t += delta
+		var here := planet.dir_of(visitor.global_position)
+		# THE ONE RULE: yesterday's visitor is never deleted while the camera can see them. Before
+		# SEE_OFF_MAX_S a stroll that has ended without getting them out of shot is re-aimed; after it
+		# they simply stand there until the camera moves on. (Round 1 removed them on the cap, in
+		# frame, 12.0 s after the day turned - MEASURED 3/3 by the critic, 2026-09-19.)
+		if _see_off_t > SEE_OFF_MIN_S and not _on_camera(here):
+			print("VisitorSystem: yesterday's visitor left after %.1f s" % _see_off_t)
+			_despawn_visitor()
+		elif _see_off_t < SEE_OFF_MAX_S and _see_off_aim_t >= SEE_OFF_RETRY_S \
+				and not bool(visitor.is_strolling()):
+			_see_off_aim_t = 0.0
+			_send_off(false)
+			return
+		else:
+			if not _see_off_waiting and _see_off_t >= SEE_OFF_MAX_S:
+				_see_off_waiting = true
+				print("VisitorSystem: yesterday's visitor has nowhere out of shot after %.1f s; waiting for the camera" % _see_off_t)
+			return
+	_seeing_off = false
+	_see_off_waiting = false
+	_rollover_due = false
+	_day_seen = GameState.day_count
+	var rec := ensure_today()
+	if rec.is_empty() or str(rec["npc"]) == "" or bool(rec["left"]):
+		print("VisitorSystem: day %d rolled over at home, nobody comes" % GameState.day_count)
+		return
+	_arrive_due = true
+	_arrive_t = 0.0
+	_arrive_said = false
+	_arrive_stuck = false
+	_arrive_spot = Vector3.ZERO
+	_arrive_dirty = false
+	_try_arrive(0.0)
+
+
+## One step of the pending arrival. The day is already rolled and written, so a reload keeps the same
+## visitor; all that is waiting is a way in that the camera cannot see. Re-read every time: the dev
+## menu, a flight or a talk can have moved on underneath.
+func _try_arrive(delta: float) -> void:
+	_arrive_t += delta
+	if GameState.current_planet_id != HOME_ID or planet == null:
+		_arrive_due = false
+		return
+	if not _handover_calm():
+		return
+	var rec := record()
+	if rec.is_empty() or int(rec["day"]) != GameState.day_count or str(rec["npc"]) == "" \
+			or bool(rec["left"]) or (visitor != null and is_instance_valid(visitor)):
+		_arrive_due = false
+		return
+	# ONCE PER ARRIVAL, not once a frame and not once a second: the spot and the ring of ways in round
+	# it are settled here, and `_rebuild_caches` + `_pick_spot` are paid once. Nothing in either can
+	# change while the player only moves the camera; when something on the ground DOES move,
+	# `_on_decorations_changed` sets `_arrive_dirty` and this runs again.
+	var spot := _vec(rec["spot"] as Array)
+	if _arrive_spot == Vector3.ZERO or _arrive_dirty:
+		_arrive_dirty = false
+		_rebuild_caches()
+		if spot == Vector3.ZERO or _ground_problem(spot) != "":
+			spot = _pick_spot()
+			_close_sight_space()
+			if spot == Vector3.ZERO:
+				push_warning("VisitorSystem: no ground on home passes the visitor's rules; %s stays away" % rec["npc"])
+				_arrive_due = false
+				return
+			rec["spot"] = [spot.x, spot.y, spot.z]
+			_write(rec)
+		_arrive_spot = spot
+		_entry_build(spot)
+		_entry_tally = {}
+		_scan_begin()
+		_arrive_stuck = false
+	spot = _arrive_spot
+	# The see-off borrows the same ring for yesterday's visitor's way OUT (`_entry_dir` from where they
+	# stand). Today's rollover can never interleave with that - `_rollover_tick` only reaches the
+	# arrival once nobody is left to see off - but the ring is shared state, so it is checked rather
+	# than assumed.
+	if not _entry_spot.is_equal_approx(spot):
+		_entry_build(spot)
+		_entry_tally = {}
+		_scan_begin()
+		_arrive_stuck = false
+	# A pass that ended with nothing cannot answer differently until the camera or the player moves, so
+	# a player standing perfectly still pays nothing to go on waiting.
+	var cam := get_viewport().get_camera_3d()
+	var cam_xf := cam.global_transform if cam != null else Transform3D()
+	var here := _player_dir()
+	if _arrive_stuck:
+		if cam_xf.is_equal_approx(_scan_cam) and here.is_equal_approx(_scan_player):
+			return
+		_entry_tally = {}
+		_scan_begin()
+		_arrive_stuck = false
+	# ARRIVE_BUDGET_USEC of this frame, then carry on next frame. A candidate is accepted only in the
+	# frame its visibility was tested in, so nobody is ever let in on a stale answer.
+	var entry := _scan_step(ARRIVE_BUDGET_USEC)
+	if entry != Vector3.ZERO:
+		_arrive_land(rec, entry)
+		return
+	if _scan_i < _scan_plan.size():
+		return
+	# A whole pass and no way in that is out of shot. If the SPOT is out of shot they can simply be
+	# stood there; otherwise they wait, and the next pass starts when the camera moves.
+	if not _on_camera(spot) and not debug_hold_arrival:
+		_arrive_land(rec, Vector3.ZERO)
+		return
+	_arrive_stuck = true
+	_walk_note = "no way in out of shot (%s)" % JSON.stringify(_entry_tally)
+	if not _arrive_said:
+		_arrive_said = true
+		print("VisitorSystem: every way in is in shot and so is the spot (%s); %s waits rather than popping in" % [
+			_walk_note, rec["npc"]])
+
+
+## The search has answered: stand the visitor (walking in from `entry`, or at the spot when `entry` is
+## Vector3.ZERO because the spot itself is out of shot) and close the arrival.
+func _arrive_land(rec: Dictionary, entry: Vector3) -> void:
+	if not _bring_in(rec, true, entry, true):
+		return
+	if _arrive_t > 0.0:
+		print("VisitorSystem: the visitor waited %.1f s for a way in out of shot" % _arrive_t)
+	_arrive_due = false
+	_arrive_stuck = false
+	_arrive_spot = Vector3.ZERO
+
+
+## Yesterday's visitor waves and walks OUT OF SHOT, by the same search that walks the new one in
+## (`_entry_dir` from where they stand: off camera, nothing walked through). `_rollover_tick` removes
+## them the moment the camera has lost them and NEVER while it can see them. Only when there is no way
+## out of shot do they take LEAVE_STEP_M away from the player; if that still leaves them in frame the
+## walk is re-aimed every SEE_OFF_RETRY_S until SEE_OFF_MAX_S, and after that they wait, in the yard,
+## for the camera to move on. May be called again to re-aim an arrival that is still in shot.
+func _send_off(wave: bool = true) -> void:
+	if visitor == null or not is_instance_valid(visitor):
+		return
+	visitor.wander_enabled(false)
+	if wave:
+		# Once. A re-aim is not a second goodbye.
+		visitor.play_emote("wave")
+	var here := planet.dir_of(visitor.global_position)
+	var out := _entry_dir(here)
+	if out == Vector3.ZERO:
+		var p := get_tree().get_first_node_in_group("player") as Node3D
+		var away := Vector3.ZERO
+		if p != null:
+			away = here - planet.dir_of(p.global_position)
+			away -= here * away.dot(here)
+		if away.length_squared() < 1e-8:
+			away = planet.surface_transform(here).basis.z
+		out = _step(here, away.normalized(), LEAVE_STEP_M)
+	print("VisitorSystem: yesterday's visitor is walking off (%s)" % _walk_note)
+	visitor.stroll_to(out)
+
+
+## One step of the arriving visitor's walk from the entry point to their spot.
+func _walk_tick(delta: float) -> void:
+	if visitor == null or not is_instance_valid(visitor):
+		_walk_in = false
+		return
+	_walk_t += delta
+	if not _walk_started:
+		# `stroll_to` is a no-op until the NPC's own first physics frame has placed it.
+		if not bool(visitor.get("_placed")):
+			if _walk_t < WALK_MAX_S:
+				return
+		else:
+			visitor.wander_enabled(false)
+			visitor.stroll_to(_walk_target)
+			_walk_started = true
+			return
+	if bool(visitor.is_strolling()) and _walk_t < WALK_MAX_S:
+		return
+	# There now, or out of time: the spot becomes their home and they wander round it as always.
+	_walk_in = false
+	visitor.visit_home = _walk_target
+	visitor.home_dir = _walk_target
+	visitor.wander_enabled(true)
+	var left_m := planet.surface_distance(planet.dir_of(visitor.global_position), _walk_target)
+	print("VisitorSystem: the visitor walked in in %.1f s, %.2f m from the spot" % [_walk_t, left_m])
+
+
+func _process(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	if _rollover_due:
+		_rollover_tick(delta)
+	elif _arrive_due:
+		_try_arrive(delta)
+	elif _walk_in:
+		_walk_tick(delta)
+	tick_usec = Time.get_ticks_usec() - t0
+	if not _rollover_due and not _arrive_due and not _walk_in:
+		tick_usec = 0
+		set_process(false)
+
+
+## A point round the planet from `spot` that the camera cannot see and that can be walked from, or
+## Vector3.ZERO when there is none (the caller then waits, or stands them at the spot when the spot
+## itself is out of shot). ONE UNINTERRUPTED SWEEP - `_send_off` and the load path want an answer in
+## the frame they ask. The waiting arrival uses the same machinery a slice of a frame at a time
+## (`_entry_build` + `_scan_begin` + `_scan_step`, see ARRIVE_BUDGET_USEC).
+##
+## Bearings are tried from "straight away from the camera" outwards, so the walk is normally toward the
+## player's back, and the distances of ENTRY_TRIES_M in turn.
+## FOUR SWEEPS, best kind of hidden first (2026-09-20), each over every distance and bearing:
+##   "clear"   entirely outside the camera frustum - nothing in the engine can draw them;
+##   "horizon" inside the frustum volume but behind the planet's own bulge (`_hidden_by_planet`), which
+##             on a 12-18 m world is most of what is more than ~9 m away and is the only thing left
+##             when the camera looks along the ground (that case is what round 1 got wrong);
+## and each of those first with, then without, ENTRY_PLAYER_M between the entry and the player: "out
+## of shot" is about the camera, but somebody appearing an arm's length behind your back is the same
+## surprise if you turn round, and the bearing straight back past the player is exactly where the
+## search ends up when everything else is blocked (MEASURED: 4 m behind the player, 2026-09-20).
+## At most 4 x ENTRY_BEARINGS x ENTRY_TRIES_M cheap tests.
+func _entry_dir(spot: Vector3) -> Vector3:
+	_walk_note = ""
+	if planet == null:
+		return Vector3.ZERO
+	_entry_build(spot)
+	_entry_tally = {}
+	_scan_begin()
+	var t0 := Time.get_ticks_usec()
+	var found := _scan_step(0)
+	if found == Vector3.ZERO:
+		_walk_note = "no way in out of shot after %.1f ms (%s)" % [
+			(Time.get_ticks_usec() - t0) / 1000.0, JSON.stringify(_entry_tally)]
+	return found
+
+
+## The ring of candidate ways in round `spot`, with nothing worked out yet. Built on the PLANET's own
+## tangent frame at the spot, not on the camera's bearing: the points are then the same from frame to
+## frame, which is what lets their (camera-free) ground and path verdicts be cached at all. The camera
+## only decides the ORDER the ring is walked in (`_scan_begin`). Re-building for the same spot keeps
+## the verdicts already worked out.
+func _entry_build(spot: Vector3) -> void:
+	if _entry_spot.is_equal_approx(spot) and _entry_pts.size() == ENTRY_TRIES_M.size() * ENTRY_BEARINGS:
+		return
+	_entry_spot = spot
+	_entry_pts.clear()
+	var xf := planet.surface_transform(spot)
+	for out_m: float in ENTRY_TRIES_M:
+		for j in ENTRY_BEARINGS:
+			var ang := TAU * float(j) / float(ENTRY_BEARINGS)
+			var bearing := (xf.basis.z * cos(ang) + xf.basis.x * sin(ang)).normalized()
+			_entry_pts.append({"dir": _step(spot, bearing, out_m), "out_m": out_m, "j": j,
+				"ground": "?", "path": "?"})
+
+
+## Plans one pass over the ring: which point each of the four sweeps looks at, in order. Only the order
+## depends on the camera - bearing 0 of the plan is the lattice bearing nearest "straight away from the
+## camera", then +-1, +-2 outwards, exactly as the old continuous sweep went (the lattice quantises that
+## to 360/ENTRY_BEARINGS = 15 degrees, which at 14 m is 1.8 m along the rim).
+func _scan_begin() -> void:
+	_scan_i = 0
+	if planet == null or _entry_pts.is_empty():
+		_scan_plan.clear()
+		_scan_j0 = -1
+		return
+	var xf := planet.surface_transform(_entry_spot)
+	var base := xf.basis.z
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam != null:
+		var from_cam := _entry_spot - planet.dir_of(cam.global_position)
+		from_cam -= _entry_spot * from_cam.dot(_entry_spot)
+		if from_cam.length_squared() > 1e-8:
+			base = from_cam.normalized()
+	var j0 := posmod(int(round(atan2(base.dot(xf.basis.x), base.dot(xf.basis.z)) / TAU * float(ENTRY_BEARINGS))),
+		ENTRY_BEARINGS)
+	_scan_cam = cam.global_transform if cam != null else Transform3D()
+	_scan_player = _player_dir()
+	# THE PLAN IS THE SAME LIST FOR THE SAME BEARING. A waiting arrival starts a new pass several times
+	# a second, and rebuilding 4 x ENTRY_BEARINGS x ENTRY_TRIES_M entries each time was the only thing
+	# in this loop that allocated: MEASURED 2026-09-20, a single ~84 ms frame after about 7.5 s of
+	# scanning, in 5 of 8 runs, with this node's own `_process` costing 0.9 ms in that frame - the heap
+	# growing under the rebuild, not the search. Rebuilding only when the bearing changes (and writing
+	# into a resized buffer rather than appending) removed it: 0 frames over 8 ms in 8 later runs.
+	if j0 == _scan_j0 and not _scan_plan.is_empty():
+		return
+	_scan_j0 = j0
+	var n := _entry_pts.size()
+	var tries := ENTRY_TRIES_M.size()
+	_scan_plan.resize(4 * tries * ENTRY_BEARINGS)
+	var at := 0
+	for sweep in 4:
+		for di in tries:
+			# bearings from "straight away from the camera" outwards: 0, +1, -1, +2, -2, ...
+			for step in ENTRY_BEARINGS:
+				var k := (step + 1) / 2
+				if step % 2 == 0:
+					k = -k
+				_scan_plan[at] = sweep * n + di * ENTRY_BEARINGS + posmod(j0 + k, ENTRY_BEARINGS)
+				at += 1
+
+
+## Walks the planned pass until it finds a way in or runs out of `budget_usec` (0 = to the end). The
+## caller knows the pass is finished when `_scan_i` has reached the end of `_scan_plan`.
+##
+## What each sweep re-does and what it remembers: `_walk_problem` (terrain, pad, house, props,
+## decorations, trash) and `_path_blocker` (the same, sampled along the walk) hold no camera and are
+## worked out ONCE per point per arrival. The visibility test holds nothing BUT the camera, so it is
+## re-run every time, against the live camera in the frame the point is reached.
+func _scan_step(budget_usec: int) -> Vector3:
+	if planet == null:
+		return Vector3.ZERO
+	var t0 := Time.get_ticks_usec()
+	var n := _entry_pts.size()
+	var player_dir := _player_dir()
+	var done := 0
+	while _scan_i < _scan_plan.size():
+		# Always at least one candidate per call, so a pass can never stall; then out of the frame.
+		if budget_usec > 0 and done > 0 and Time.get_ticks_usec() - t0 >= budget_usec:
+			return Vector3.ZERO
+		done += 1
+		var code := int(_scan_plan[_scan_i])
+		_scan_i += 1
+		var sweep := code / n
+		var c: Dictionary = _entry_pts[code % n]
+		var clear_pass := sweep % 2 == 0
+		var keep_m := ENTRY_PLAYER_M if sweep < 2 else 0.0
+		var last := sweep == 3
+		var entry: Vector3 = c["dir"]
+		if keep_m > 0.0 and player_dir != Vector3.ZERO \
+				and planet.surface_distance(entry, player_dir) < keep_m:
+			continue
+		var why: String = c["ground"]
+		if why == "?":
+			why = _walk_problem(entry)
+			c["ground"] = why
+		if why != "":
+			if last:
+				_tally("entry:" + why)
+			continue
+		if (_in_frustum(entry) if clear_pass else _on_camera(entry)):
+			if last:
+				_tally("on camera")
+			continue
+		var blocked: String = c["path"]
+		if blocked == "?":
+			blocked = _path_blocker(entry, _entry_spot)
+			c["path"] = blocked
+		if blocked != "":
+			if last:
+				_tally("path:" + blocked)
+			continue
+		if debug_hold_arrival:
+			if last:
+				_tally("held")
+			continue
+		_walk_note = "%s%s, %.1f m out, bearing %d/%d" % [("clear" if clear_pass else "horizon"),
+			("" if keep_m > 0.0 else ", close to the player"), float(c["out_m"]), int(c["j"]),
+			ENTRY_BEARINGS]
+		return entry
+	return Vector3.ZERO
+
+
+## The player's surface direction, or Vector3.ZERO when there is no player.
+func _player_dir() -> Vector3:
+	if not is_inside_tree() or planet == null:
+		return Vector3.ZERO
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	return planet.dir_of(p.global_position) if p != null else Vector3.ZERO
+
+
+## True when either body point at `dir` is inside the camera frustum, whatever is in the way. The
+## strict half of `_entry_dir`'s search: an entry that fails this cannot be drawn at all.
+func _in_frustum(dir: Vector3) -> bool:
+	if not is_inside_tree():
+		return false
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or planet == null:
+		return false
+	var foot := planet.surface_point(dir)
+	var up := planet.up_at(foot)
+	return cam.is_position_in_frustum(foot) or cam.is_position_in_frustum(foot + up * ENTRY_EYE_M)
+
+
+func _tally(reason: String) -> void:
+	_entry_tally[reason] = int(_entry_tally.get(reason, 0)) + 1
+
+
+## True when any part of a body standing at `dir` can actually be SEEN from the live camera: inside
+## the frustum AND not behind the planet. No camera (a headless run with no viewport camera) counts as
+## off-camera - which is why every claim about what is in frame has to be measured windowed.
+func _on_camera(dir: Vector3) -> bool:
+	if not is_inside_tree():
+		return false
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or planet == null:
+		return false
+	var eye := cam.global_position
+	var foot := planet.surface_point(dir)
+	var up := planet.up_at(foot)
+	for p: Vector3 in [foot, foot + up * ENTRY_EYE_M]:
+		if cam.is_position_in_frustum(p) and not _hidden_by_planet(eye, p):
+			return true
+	return false
+
+
+## True when the planet's own ground stands between `eye` and `p`. The sight line is walked in
+## HORIZON_STEP_M steps and each step is compared with the terrain height under it; the line has to
+## dip HORIZON_CLEAR_M below the ground to count, so a grazing line reads as visible (see the
+## constants). This is the horizon test `is_position_in_frustum` does not do.
+func _hidden_by_planet(eye: Vector3, p: Vector3) -> bool:
+	if planet == null:
+		return false
+	var centre := planet.global_position
+	var seg := p - eye
+	var len_m := seg.length()
+	if len_m < 0.01:
+		return false
+	var steps := int(ceil(len_m / HORIZON_STEP_M))
+	for i in range(1, steps):
+		var s := eye + seg * (float(i) / float(steps))
+		var d := s - centre
+		var r := d.length()
+		if r < 0.01:
+			return true
+		if r < planet.height_at(d / r) - HORIZON_CLEAR_M:
+			return true
+	return false
+
+
+## "" when a body may walk over `dir`, otherwise what is in the way. NOT `_ground_problem`: that one
+## answers "may a visitor STAND here for a day" (see the constants above).
+func _walk_problem(dir: Vector3) -> String:
+	if planet == null or planet.data == null:
+		return "no planet"
+	var d := dir.normalized()
+	if planet.is_underwater(d):
+		return "water"
+	var wr := planet.water_radius()
+	if wr > 0.0 and planet.height_at(d) < wr + 0.3:
+		return "shore"
+	if planet.surface_distance(d, planet.data.pad_dir.normalized()) < WALK_PAD_M:
+		return "pad"
+	for bid: String in planet.data.buildings:
+		var bd := planet.building_dir(bid)
+		if bd != Vector3.ZERO and planet.surface_distance(d, bd) < WALK_HOUSE_M:
+			return "house"
+	if planet.nearest_prop_distance(d) < WALK_PROP_M:
+		return "prop"
+	for r: Dictionary in _deco_cache:
+		if planet.surface_distance(d, r["dir"] as Vector3) < float(r["footprint"]) + WALK_DECO_GAP_M:
+			return "decoration"
+	var here := planet.surface_point(d)
+	var trash := get_tree().root.get_node_or_null("World/TrashField") if is_inside_tree() else null
+	if trash != null:
+		for c: Node in trash.get_children():
+			if c is Node3D and here.distance_to((c as Node3D).global_position) < WALK_TRASH_M:
+				return "trash"
+	return ""
+
+
+## "" when nothing on the straight surface path from `a` to `b` would be walked through, otherwise the
+## first thing in the way.
+func _path_blocker(a: Vector3, b: Vector3) -> String:
+	var span := planet.surface_distance(a, b)
+	var steps := maxi(1, int(ceil(span / PATH_STEP_M)))
+	for i in range(1, steps):
+		var why := _walk_problem(a.slerp(b, float(i) / float(steps)).normalized())
+		if why != "":
+			return why
+	return ""
+
+
+## `metres` round the planet from the surface direction `from`, along the tangent `tangent`.
+func _step(from: Vector3, tangent: Vector3, metres: float) -> Vector3:
+	var a := metres / maxf(planet.radius, 0.001)
+	return (from.normalized() * cos(a) + tangent.normalized() * sin(a)).normalized()
 
 
 # ============================================================================= talk
@@ -622,6 +1382,9 @@ func _on_decoration_removed(_planet_id: String, _instance_id: String) -> void:
 func _on_decorations_changed() -> void:
 	if visitor != null:
 		_rebuild_deco_cache()
+	# A pending arrival's ground and path verdicts were worked out against the old yard.
+	if _arrive_due:
+		_arrive_dirty = true
 
 
 # ============================================================================= the game
@@ -854,6 +1617,32 @@ func _ground_problem(dir: Vector3) -> String:
 	return ""
 
 
+## THE ORDER THE "framed" LATTICE IS SEARCHED IN, rolled from the day alone (Fisher-Yates on a seeded
+## RandomNumberGenerator, not Array.shuffle, which uses the global one and would not be reproducible).
+## Pure and seeded like every other per-day roll here, so a reload on the same day walks the lattice in
+## the same order and lands on the same square even when the saved spot has to be picked again.
+##
+## WHY A SHUFFLE AND NOT A ROLLED IDEAL: the search takes the FIRST square that passes every rule, so
+## whatever fixes the order fixes the spot. The fixed "nearest (4.0 ahead, 2.4 to the spawn side)" sort
+## gave 1 distinct spot in 30 days (MEASURED 2026-09-20). Rolling that ideal over the lattice gave 11
+## in 30, but clumped: 17 of the 30 days landed on the same two squares, because on home not one square
+## on the spawn side passes the frame rules (39 pass, all 2.0-4.4 m to the OTHER side), so half of the
+## ideal's roam collapsed onto the two squares nearest that edge. A shuffle asks the squares in a
+## different order instead, which makes every LEGAL square equally likely to be the first one found -
+## and it is no slower: the first passing square is reached in about lattice/passing = 27 probes on
+## average, where the sorted search had to walk every square nearer the ideal than the nearest passer.
+## Every ground and frame rule is still applied to every square, so the order can only choose between
+## legal squares, never make an illegal one win.
+static func _day_shuffle(a: Array[Vector2], day: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([SPOT_SEED, day])
+	for i in range(a.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var t := a[i]
+		a[i] = a[j]
+		a[j] = t
+
+
 ## The four passes of "WHERE THEY STAND". Vector3.ZERO when no ground on the planet passes.
 func _pick_spot() -> Vector3:
 	var first_problem := ""
@@ -866,11 +1655,7 @@ func _pick_spot() -> Vector3:
 		for ix in range(int(round(AHEAD_MIN_M / SEARCH_STEP_M)), int(round(AHEAD_MAX_M / SEARCH_STEP_M)) + 1):
 			for iy in range(-int(round(SIDE_MAX_M / SEARCH_STEP_M)), int(round(SIDE_MAX_M / SEARCH_STEP_M)) + 1):
 				near.append(Vector2(ix, iy) * SEARCH_STEP_M)
-		var ideal := Vector2(IDEAL_AHEAD_M, IDEAL_SIDE_M)
-		near.sort_custom(func(a: Vector2, b: Vector2) -> bool:
-			var da := a.distance_squared_to(ideal)
-			var db := b.distance_squared_to(ideal)
-			return da < db or (is_equal_approx(da, db) and (a.x < b.x or (is_equal_approx(a.x, b.x) and a.y < b.y))))
+		_day_shuffle(near, GameState.day_count)
 		# Pass 1 needs every sight line clear, round the whole wander patch too; pass 2 only where they
 		# stand (the patch still in frame) - a crowded yard can hide some of the patch.
 		for pass_name: String in ["framed", "framed-spot"]:
@@ -1435,6 +2220,96 @@ func debug_search_tally(tag: String = "") -> void:
 			tally[key] = int(tally.get(key, 0)) + 1
 	_close_sight_space()
 	print("VISITTALLY %s %s passed=[%s]" % [tag, JSON.stringify(tally), ",".join(passed)])
+
+
+## QA: the spot the real `_pick_spot` gives for each of `days` days from today - with each one re-run
+## through the ground and frame rules, how long the search took, and how far the visitor's column sits
+## from the landed astronaut's in each landing frame ("behind the player's head" is an overlap of 0.00).
+## How many are distinct (further apart than a quarter of a metre) and how far apart they are.
+## Restores the day. Prints only; nothing is written and no visitor is moved.
+func debug_spot_spread(tag: String, days: int) -> void:
+	if planet == null:
+		return
+	var keep := GameState.day_count
+	var dirs: Array[Vector3] = []
+	var behind := 0
+	for i in days:
+		GameState.day_count = keep + i
+		_rebuild_caches()
+		var t0 := Time.get_ticks_usec()
+		var d := _pick_spot()
+		var us := Time.get_ticks_usec() - t0
+		var ground := _ground_problem(d)
+		var view := _view_problem(d)
+		_close_sight_space()
+		dirs.append(d)
+		var gap := _head_gap(d)
+		if gap <= 0.0:
+			behind += 1
+		print("VISITSPREAD %s day=%d dir=%s pass=%s ground=[%s] view=[%s] head_gap=%.3f pick_ms=%.1f note=%s" % [
+			tag, GameState.day_count, str(d).replace(" ", ""), spot_pass, ground, view, gap,
+			us / 1000.0, spot_note])
+	GameState.day_count = keep
+	var distinct: Array[Vector3] = []
+	for d: Vector3 in dirs:
+		var seen := false
+		for e: Vector3 in distinct:
+			if planet.surface_distance(d, e) < 0.25:
+				seen = true
+				break
+		if not seen:
+			distinct.append(d)
+	var maxd := 0.0
+	var sum := 0.0
+	var pairs := 0
+	for i in dirs.size():
+		for j in range(i + 1, dirs.size()):
+			var m := planet.surface_distance(dirs[i], dirs[j])
+			maxd = maxf(maxd, m)
+			sum += m
+			pairs += 1
+	print("VISITSPREAD %s days=%d distinct=%d max_apart_m=%.2f mean_apart_m=%.2f behind_head=%d" % [
+		tag, days, distinct.size(), maxd, (sum / float(pairs) if pairs > 0 else 0.0), behind])
+
+
+## QA: the smallest gap, in screen widths, between the visitor's column at `d` and the landed
+## astronaut's column, over both landing cameras. <= 0 means the two overlap - the visitor is behind
+## the player's head in that settled frame. `_build_views` must have run.
+func _head_gap(d: Vector3) -> float:
+	if _views.is_empty() or d == Vector3.ZERO:
+		return 1.0
+	var worst := 1.0
+	for v: Dictionary in _views:
+		var them := _column_rect(v, planet.surface_transform(d), COLUMN_HALF_M, COLUMN_TOP_M)
+		var me := _column_rect(v, _astronaut_xf, ASTRONAUT_RADIUS_M, ASTRONAUT_HEIGHT_M)
+		if them.size == Vector2.ZERO or me.size == Vector2.ZERO:
+			continue
+		var gap: float = maxf(maxf(them.position.x - me.end.x, me.position.x - them.end.x),
+			maxf(them.position.y - me.end.y, me.position.y - them.end.y))
+		worst = minf(worst, gap)
+	return worst
+
+
+## The screen rectangle (in the same -1..1 units as VIEW_SAFE) of an upright box `half` wide and
+## `top` tall standing at `xf`, seen from the landing camera `v`.
+func _column_rect(v: Dictionary, xf: Transform3D, half: float, top: float) -> Rect2:
+	var eye: Vector3 = v["eye"]
+	var basis: Basis = v["basis"]
+	var up := xf.basis.y
+	var side := basis.x - up * basis.x.dot(up)
+	side = side.normalized() if side.length_squared() > 1e-6 else xf.basis.x
+	var rect := Rect2()
+	var first := true
+	for c: Vector3 in [xf.origin - side * half, xf.origin + side * half,
+			xf.origin - side * half + up * top, xf.origin + side * half + up * top]:
+		var rel := c - eye
+		var depth := -basis.z.dot(rel)
+		if depth < 0.5:
+			return Rect2()
+		var sp := Vector2(basis.x.dot(rel) / depth / float(v["tan_x"]), basis.y.dot(rel) / depth / float(v["tan_y"]))
+		rect = Rect2(sp, Vector2.ZERO) if first else rect.expand(sp)
+		first = false
+	return rect
 
 
 ## `ground_problem(dir)`, printed - lets a Director timeline or a critic assert the exact rule name

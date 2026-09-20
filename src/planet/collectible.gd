@@ -42,6 +42,10 @@ var _t := 0.0
 var _picked := false
 var _phase := 0.0
 
+## docs/OPEN_ISSUES.md 66: how many "stardust_pickup" companions each world carries (see
+## `_ensure_stardust_companions()` below for why they are not a PlanetData.collectible_kind entry).
+const STARDUST_COMPANIONS := 5
+
 ## Record key for today's pick list.
 static func day_key(id: String) -> String:
 	return "%d:%s" % [GameState.day_count, id]
@@ -71,6 +75,150 @@ func _ready() -> void:
 	shape.shape = s
 	shape.position = Vector3(0.0, 0.4, 0.0)
 	add_child(shape)
+	if kind != "stardust_pickup":
+		_ensure_stardust_companions()
+
+## Makes sure this world's STARDUST_COMPANIONS stardust pickups exist for today, spawning any that
+## are missing (not yet picked today, and no live node for them already) as extra siblings right here
+## under the planet's own Collectibles node.
+##
+## Deliberately NOT done by adding "stardust_pickup" to a world's PlanetData.collectible_kind, which
+## is the obvious way and the one this file used at first: planet_props.gd::_collectibles() reads that
+## same field, but so does favor_system.gd's `_local_collectible()` (line ~828, a file this job's brief
+## says not to touch - another workflow owns it this round) - it excludes only the literal "scrap", so
+## every OTHER kind in that list is a valid "fetch" favour target. MEASURED: on a world with 5 of 13
+## kind-list entries turned into "stardust_pickup", about 5/13 of that world's "fetch" offers rolled
+## it - a soft-lock (item_count("stardust_pickup") can never rise past 0, same shape as the
+## "stardust_shard" bug favor_system.gd:74 already documents) on nearly half of one whole favour type,
+## not the rare edge case a first read suggests. Spawning these directly, here, means
+## PlanetData.collectible_kind never mentions "stardust_pickup" at all, so favor_system.gd never sees
+## it and cannot offer it - no edit to that file required or made.
+##
+## Whichever ordinary collectible's _ready() runs first in a given build does all the spawning; every
+## other ordinary collectible's _ready() the same build finds every companion already present (or
+## already picked today) and does nothing - safe however many of the world's own collectibles survive
+## `planet_props.gd`'s own was-picked-today skip on a given visit.
+##
+## ROUND 2 FIX (docs/OPEN_ISSUES.md 66, critic round 1): this call alone is NOT enough. It only runs
+## from an ORDINARY collectible's own _ready(), so once every ordinary collectible on a world is
+## already in GameState.picked_collectibles for today, planet_props.gd::_collectibles() spawns no
+## ordinary collectible at all and no Collectible._ready() ever runs - the five untouched stardust
+## pickups then never spawn either. MEASURED (critic, 4/4 worlds): sweep the ordinary collectibles,
+## fly off and back (SceneRouter's own change_scene_to_file(WORLD_SCENE) path), and the world rebuilds
+## with zero collectibles at all. Fixed below by ALSO running the exact same spawn from a place that
+## always exists regardless of ordinary collectibles: EventBus.planet_loaded, which world.gd emits at
+## the end of every world build, empty or not (see _connect_world_safety_net()). Both paths call the
+## same idempotent _spawn_missing_companions(); whichever runs first does the work, the other finds
+## every companion already present (or already picked) and does nothing.
+func _ensure_stardust_companions() -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	var host: Node = parent.get_parent()
+	if host == null or not host.has_method("surface_transform"):
+		return
+	_spawn_missing_companions(parent, host, planet_id)
+
+## The actual spawn loop, pulled out of _ensure_stardust_companions() so it can be driven either by a
+## live ordinary Collectible (the common case) or, when a world has none today, by
+## _on_world_planet_loaded() below with no Collectible instance involved at all.
+static func _spawn_missing_companions(coll_root: Node, host: Node, planet_id: String) -> void:
+	for i in STARDUST_COMPANIONS:
+		var cid := "%s_star%d" % [planet_id, i]
+		if was_picked_today(planet_id, cid):
+			continue
+		if coll_root.has_node("Collectible_" + cid):
+			continue
+		var c := Collectible.new()
+		c.setup("stardust_pickup", cid, planet_id)
+		c.transform = host.surface_transform(_companion_placement_dir(host, planet_id, i))
+		coll_root.add_child(c)
+
+## World-empty safety net (docs/OPEN_ISSUES.md 66, critic round 1 blocking finding). Connected once,
+## process-wide, from _static_init() - which GDScript calls the first time this class is loaded, and
+## in practice that is always from inside planet_props.gd::_collectibles() while building a world,
+## i.e. always after every autoload (including EventBus) is already up. EventBus.planet_loaded fires
+## once at the END of world.gd's _ready(), on every world build, whether or not that build spawned any
+## ordinary collectible - the same node layout every other system already keys off
+## (get_node_or_null("/root/World/Planet"), used by environment.gd, rocket_pad.gd, part_celebration.gd
+## and others), so this needs no reference to planet_props.gd or world.gd at all.
+static var _world_safety_net_connected := false
+
+static func _static_init() -> void:
+	_connect_world_safety_net()
+
+static func _connect_world_safety_net() -> void:
+	if _world_safety_net_connected:
+		return
+	_world_safety_net_connected = true
+	if not EventBus.planet_loaded.is_connected(_on_world_planet_loaded):
+		EventBus.planet_loaded.connect(_on_world_planet_loaded)
+
+static func _on_world_planet_loaded(planet_id: String) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return
+	var planet_node: Node = tree.root.get_node_or_null("World/Planet")
+	if planet_node == null or not planet_node.has_method("surface_transform"):
+		return
+	var coll_root: Node = planet_node.get_node_or_null("Collectibles")
+	if coll_root == null:
+		return
+	_spawn_missing_companions(coll_root, planet_node, planet_id)
+
+## A fixed, hash-derived direction per planet + companion index - NOT drawn from the planet's own
+## placement RNG (`Planet.make_rng()` / `_find_free_dir()`, which `planet_props.gd::_collectibles()`
+## uses for every other collectible), so adding these five never shifts a single existing collectible,
+## prop or terrain roll on any world - re-measured (tools/measure/sweep.gd) byte-identical positions
+## and kind counts for every pre-existing collectible on all seven worlds before and after this
+## feature. Used only as the LAST-RESORT fallback by `_companion_placement_dir()` below.
+static func _companion_dir(pid: String, i: int) -> Vector3:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("stardust_companion|%s|%d" % [pid, i])
+	var theta := rng.randf_range(0.0, TAU)
+	var z := rng.randf_range(-0.8, 0.8)
+	var r := sqrt(maxf(0.0, 1.0 - z * z))
+	return Vector3(r * cos(theta), z, r * sin(theta)).normalized()
+
+## ROUND 2 (docs/OPEN_ISSUES.md 66, critic round 1 non-blocking finding): the pure hash roll above was
+## never reserved-zone checked, unlike every other collectible (`planet_props.gd::_collectibles()`
+## always runs new spots through `Planet._find_free_dir()`). MEASURED by the critic: 12 of 35 rolls
+## failed `Planet._is_free(dir, 0.45)` - mostly harmless (inside a soft reservation like the rocket pad
+## or a spawn marker) but two tight against a scatter prop and one reading underwater at the shoreline.
+## Nothing was unreachable, but 35 unchecked dice rolls re-roll the moment a radius changes - and
+## home's radius is exactly what the concurrent workflow this round is about to resize. Fixed by
+## running the SAME clearance test every other collectible must pass, seeded from our own dedicated RNG
+## (not `planet.make_rng()`'s shared stream) so this still never shifts any pre-existing collectible,
+## prop or terrain roll.
+##
+## FIRST ATTEMPT (kept here as the lesson, not the code) searched only within a 2 m band of the old
+## hash spot. MEASURED, re-run after: WORSE, 13 of 35 still failing, because a reservation like the
+## rocket pad's is 4.45-5.45 m - the whole 2 m band around a roll that landed inside one is still
+## inside it, so every banded try failed and the fallback was the same bad unchecked spot as before.
+## Fixed by widening to an UNBANDED search (band_max_m 0.0 - anywhere free on the planet, the same as
+## `planet_props.gd::_collectibles()` itself uses for every ordinary collectible) once the tight banded
+## try fails, before ever falling back to the unchecked hash direction. RE-MEASURED after this change:
+## 0 of 35 fail `_is_free`/`is_underwater` (tools/measure/placement_check.gd) on all seven worlds.
+static func _companion_placement_dir(host: Node, pid: String, i: int) -> Vector3:
+	var fallback := _companion_dir(pid, i)
+	if not (host.has_method("_find_free_dir") and host.has_method("register_prop")):
+		return fallback
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("stardust_companion_free|%s|%d" % [pid, i])
+	# Pass 1: stay close to the original roll (a small nudge off a tight prop or the shoreline).
+	var dir: Vector3 = host._find_free_dir(rng, 0.45, 40, false, fallback, 2.0)
+	if dir == Vector3.ZERO:
+		dir = host._find_free_dir(rng, 0.3, 40, true, fallback, 2.0)
+	# Pass 2: the roll landed inside something bigger than a 2 m band can escape (the rocket pad's
+	# reservation is 4.45-5.45 m) - search the whole planet instead, same as an ordinary collectible.
+	if dir == Vector3.ZERO:
+		dir = host._find_free_dir(rng, 0.45, 60, false)
+	if dir == Vector3.ZERO:
+		dir = host._find_free_dir(rng, 0.3, 60, true)
+	if dir == Vector3.ZERO:
+		dir = fallback
+	host.register_prop(dir, 0.45)
+	return dir
 
 func _build_visual() -> void:
 	_visual = Node3D.new()
@@ -113,6 +261,24 @@ func _build_visual() -> void:
 			mi.rotation.x = 0.35
 			_base_y = 0.3
 			sparkle_col = Color("#ffd9a0")
+		"stardust_pickup":
+			# docs/OPEN_ISSUES.md 66: a pure-currency pickup (pays straight into GameState.stardust,
+			# like "scrap" below) - NOT the removed "stardust_shard" material, which soft-locked a
+			# favour (favor_system.gd:74) because it was never a real fetch target. This one is never
+			# add_item()'d (see interact()), never in favor_system.gd's MATERIALS list and never sold in
+			# a shop, so it cannot repeat that bug. Same shard mesh the old material used to use.
+			# MEASURED (tools/measure/debug_shard.gd, a scratch-only capture): this file's own
+			# SHARD_COLOR/SHARD_SPARKLE pair (#ffe27a/#ffd166) read as a flat cream-white blob in
+			# daylight, not gold - crystal.gdshader's ALBEDO is lit by the sun at noon far more than it
+			# is by `glow_strength` (`emission_day_scale` = 0.16), so a light, low-saturation albedo
+			# just reflects white. The deeper, more saturated amber the old (now-dead) "stardust_shard"
+			# case already used - #d99512 / #ffcf55 - reads as an actual gold gem instead; kept that
+			# pairing rather than reintroduce the cream wash-out this shader's own header already
+			# documents fixing once.
+			mi.mesh = PlanetPropMeshes.shard()
+			mi.material_override = PlanetPropMeshes.crystal_material(Color("#d99512"), Color("#ffcf55"), 1.5, true, 0.35)
+			_base_y = 0.28
+			sparkle_col = Color("#ffd166")
 		"scrap":
 			# CORE_LOOP "Scrap and stardust": its own look, not the stardust-shard fallback - a bent
 			# hull plate with a bolt still through it, built with the same kit + colors as the space
@@ -205,20 +371,34 @@ func interact(player: Node3D) -> void:
 	# craftable material - so it must skip add_item() or the bag grows a second, unsynced "Scrap"
 	# entry (a flat +1/pickup) alongside the real +3..+6 GameState.scrap total. Critic round 1 caught
 	# this live: HUD read 10, the bag's Materials tab simultaneously showed a disconnected "Scrap x1".
-	if kind != "scrap":
+	# stardust_pickup is the same shape of currency pickup (docs/OPEN_ISSUES.md 66) - no inventory
+	# item, so it can never be a favour's bring-target and never shows up in a shop's sell list.
+	if kind != "scrap" and kind != "stardust_pickup":
 		GameState.add_item(kind)
-	if kind == "stardust_shard":
-		GameState.add_stardust(randi_range(8, 15))
-	elif kind == "scrap":
+	var toast_text := ""
+	if kind == "scrap":
 		# CORE_LOOP "Scrap and stardust" / GameState.STARTING_SCRAP is 5 - a small, tight range so a
 		# handful of pickups reads as real progress without dwarfing that starting stash. FIRST GUESS,
 		# BUILD_PLAN Phase 6 tunes it from a timed play-through.
 		GameState.add_scrap(randi_range(3, 6))
+	elif kind == "stardust_pickup":
+		# STARDUST_COMPANIONS (5) of these per world (see _ensure_stardust_companions()),
+		# randi_range(9,15) each: a full sweep always lands 45-75 stardust regardless of rolls, inside
+		# the 40-90/world/day target measured in docs/OPEN_ISSUES.md 66 without a fitted constant on top.
+		var amount := randi_range(9, 15)
+		GameState.add_stardust(amount)
+		toast_text = "+%d stardust!" % amount
 	var def := Catalog.get_item(kind)
 	var display: String = str(def.get("name", kind.capitalize()))
+	if toast_text == "":
+		toast_text = "You got a %s!" % display
 	EventBus.collectible_picked.emit(kind, global_position)
 	AudioManager.play_sfx("pickup")
-	EventBus.toast_requested.emit("You got a %s!" % display, kind)
+	# toast.gd falls back to its drawn stardust-coloured star for any icon id Catalog doesn't know -
+	# stardust_pickup is deliberately not a Catalog item, so pass "star" straight rather than rely on
+	# that fallback (the same way favor_system.gd's own "+N Stardust" toast does).
+	var toast_icon := "star" if kind == "stardust_pickup" else kind
+	EventBus.toast_requested.emit(toast_text, toast_icon)
 	interacted.emit(player)
 	# pop-and-shrink
 	var tw := create_tween()

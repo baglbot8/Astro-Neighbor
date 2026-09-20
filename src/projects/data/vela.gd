@@ -248,7 +248,7 @@ static func definition() -> Dictionary:
 						"The array logs a friend who listens back.",
 					],
 					"tomorrow": [
-						"That channel is closed today. Return tomorrow.",
+						"That channel is closed today. Return in a few hours.",
 					],
 				},
 			},
@@ -270,7 +270,7 @@ static func definition() -> Dictionary:
 						"Tell Vela: dish nine ran warm once. Briefly.",
 					],
 					"tomorrow": [
-						"The page can wait. Go tomorrow, unhurried.",
+						"The page can wait a few hours yet. No hurry.",
 					],
 				},
 			},
@@ -294,7 +294,7 @@ static func definition() -> Dictionary:
 						"Installed. Nine listens again. All eight, now.",
 					],
 					"tomorrow": [
-						"Already placed today. Let it settle till tomorrow.",
+						"Already placed today. Let it settle a while yet.",
 					],
 				},
 			},

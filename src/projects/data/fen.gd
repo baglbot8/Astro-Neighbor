@@ -206,7 +206,7 @@ static func definition() -> Dictionary:
 						"Good work. I logged it. Twice, to be certain.",
 					],
 					"tomorrow": [
-						"Enough guiding. Rest. Tomorrow we find where it landed.",
+						"Enough guiding. Rest. We look again in a few hours.",
 					],
 				},
 			},
@@ -227,7 +227,7 @@ static func definition() -> Dictionary:
 						"Three found. My count agrees with yours, for once.",
 					],
 					"tomorrow": [
-						"Enough walking today. Tomorrow, the first pool gets a light.",
+						"Enough walking today. The first pool gets light soon.",
 					],
 				},
 			},

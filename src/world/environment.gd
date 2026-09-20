@@ -19,11 +19,23 @@ extends Node3D
 ##   get_sun_direction() -> Vector3 unit vector pointing TOWARD the sun (world space)
 ##   get_night_factor() -> float    0 in full day, 1 in full night
 ##   set_space_blend(t) / get_space_blend()   0 = on the surface, 1 = full space (rocket climb)
-##   time_scale                     1.0 = a 10 minute day, 0.0 = frozen
+##   time_scale                     1.0 = a 25 minute day, 0.0 = frozen
 ## Emits EventBus.time_of_day_changed every ~0.05 h and EventBus.day_phase_changed on phase change.
 
-## One in-game day in real seconds (10 minutes).
-const DAY_LENGTH_SEC := 600.0
+## One in-game day in real seconds (25 minutes).
+##
+## WAS 600.0 (a 10 minute day) up to 2026-09-19. The user asked for 25 minutes so that the things
+## that happen "once a day" feel special again: at 600 s a visitor turned up every ~20 real minutes
+## and a favour several times an hour, which read as a treadmill rather than a routine. Everything
+## else in this file is a function of `_hour` (the sun arc, the moons, the sky grade, the star day
+## scale, the lamps, sky_bodies' drift periods, which are quoted in GAME hours), so the whole cycle
+## simply stretches with it and no other constant here was tuned against 600 s. The in-game shape of
+## a day is unchanged: `_phase_for` still calls 20:00-05:00 night, 9.00 of 24 hours, so night is still
+## 37.5% of the day - measured 9.38 real minutes instead of 3.75. MEASURED (headless, --fixed-fps 60,
+## the real environment.tscn at time_scale 1, 06:00 back round to 06:00): 1500.017 s, one frame over.
+## The finale's forced night does not read this at all - it holds the clock with `time_scale = 0` and
+## jumps it with `set_time` - so it is unaffected.
+const DAY_LENGTH_SEC := 1500.0
 const EMIT_STEP_HOURS := 0.05
 const SKY_SHADER := preload("res://src/shaders/sky.gdshader")
 const VIGNETTE_SHADER := preload("res://src/shaders/vignette.gdshader")
@@ -132,7 +144,7 @@ const GRADE_NIGHT := [
 ## Night-factor step that forces the grade LUT to be rebuilt (keeps it off the per-frame path).
 const GRADE_STEP := 0.02
 
-## Speed of the clock. 1.0 = 600 s per day. 0.0 freezes time (showcases).
+## Speed of the clock. 1.0 = DAY_LENGTH_SEC (1500 s) per day. 0.0 freezes time (showcases).
 @export var time_scale := 1.0
 ## When set, used instead of looking up the planet (showcase scenes).
 @export var data_override: PlanetData
@@ -474,7 +486,8 @@ func _build_environment() -> void:
 	# the screen, and never reads this cubemap — REALTIME's whole-frame freshness bought nothing
 	# visible. INCREMENTAL re-renders one face (of 6, further split into mip passes) per frame
 	# instead of the whole cubemap, so the ambient/reflection data lags the sky by up to a few
-	# frames, which a clock that moves 24h per 600s (0.04 h/frame at 60fps) cannot show.
+	# frames, which a clock that moves 24h per 1500s (0.016 h/frame at 60fps; it was 0.04 h/frame when
+	# this was measured on the old 600 s day, so the lag is now smaller still) cannot show.
 	# RE-MEASURED (fix3b/env round 1, independent harness: a scratch probe scene building the real
 	# planet.tscn + environment.tscn under a static gameplay camera, gl_compatibility, disable-vsync,
 	# max-fps 0, A/B/A/B, median render time over 240 sampled frames): REALTIME 1.28-1.35 ms,
