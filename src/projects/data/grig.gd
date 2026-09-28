@@ -109,13 +109,10 @@ extends RefCounted
 ## land on the same bar. CLAUDE.md's "no fitted constants" rule argues against moving it without a
 ## timed play-through showing it is actually wrong (Phase 6).
 ##
-## Voice (docs/CORE_LOOP.md "World problems": Grig is "blunt, one-eyed stonecutter who counts";
-## npc_data.gd "grig" entry - intro, greet and small_talk all read the same way: short declarative
-## sentences, often one word long, exact numbers, dry rather than warm, never a question he does not
-## also answer himself ("Water again. A garden again. Correctly ordered."). No Animal Crossing words
-## (docs/ARCHITECTURE.md §1.1). Zorp's "with" lines (spoken in HIS voice, not Grig's) match zorp.gd's
-## own writing: short exclaiming bursts, a word repeated for emphasis, curious asides.
-## Every line <= 60 characters, 1-3 lines per list (project_system.gd "Writing").
+## Voice (docs/CAST_VOICES_DRAFT.md, approved 2026-09-27, with docs/STORY_HOME_SPEC.md 8.1): 
+## Grig is grumpy outside, soft inside (habit "Hmph."); he carved the big stairs up his hill.
+## No building jargon, no numbering. Zorp's "with" lines are in Zorp's voice.
+## Plain English a 10-year-old reads once. Every line <= 60 characters.
 
 const ITEM_ID := "grig_dry_garden"
 const HUNT_COUNT := 3
@@ -127,17 +124,19 @@ static func definition() -> Dictionary:
 		"part": "part_grig",
 		"part_fit_scrap": 8,
 		"intro": [
-			"Chalk. Dry chalk. Not one drop of water in it.",
-			"Nine hundred steps, and every one of them thirsty.",
-			"Dowse with me. Feel for the pulse. Find water.",
+			"Hmph. My chalk is dry. No water in it at all.",
+			"My stairs are dusty. Nothing grows on them.",
+			"We leave soon. I don't leave jobs half done.",
+			"Help me find water under the ground.",
 		],
 		"part_lines": [
-			"Water again. A garden again. Correctly ordered.",
-			"Take this valve. Cut it myself. Fits your rocket.",
-			"Best neighbour on the steps. Recorded. Permanently.",
+			"Water again. A garden again. Good. Very good.",
+			"Take this valve. I cut it myself. Fits your rocket.",
+			"Good luck, wherever you land. Mind the stairs.",
+			"Best neighbour I've had. Hmph. Go on, then.",
 		],
 		"part_again": [
-			"Lost the valve? I keep spares. I always keep spares.",
+			"Lost the valve? Here. I made another one.",
 		],
 		"items": [
 			{
@@ -145,7 +144,7 @@ static func definition() -> Dictionary:
 				"name": "Barely-There Bloom",
 				"kind": "decoration",
 				"category": "plants",
-				"desc": "Zorp's hardy pale flower, coaxed to grow in dry chalk.",
+				"desc": "Zorp's tough little flower. It grows in dry chalk.",
 				"icon_color": "#cfe4ff",
 				# Reused decoration scene (schema: "any shipped decoration scene may be reused").
 				# footprint must match the scene's own DecoItem.footprint (moon_flower_bed.gd:14).
@@ -167,18 +166,18 @@ static func definition() -> Dictionary:
 				},
 				"lines": {
 					"ask": [
-						"Water hides under chalk. I feel it. Sometimes.",
-						"Walk slow. Listen for the pulse. Find three.",
+						"Water hides under the chalk. Let's find it.",
+						"Walk slow. Feel for a pulse, like a heartbeat.",
 					],
 					"progress": [
-						"Still dowsing? The chalk does not lie. Mostly.",
+						"Still looking? Walk slow. Feel for the pulse.",
 					],
 					"done": [
-						"Three pulses. Three springs. Correctly counted.",
-						"Water, under my own steps. I did not expect that.",
+						"Three springs. Under my own stairs. Hmph!",
+						"I didn't expect that. Good work.",
 					],
 					"tomorrow": [
-						"Enough walking for today. Dowse again in a few hours.",
+						"Enough walking for today. Try again later.",
 					],
 				},
 			},
@@ -189,18 +188,18 @@ static func definition() -> Dictionary:
 				"hand_over": {ITEM_ID: 1},
 				"lines": {
 					"ask": [
-						"Water is not enough. I need something that drinks little.",
-						"Zorp grows strange flowers. Ask him for one. Now.",
+						"Water's not enough. I need a tough plant.",
+						"Zorp grows odd flowers. Go ask him for a seed.",
 					],
 					"progress": [
-						"Seen Zorp yet? His hollow is close. Go.",
+						"Seen Zorp yet? His garden is close. Go.",
 					],
 					"tomorrow": [
-						"No seed yet? Fine. Try Zorp again in a few hours.",
+						"No seed yet? Fine. Try Zorp again later.",
 					],
 					"with": [
-						"Oh! A pouch for Grig? I have just the one!",
-						"Barely drinks at all! Perfect for dry chalk!",
+						"Oh ho! A seed for Grig? I have just the one!",
+						"It hardly drinks. Perfect for dry chalk!",
 					],
 				},
 			},
@@ -213,18 +212,61 @@ static func definition() -> Dictionary:
 				"count": 1,
 				"lines": {
 					"ask": [
-						"Pouch in hand? Good. Plant it on a flat tread.",
-						"Somewhere the water reaches. I marked a good one.",
+						"Got the seed? Good. Plant it on a flat stair.",
+						"Somewhere the water reaches. I marked a spot.",
 					],
 					"progress": [
-						"Not planted yet. The ring is still glowing there.",
+						"Not planted yet. Look for the glowing ring.",
 					],
 					"done": [
-						"It bloomed. Pale, but it bloomed. Good. Very good.",
-						"My driest step has a garden now. Correctly placed.",
+						"It bloomed. Small, but it bloomed. Good.",
+						"My driest stair has a garden now. Hmph. Nice.",
 					],
 					"tomorrow": [
 						"Already planted today. Come see it grow later.",
+					],
+				},
+			},
+			{
+				# STORY_SPINE (PLANET_SAFARI_SPEC.md 15.2, migrated from the retired sky "photo" step,
+				# same appended 4th-step slot). Grig's own line is the OTHER kind ("kind": "score", spec
+				# 15.2 table: "one safari on his world worth at least N stardust (Grig counts
+				# everything)") - fitting for the one neighbour whose own voice is entirely about
+				# counting and totals, not a single named sight.
+				#
+				# N = 140, MEASURED (CLAUDE.md "no fitted constants" - not guessed), between the
+				# careless and careful test players' median SESSION totals on Grig
+				# (tools/ps_careless_player.gd / ps_careful_player.gd), 5 seeded runs each
+				# (--ps-seed=1..5), headless, --rendering-method gl_compatibility, --fixed-fps 60, in a
+				# renamed scratch copy (config/name "AN W1 W1B 0926" - never the user's real save):
+				#   careless totals (sum of that run's photo prices): 45, 99, 116, 118, 161 -> median 116
+				#   careful  totals:                                  93, 105, 160, 170, 200 -> median 160
+				# 140 is the rounded midpoint of the two medians (138), strictly between both: a careless
+				# player (points roughly, never zooms) falls short more often than not; a careful one
+				# (gets close, waits for a moment) clears it on most of the sampled runs (3 of 5 here) but
+				# not trivially on every one - not re-tuned against a bigger sample, per the same rule.
+				"type": "planet_photo",
+				"title": "Safari score: 140 stardust",
+				"planet": "grig",
+				"kind": "score",
+				"target": 140,
+				"lines": {
+					"ask": [
+						"Before I go. One safari here, on my hill.",
+						"Take photos worth 140 stardust. At least.",
+					],
+					"progress": [
+						"Not 140 yet? Go again. Get closer this time.",
+					],
+					"already_have": [
+						"Already past 140? Hmph. You beat me to it.",
+					],
+					"done": [
+						# STORY_HOME_SPEC.md 5.4 / PLANET_SAFARI_SPEC.md 17.1 rule 12: names the REAL session
+						# amount, not the "140" target repeated back - project_system.gd's `_lines()` fills
+						# the %d from GameState.flags["planet_safari_best_total"]["grig"].
+						"%d stardust. Hmph. Best safari yet. Good.",
+						"I forgot how nice the view is from up here.",
 					],
 				},
 			},

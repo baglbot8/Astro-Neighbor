@@ -1,80 +1,146 @@
 extends RefCounted
-## FINALE LINES (docs/PHASE5_SPEC.md §3 "Home is here", word for word). Data-only: no logic, so a
-## builder that needs the words never has to parse dialogue_box calls to find them, and this file can
-## be diffed straight against the spec text. Every quoted string in §3 is a "box" - one call to
-## DialogueBox.show_lines / DialogueRunner.say shows one array of boxes as one turn.
+## FINALE LINES - "Don't Move Out", THE PARTY VERSION (docs/STORY_HOME_SPEC.md §8 and §8.1, the user's own
+## order, 2026-09-27; voices per docs/CAST_VOICES_DRAFT.md with §8.1's changes). It replaced §5.7's convoy
+## meeting on 2026-09-27: a goodbye party; the neighbours say they are staying and everyone agrees; DJ Nova
+## reminds them the meteor is still coming; Vela's idea (knock it off course with his ship); everyone offers
+## their ship; Stella: a moving meteor is hard to hit on autopilot; the Professor tracks its path with your
+## photos; the ships fly on autopilot while everyone watches from the Commons; they come back bruised but
+## working; Pip and Pop will fix them; a party; the self-timer group photo. Data-only: no logic, so a builder
+## that needs the words never has to parse dialogue calls to find them, and this file can be diffed
+## straight against the spec text. Every quoted string is a "box" - one call to DialogueRunner.say
+## shows one array of boxes as one turn.
 ##
-## docs/BUILD_PLAN.md Phase 5, builder L0 (this file), owned afterwards by K (flow), K2 (meeting) and
-## G (gift) as they consume it - they do not edit it; a wording change goes back to the lead against
-## PHASE5_SPEC.md §3.
+## Owned by the finale builder; a wording change goes back to the lead against STORY_HOME_SPEC §8.
 ##
 ## ============================================================================== SHAPE
 ## Each beat below is an Array[Dictionary], in spec order, of turns shaped one of:
 ##   {"speaker": <npc id>, "lines": [<box>, ...]}                    - a spoken turn
-##   {"speaker": <npc id>, "camera": <letter>, "lines": [<box>, ...]}  - spoken, camera-tagged (§2)
-##   {"action": <stage direction>}                                    - not spoken, no box
+##   {"speaker": <npc id>, "camera": <letter>, "lines": [<box>, ...]}  - spoken, camera-tagged
+##   {"action": <stage direction>, "id": <what the beat does>}        - not spoken, no box
 ##   {"speaker": <npc id>, "ask": {"prompt": <box>, "options": [<label>, ...]}} - a DialogueRunner.ask
 ##   {"toast": <text>}                                                - EventBus.toast_requested, not a box
-## `speaker` is the npc id DialogueRunner already resolves display name / voice / accent from
-## (npc_data.gd): zorp, bolt, fen, grig, vela, pip, pop, mayor_orbit (Professor Comet), dj_nova.
-## `camera` is one of the meeting beat's own rule letters (§2: W shoulder, P speaker, U crowd-up,
-## S side-on, R pad three-quarter) - "" where §3 names no camera for that line. The final ask of the
-## Meeting beat continues the S framing in the prose but the spec text tags no letter on the ask line
-## itself, so it is left "" here rather than guessed; the meeting builder decides what that ask keeps.
+## `speaker` is the npc id DialogueRunner resolves display name / voice / accent from (npc_data.gd):
+## zorp, bolt, fen, grig, vela, pip, pop, mayor_orbit (Professor Comet), dj_nova.
+## `camera` is one of the meeting's rule letters (docs/PHASE5_SPEC.md §2: W shoulder, P speaker, U crowd-up,
+## S side-on, R pad three-quarter), only where §5.7 tags one ([U], [S]).
+## An action's `id` is what finale_meeting.gd / finale_gift.gd key on (the `action` text is the stage
+## direction, kept for the trace): "scrapbook" the Professor holds up your scrapbook, "silence" nobody
+## moves, "pause" a short pause on the whole crowd, "cheer" everyone agrees (each cheers at its own offset),
+## "turn" all turn to the player, "launch" the six ships fly off on autopilot (finale_launch.gd plays it),
+## "return" the ships and your rocket land back on the Commons, bruised (finale_gift.gd), "party" the
+## party (music, everyone celebrating), "photo" the group photo (finale_gift.gd).
 ##
-## Every box is <= 60 characters (checked below in a comment, not code - this is data only). None in
-## this build ran long enough to need flagging or rewording.
+## Every box is <= 60 characters (the project's LINE_MAX; STORY_HOME_SPEC §2 ruling 12), measured on
+## this file by the builder.
 
 ## ------------------------------------------------------------------------------------- CALL (home)
-## Professor Comet's radio call (RadioSpeaker "mayor_orbit"). Ends on a choice; "What is it?" branches
-## to CALL_WHAT_IS_IT below, "On my way" falls straight through to the Meeting beat with no reply line.
+## Professor Comet's radio call (RadioSpeaker "mayor_orbit"). Ends on a choice; "A party?" branches to
+## CALL_ALREADY below, "On my way" falls straight through to the party with no reply line.
 const CALL: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": [
 		"Professor Comet here. Oh my. She's GOLD!",
 		"You could fly all the way home now.",
 	]},
 	{"speaker": "mayor_orbit", "lines": [
-		"But hold on. Something big is on my scope.",
-		"I checked twice. Then I found my glasses.",
+		"Well. That's the last ship ready to go.",
+		"So before everyone leaves: a goodbye party!",
 	]},
 	{"speaker": "mayor_orbit", "ask": {
-		"prompt": "Come to the Commons? I'm calling everyone.",
-		"options": ["On my way", "What is it?"],
+		"prompt": "It's on the Commons. Will you come?",
+		"options": ["On my way", "A party?"],
 	}},
 ]
-## The reply when "What is it?" is chosen.
-const CALL_WHAT_IS_IT: Array[Dictionary] = [
-	{"speaker": "mayor_orbit", "lines": ["Better seen than said. Do come. Nobody panic."]},
+## The reply when "A party?" is chosen.
+const CALL_ALREADY: Array[Dictionary] = [
+	{"speaker": "mayor_orbit", "lines": ["A goodbye party, friend. Everyone will be there."]},
 ]
 
-## ------------------------------------------------------------------------------------- MEETING (Commons)
-## Sequential; the last entry is the Send/Moment choice (see MOMENT and SEND below for the branches).
+## ------------------------------------------------------------------------------------- MEETING (the party)
+## The goodbye party on the Commons at night; the five packed ships stand round the square
+## (neighbour_ships.gd). Sequential; the last entry is the choice (MOMENT and SEND below are the branches).
 const MEETING: Array[Dictionary] = [
-	{"speaker": "zorp", "lines": ["You came! Everyone came! Even Grig came!"]},
-	{"speaker": "grig", "lines": ["Closed the steps. All nine hundred and four."]},
+	# The party.
 	{"speaker": "mayor_orbit", "lines": [
-		"Thank you all for coming. Now, look up.",
-		"Just there, above the pad. See it?",
+		"You made it! Welcome to the goodbye party!",
+		"One last night together, before everyone goes.",
 	]},
-	{"speaker": "mayor_orbit", "camera": "U", "lines": ["A giant asteroid. It's headed for our worlds."]},
-	{"speaker": "bolt", "lines": ["I ran its path forty times. Five worlds. Every time."]},
+	{"speaker": "dj_nova", "lines": ["YO! Last party on the Commons. Make it LOUD!"]},
+	{"speaker": "zorp", "lines": ["Oh ho! A party! My moustache is wiggling!"]},
+	{"speaker": "grig", "lines": ["Hmph. I closed my stairs for the day. For this."]},
+	{"speaker": "mayor_orbit", "lines": [
+		"Before you all fly off, a little toast.",
+		"To the kindest neighbours in the whole sky.",
+	]},
+	{"action": "a short pause; nobody says anything", "id": "pause"},
+	# One by one: they are staying.
+	{"speaker": "zorp", "lines": [
+		"Hmm. May an old fellow say something?",
+		"The chime on my world. I fall asleep to it.",
+		"I can't leave it. I'm staying!",
+	]},
+	{"speaker": "bolt", "lines": [
+		"I have news too. I checked 212 other masts.",
+		"None of them fit me like mine. I am staying.",
+	]},
+	{"speaker": "fen", "lines": [
+		"I sprouted by my pool. My roots are there.",
+		"I'm not going either. I'm staying.",
+	]},
+	{"speaker": "grig", "lines": [
+		"Best view there is, from the top of my hill.",
+		"I'm staying. Somebody had to say it.",
+	]},
 	{"speaker": "vela", "lines": [
-		"The array heard it three nights ago.",
-		"I filed it under 'unexplained'. I was wrong.",
+		"I look at my photo of home every night.",
+		"My bulb is glowing. I'm staying too!",
 	]},
-	{"speaker": "fen", "lines": ["Nine years of notes. Nothing this size, ever."]},
-	{"speaker": "pip", "lines": ["We could hide in the stockroom..."]},
-	{"speaker": "pop", "lines": ["...no, we couldn't. It's full of lamps."]},
-	{"speaker": "zorp", "lines": ["Unless something fast hits it first. VERY fast."]},
-	{"action": "all turn to the rocket"},
-	{"speaker": "bolt", "camera": "S", "lines": ["Your rocket is fast. Five parts. From us."]},
+	{"speaker": "pip", "lines": ["Don't tell anyone. We never packed the lamps."]},
+	{"speaker": "pop", "lines": ["I kept my box open. Now I can unpack! Yay!"]},
+	{"speaker": "stella", "lines": ["Then I'm staying too, darling. Obviously."]},
+	{"speaker": "mayor_orbit", "lines": ["Then... everyone is staying?"]},
+	{"action": "everyone agrees: a cheer, each at its own moment", "id": "cheer"},
+	# The reminder, looking up at the meteor.
+	{"speaker": "dj_nova", "camera": "U", "lines": ["Uh... just a reminder that METEOR'S still coming for us!"]},
+	{"action": "silence; nobody moves", "id": "silence"},
+	# Vela's idea; everyone offers their ship.
+	{"speaker": "vela", "lines": [
+		"Oh! My bulb just lit up. I have an idea!",
+		"My ship could knock the meteor off course!",
+	]},
+	{"speaker": "mayor_orbit", "lines": [
+		"A brave idea, Vela. But one ship won't do it.",
+		"That meteor is far too big.",
+	]},
+	{"speaker": "bolt", "lines": ["Then take my ship too. That makes 2."]},
+	{"speaker": "zorp", "lines": ["And mine! She's old, like me, but she flies!"]},
+	{"speaker": "fen", "lines": ["Take mine as well. Slow, but steady."]},
+	{"speaker": "grig", "lines": ["Hmph. Mine too. Bring it back in one piece."]},
+	{"speaker": "mayor_orbit", "lines": ["Every ship! Nobody aboard, mind. Autopilot."]},
+	# Stella's worry; the Professor's answer: your photos.
+	{"speaker": "stella", "lines": [
+		"Autopilot, darling? At a meteor that moves?",
+		"That will be very hard to hit.",
+	]},
+	{"speaker": "mayor_orbit", "lines": [
+		"Not if we know its path. And we can.",
+		"May I borrow your scrapbook, friend?",
+	]},
+	{"action": "the Professor holds up the scrapbook", "id": "scrapbook"},
+	{"speaker": "mayor_orbit", "lines": [
+		"That streak is in your photos from every world.",
+		"Put them together, and I can track its path.",
+		"It's the best shot we've got.",
+		"The best shot to save our whole solar system.",
+	]},
+	# Your rocket.
+	{"action": "all turn to the player", "id": "turn"},
 	{"speaker": "mayor_orbit", "camera": "S", "lines": [
-		"She's your way home. Nobody will ask it of you.",
-		"But she's the only thing that could do it.",
+		"Your rocket is the fastest ship we have.",
+		"It's yours to send, or to keep. Nobody minds.",
 	]},
 	{"speaker": "mayor_orbit", "ask": {
-		"prompt": "It's your rocket. What would you like to do?",
-		"options": ["Give me a moment", "Send her"],
+		"prompt": "Will you send your rocket with theirs?",
+		"options": ["Give me a moment", "Send my rocket"],
 	}},
 ]
 
@@ -84,49 +150,48 @@ const MOMENT: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": ["Take all the time you need. We'll be right here."]},
 	{"speaker": "zorp", "lines": ["Whatever you choose, you're still my best friend."]},
 	{"speaker": "bolt", "lines": ["Friendship does not need a rocket. I checked."]},
-	{"speaker": "fen", "lines": ["Sit a while. The sky will wait. It always has."]},
-	{"speaker": "grig", "lines": ["Steps can be cut again. A world cannot."]},
+	{"speaker": "fen", "lines": ["Sit in the warm with me a while. Then decide."]},
+	{"speaker": "grig", "lines": ["Hmph. Your rocket, your choice. Fair's fair."]},
 	{"speaker": "vela", "lines": ["Take your time. Good answers are rarely quick."]},
 ]
 
-## ------------------------------------------------------------------------------------- SEND (send-off)
-## "Send her": two boxes before ignition (the crowd steps back, the ladder stows, the astronaut waves).
+## ------------------------------------------------------------------------------------- SEND ("Send my rocket")
+## Two boxes; everyone steps back and the six ships fly off on autopilot, your rocket in front, while
+## everyone watches from the Commons (finale_launch.gd); they hit the meteor and it breaks into a shower.
 const SEND: Array[Dictionary] = [
-	{"speaker": "bolt", "lines": ["Autopilot set. Passengers: zero. Course: true."]},
-	{"speaker": "mayor_orbit", "lines": ["Everyone, stand back from the pad!"]},
+	{"speaker": "bolt", "lines": ["Autopilot on. 6 ships, flying for all of us."]},
+	{"speaker": "mayor_orbit", "lines": ["Everyone, stand back! Here they go!"]},
+	{"action": "six ships fly off on autopilot, yours in front; everyone watches from the Commons; the meteor breaks into a shower", "id": "launch"},
 ]
 
-## ------------------------------------------------------------------------------------- GIFT
-## Ends with a toast, not a spoken box (EventBus.toast_requested, per FinaleGift.finished).
-const GIFT: Array[Dictionary] = [
+## ------------------------------------------------------------------------------------- HOME (the ships come back; the party)
+## Everyone on the Commons under the shower. Ends with a toast, not a spoken box.
+const HOME: Array[Dictionary] = [
 	{"speaker": "dj_nova", "lines": ["Best. Light show. EVER!"]},
-	{"speaker": "zorp", "lines": [
-		"One more! Did you see?",
-		"Okay. Don't look at the pad.",
-		"...Now look at the pad!",
-	]},
+	{"speaker": "zorp", "lines": ["Ho ho! We did it! It's all sparkles now!"]},
 	{"speaker": "mayor_orbit", "lines": [
-		"We started her the day you crashed.",
-		"Everyone gave a piece.",
+		"A meteor shower. The safe kind.",
+		"Our whole solar system is safe.",
 	]},
-	{"speaker": "bolt", "lines": [
-		"One gold panel fell off your rocket. I kept it.",
-		"It is the hatch now. Polished 88 times.",
+	{"action": "a short pause, looking up", "id": "pause"},
+	{"speaker": "fen", "lines": ["Look up, friends. Lights, coming down."]},
+	{"action": "the ships and your rocket come back and land, bruised but working", "id": "return"},
+	{"speaker": "bolt", "lines": ["They all came back! 37 dents. Still working."]},
+	{"speaker": "grig", "lines": ["Hmph. Scratched. ...Worth it."]},
+	{"speaker": "pip", "lines": [
+		"Dents? Bring them to Cosmo Depot, customers!",
+		"Pop and I will fix every ship. For free!",
 	]},
-	{"speaker": "zorp", "lines": [
-		"It has knees! Three! Like you, but more!",
-		"The antenna is mine. It glows when happy.",
-	]},
-	{"speaker": "fen", "lines": ["The lamp on the front is mine. For long dusks."]},
-	{"speaker": "grig", "lines": [
-		"I cut the ladder. Eleven rungs. All numbered.",
-		"Small. Won't reach your old home.",
-		"Reaches all of ours.",
-	]},
-	{"speaker": "vela", "lines": ["The little dish is mine. I will always hear you."]},
+	{"speaker": "pop", "lines": ["I'm good at fixing! Oops. I'm mostly good."]},
+	{"speaker": "mayor_orbit", "lines": ["Well then. I'd say this calls for a party."]},
+	{"speaker": "dj_nova", "lines": ["A REAL party this time! Everybody dance!"]},
+	{"action": "the party: music, everyone celebrating", "id": "party"},
+	{"speaker": "vela", "lines": ["Listen. It sounds like home."]},
+	{"speaker": "bolt", "lines": ["One more thing. A photo of all 11 of us."]},
+	{"action": "the player takes the group photo; it becomes the scrapbook's last page", "id": "photo"},
 	{"speaker": "mayor_orbit", "lines": [
-		"You gave up one way home.",
-		"So we built you another. Welcome home.",
+		"Your ship still flies. You could go anywhere.",
+		"But I think you're home. Welcome home.",
 	]},
 	{"toast": "Every world is open. Planet stats are back."},
 ]

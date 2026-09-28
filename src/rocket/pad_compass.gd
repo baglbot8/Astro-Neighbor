@@ -52,9 +52,17 @@ func retire() -> void:
 	_shown = false
 
 
+## TEST-ONLY HOOK (P2 GATE evidence, docs/PLANET_SAFARI_SPEC.md 7). Prints only.
+func debug_report(tag: String = "") -> void:
+	print("PADCOMPASS %s want=%s alpha=%.2f root_visible=%s photo_active=%s" % [
+		tag, str(_want), _alpha, str(_root != null and _root.visible), str(PhotoMode.active)])
+
+
 func _process(delta: float) -> void:
 	_pulse += delta
-	_want = _shown and not EventBus.is_modal_open() and _evaluate()
+	# PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): the rocket pip is not part of
+	# a safari, which starts and ends at the pad on foot.
+	_want = _shown and not EventBus.is_modal_open() and not PhotoMode.active and _evaluate()
 	var goal := 1.0 if _want else 0.0
 	_alpha = move_toward(_alpha, goal, delta / FADE)
 	_root.visible = _alpha > 0.003

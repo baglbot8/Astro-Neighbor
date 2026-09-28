@@ -1,10 +1,19 @@
 class_name FinaleLaunch
 extends Node3D
-## THE SEND-OFF - the Phase 5 showpiece (docs/PHASE5_SPEC.md §2 "Send-off", §4 "Shower", §5, §7).
-## finale.gd instances this under /root/World (by path) once "Send her" is chosen, calls
-## `play(meeting)`, and waits for `finished`. Nothing in it is spoken: it is one shot, seen from the
-## ground, of the empty gold rocket flying into the giant asteroid and the rock turning into a meteor
-## shower over your friends' upturned faces.
+## THE SEND-OFF - the Phase 5 showpiece (docs/PHASE5_SPEC.md §2 "Send-off", §4 "Shower", §5, §7), since
+## 2026-09-27 THE FLEET ON AUTOPILOT (docs/STORY_HOME_SPEC.md §8 and §8.1). finale.gd instances this under
+## /root/World (by path) once "Send my rocket" is chosen, calls `play(meeting)`, and waits for `finished`.
+## Nothing in it is spoken: it is one shot, seen from the ground with the whole crowd and the astronaut
+## (nobody boards: everyone watches from the Commons), of SIX empty ships launching together - your gold
+## rocket in front, the five neighbours' packed ships (neighbour_ships.gd, parked round the Commons by the
+## meeting) lifting off their own spots and closing into a V behind her - hitting the meteor (GiantAsteroid)
+## and the rock breaking into a meteor shower over the upturned faces. The ships survive: they are hidden in
+## the flash with the rocket and come back down, bruised but working, in the next beat (finale_gift.gd, HOME).
+##
+## THE FLEET (`_update_fleet`). Ship i lights FLEET_IGNITE_GAP x (i+1) after the rocket and climbs from
+## its own spot with the rocket's own displacement (lagged by that gap), then blends over FLEET_JOIN into
+## its FLEET_SLOT behind the rocket in the rocket's frame (nose, side, belly), the slots closing to
+## FLEET_CLOSE of their size by the hit so the six arrive together inside the flash.
 ##
 ## THE SHOT, one camera and no cut, 22 s (shot clock; every value is a function of it):
 ##    0.0   the camera starts on the meeting's own camera and settles, behind the crowd 2.5 m up with a
@@ -22,12 +31,12 @@ extends Node3D
 ##   13.0   the camera swings down over the crowd to a low three-quarter front of their upturned faces,
 ##          the streaks pouring over them; everyone cheers and DJ Nova dances
 ##   15-18  five hero stars, one in each friend's accent (`finale_hero_star`), cross the faces frame
-##   22.0   settled on the gift frame with the pad out of view; `finished(false)`
+##   22.0   settled on the faces frame with the pad out of view; `finished(false)`
 ##
 ## BORROWED, NOT OWNED. The rocket is /root/World/Rocket's `rocket` (a RocketModel), moved only through
 ## its transform and RocketModel's public API, the way CrashIntro borrows it; at the end it is back on
-## its parked transform, engine off, and hidden - the gift (finale_gift.gd) swaps the skiff in with
-## `rocket_pad.adopt_model`. The rock, the crowd and the meeting camera come from the meeting
+## its parked transform, engine off, and hidden (still "up there") - HOME (finale_gift.gd) shows it back on
+## the pad with the five ships on their spots; nothing adopts a skiff any more. The rock, the crowd and the meeting camera come from the meeting
 ## (finale_meeting.gd, loaded by path by finale.gd - never named here), each looked up with a guarded
 ## `has_method`, with a fallback so a missing piece degrades the shot instead of stranding the player.
 ##
@@ -70,6 +79,19 @@ const MODAL_NAME := "cutscene"
 const TRACE_TAG := "L2"
 const FINALE_STATE_PATH := "res://src/campaign/finale_state.gd"
 const SHOWER_PATH := "res://src/campaign/star_shower.gd"
+const FLEET_NODE := "NeighbourShips"
+
+# ------------------------------------------------------------------------------------ the fleet
+## Ship i (neighbour_ships.gd OWNERS order) lights this long after the one before it, after the rocket.
+const FLEET_IGNITE_GAP := 0.14
+const FLEET_FLAME_GROW := 0.7
+## Slots behind the rocket in its own frame: (back along the nose, out along its side, along its belly), m.
+## Your rocket leads; Bolt and Zorp at her shoulders, Fen and Vela wider, Grig at the tail.
+const FLEET_SLOT := {"bolt": Vector3(3.6, 2.7, 0.5), "zorp": Vector3(3.6, -2.7, 0.5), "vela": Vector3(6.8, 5.2, -0.2),
+	"fen": Vector3(6.8, -5.2, -0.2), "grig": Vector3(9.8, 0.0, 1.1)}
+## Shot seconds over which ship i blends from its own climb into its slot (plus 0.25 s per ship).
+const FLEET_JOIN := Vector2(3.2, 6.6)
+const FLEET_CLOSE := 0.55
 
 # ------------------------------------------------------------------------------------ timeline (s)
 const IGNITE_T := 1.0
@@ -85,6 +107,8 @@ const CHUNK_STREAK_GAP := 0.27
 const REMNANT_SHRINK := Vector2(13.0, 15.7)
 const CHEER_T := 13.3
 const CHEER2_T := 16.7
+## The crowd's cheers start spread over this long, never in unison (ruling 2.14 (b); see `cheer_offset`).
+const CHEER_SPREAD_S := 1.5
 const DANCE_T: Array[float] = [13.4, 16.3, 19.2]
 const ASTRO_CHEER_T := 13.6
 const ASTRO_CHEER_S := 1.6
@@ -251,6 +275,9 @@ var _asteroid: Node3D
 var _meeting_cam: Camera3D
 var _crowd: Array[Node3D] = []
 var _crowd_ids: PackedStringArray = []
+var _fleet: Node3D
+var _fleet_ids: PackedStringArray = []
+var _fleet_rest: Dictionary = {}
 var _music := ""
 var _saved_time_scale := 1.0
 var _held_clock := false
@@ -421,6 +448,16 @@ func apply_end_state() -> void:
 			_rocket.global_transform = _rest
 		_rocket.visible = false
 	AudioManager.stop_loop("rocket_loop", 0.2)
+	if _fleet == null:
+		_find_fleet()
+	if _fleet != null and is_instance_valid(_fleet):
+		for id in _fleet_ids:
+			_fleet.call("set_flame", id, 0.0)
+			var fs := _fleet.call("ship", id) as Node3D
+			if fs != null:
+				fs.global_transform = _fleet_rest[id]
+				fs.visible = false
+		# Hidden, "still up there": HOME (finale_gift.gd) lands them back on their spots, bruised (§8.1).
 	if _asteroid != null and is_instance_valid(_asteroid):
 		_asteroid.visible = false
 		_asteroid.scale = Vector3.ONE
@@ -455,6 +492,50 @@ func stop_stragglers() -> void:
 	_beat("stop_stragglers")
 
 
+## HOME's sky (docs/STORY_HOME_SPEC.md §3 beat 10 and §5.7 HOME: everyone is back on the Commons UNDER the
+## shower, and the lines lean on it). The stragglers alone - one every 8-12 s - left HOME's sky empty about
+## 90% of the time (critic, round 1: no streak in any HOME frame of two real runs, none in the last photo), so
+## FinaleGift keeps the send-off's closing rate going over HOME by calling this `home_rate()` times a second.
+## One shell streak on the shower's own clock, starting `lead` s from now (negative: already in flight), its
+## midpoint re-drawn into `frame` (`[Transform3D, vfov_deg, aspect]`, StarShower.add_shell) with probability
+## `in_frame`. Radial from the rock like every other streak: still a shower, not fireworks.
+func home_streak(frame: Array, in_frame: float, lead := 0.0) -> void:
+	if _shower == null or not is_instance_valid(_shower):
+		return
+	if not _shower.is_processing():
+		# The shower idles once it has no streaks and no stragglers; its own clock must run to draw these.
+		_shower.call("start_stragglers")
+	# Draw the start's angle from the radiant around the frame's own: HOME's cameras look at the crowd from
+	# the pad's side, away from the rock, where StarShower's default 8-150 deg band hardly reaches (MEASURED,
+	# first HOME run with the default band: 8 draws into the last photo's lens landed 1 head in it). The same
+	# idea as the send-off's faces frame (TAIL_THETA), taken from the frame instead of fixed: the angle of the
+	# camera's forward from the radiant (seen from the shower's eye, `_build_shower`), +- its half-diagonal.
+	var band := Vector2.ZERO
+	if frame.size() >= 3:
+		var eye := _c + _up_c * 1.2
+		var fwd := -(frame[0] as Transform3D).basis.z
+		var th := rad_to_deg((_rock_c - eye).angle_to(fwd))
+		var ty := tan(deg_to_rad(float(frame[1]) * 0.5))
+		var tx := ty * float(frame[2])
+		var half := rad_to_deg(atan(sqrt(tx * tx + ty * ty)))
+		var lo := float((_shower.get_script() as GDScript).get_script_constant_map().get("THETA_MIN_DEG", 8.0))
+		band = Vector2(maxf(lo, th - half), minf(179.0, th + half))
+	_shower.call("add_shell", float(_shower.call("clock")) + lead, frame, in_frame, 0, band)
+
+
+## HOME's rate: the send-off's own closing rate over the faces frame (TAIL_RATE, streaks per second), so the
+## shower carries on over HOME exactly as thick as the send-off left it - not a new number.
+func home_rate() -> float:
+	return TAIL_RATE
+
+
+## Streak heads alive and bright inside `cam`'s view right now (StarShower.on_screen_count); -1 with no shower.
+func shower_on_screen(cam: Camera3D) -> int:
+	if _shower == null or not is_instance_valid(_shower) or cam == null:
+		return -1
+	return int(_shower.call("on_screen_count", cam, get_viewport().get_visible_rect().size))
+
+
 ## §7 warm-up list for the meeting's 2 cm quads: the shower's streak material, the flash's glow sprite and
 ## the dust ring's puff (CrashFx's own builders, so the very same shader parameters are compiled).
 static func warm_materials() -> Array[Material]:
@@ -472,7 +553,7 @@ static func warm_materials() -> Array[Material]:
 
 
 ## The send-off's opening frame for `meeting` - `[Transform3D, vfov_deg]` - without playing anything, so
-## the meeting's last "Send her" framing can end on it (then the seed blend is a no-op and the opening
+## the meeting's last "Send my rocket" framing can end on it (then the seed blend is a no-op and the opening
 ## wide keeps its 2.5 s). Empty if the world is missing a piece.
 static func opening_frame(meeting: Node) -> Array:
 	var tree := Engine.get_main_loop() as SceneTree
@@ -649,11 +730,14 @@ func _solve_geometry() -> void:
 	if axis.length_squared() < 0.0001:
 		axis = _player.global_position - pad_ground
 	axis = (axis - _pad_up * axis.dot(_pad_up)).normalized()
-	if not _crowd.is_empty():
+	# The crowd on the ground: everyone visible when the shot is solved (since §8.1 nobody boards) - the same set the meeting's precomputed opening
+	# frame saw (finale_meeting.gd `_precompute_opening`), so the side pick it left is reused.
+	var standing := _standing_crowd()
+	if not standing.is_empty():
 		var acc := Vector3.ZERO
-		for n in _crowd:
+		for n in standing:
 			acc += n.global_position
-		_c = _planet.surface_point(acc / float(_crowd.size()))
+		_c = _planet.surface_point(acc / float(standing.size()))
 	else:
 		_c = _planet.surface_point(_planet.step_dir(_pad_up, (_pad_up + axis * 0.3).normalized(), CROWD_FALLBACK_M))
 	_up_c = _planet.dir_of(_c)
@@ -967,15 +1051,64 @@ static func _short_of(a: Vector3, b: Vector3, clear_m: float) -> Vector3:
 	return b if l <= clear_m + 0.01 else a + d * ((l - clear_m) / l)
 
 
-## Head tops of the crowd (or of the §2 rows along the axis when there is no crowd).
+## Head tops of the crowd still standing on the ground (or of the §2 rows along the axis when there is none).
 func _head_points() -> PackedVector3Array:
 	var out := PackedVector3Array()
-	for n in _crowd:
-		if is_instance_valid(n):
-			out.append(n.global_position + _planet.dir_of(n.global_position) * HEAD_H)
+	for n in _standing_crowd():
+		out.append(n.global_position + _planet.dir_of(n.global_position) * HEAD_H)
 	if out.is_empty():
 		out.append(_c + _up_c * HEAD_H)
 	return out
+
+
+## The crowd members visible on the ground (since §8.1, all of them: the ships fly on autopilot).
+func _standing_crowd() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for n in _crowd:
+		if is_instance_valid(n) and n.is_visible_in_tree():
+			out.append(n)
+	return out
+
+
+## Every eye of the authored path for a crowd centred at `c` (b_c toward the pad, s_c to one side), on
+## BOTH sides (the side is picked later): the opening, the crane, the swing and the faces frame. The
+## meeting's ship parking keeps the neighbours' ships off these (neighbour_ships.gd EYE_GAP).
+static func eye_samples(planet: Planet, c: Vector3, b_c: Vector3, s_c: Vector3) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if planet == null:
+		return out
+	var up_c := planet.dir_of(c)
+	for sgn: float in [1.0, -1.0]:
+		var pts: Array[Vector3] = []
+		for i in 5:
+			var k := float(i) / 4.0
+			pts.append(Vector3(lerpf(A_ALPHA, B_ALPHA, k), lerpf(A_RHO, B_RHO, k), lerpf(A_H, B_H, k)))
+		for i in 11:
+			var w := float(i) / 10.0
+			pts.append(Vector3(lerpf(B_ALPHA, D_ALPHA, w), lerpf(B_RHO, D_RHO, w) - (D_CREEP_M if i == 10 else 0.0), lerpf(B_H, D_H, w)))
+		for q: Vector3 in pts:
+			var a := deg_to_rad(q.x * sgn)
+			var v := b_c * cos(a) + s_c * sin(a)
+			var ang := q.y / maxf(planet.radius, 1.0)
+			var dir := (up_c * cos(ang) + v * sin(ang)).normalized()
+			out.append(planet.surface_point(dir) + dir * q.z)
+	return out
+
+
+func _find_fleet() -> void:
+	_fleet = null
+	_fleet_ids = PackedStringArray()
+	_fleet_rest = {}
+	var pad := get_tree().root.get_node_or_null("World/Rocket")
+	var f := pad.get_node_or_null(FLEET_NODE) as Node3D if pad != null else null
+	if f == null or not f.has_method("ship"):
+		return
+	_fleet = f
+	for id: String in f.call("ids"):
+		var sh := f.call("ship", id) as Node3D
+		if sh != null:
+			_fleet_ids.append(id)
+			_fleet_rest[id] = f.call("parked", id)
 
 
 func _build_nodes() -> void:
@@ -999,6 +1132,7 @@ func _build_nodes() -> void:
 	_dust.global_transform = Transform3D(_rest.basis.orthonormalized(), _rest.origin)
 	_build_shower()
 	_build_skip_hint()
+	_find_fleet()
 
 
 func _build_shower() -> void:
@@ -1095,6 +1229,7 @@ func _step(dt: float) -> void:
 
 func _update_all(t: float) -> void:
 	_update_rocket(t)
+	_update_fleet(t)
 	_update_fx(t)
 	_update_rock(t)
 	if _shower != null:
@@ -1188,6 +1323,50 @@ static func _nose_basis(nose: Vector3, face: Vector3) -> Basis:
 	return Basis(x, y, z)
 
 
+# ============================================================================= the fleet
+## The five neighbours' ships (see THE FLEET in the header). Hidden with the rocket in the flash.
+func _update_fleet(t: float) -> void:
+	if _fleet == null or not is_instance_valid(_fleet):
+		return
+	if t >= HIT_T:
+		if _once("fleet_gone"):
+			for id in _fleet_ids:
+				_fleet.call("set_flame", id, 0.0)
+				var s0 := _fleet.call("ship", id) as Node3D
+				if s0 != null:
+					s0.visible = false
+			# Hidden, not freed: they come back bruised in HOME (finale_gift.gd, docs/STORY_HOME_SPEC.md §8.1).
+			_beat("fleet hit t=%.2f ships=%d (hidden until they come back in HOME)" % [t, _fleet_ids.size()])
+		return
+	var rx := _rocket_xf(t)
+	var nose := rx.basis.y.normalized()
+	var side := rx.basis.x.normalized()
+	var belly := rx.basis.z.normalized()
+	var close := lerpf(1.0, FLEET_CLOSE, smoothstep(LIFT_T + 3.0, HIT_T, t))
+	var turn := smoothstep(LIFT_T, LIFT_T + 3.0, t)
+	for i in _fleet_ids.size():
+		var id := _fleet_ids[i]
+		var sh := _fleet.call("ship", id) as Node3D
+		if sh == null:
+			continue
+		var rest: Transform3D = _fleet_rest[id]
+		var lag := FLEET_IGNITE_GAP * float(i + 1)
+		var own := rest.origin + (_rocket_xf(maxf(t - lag, 0.0)).origin - _rest.origin)
+		var slot: Vector3 = FLEET_SLOT.get(id, Vector3(8.0, 0.0, 0.0))
+		var form := rx.origin - nose * slot.x * close + side * slot.y * close + belly * slot.z * close
+		var w := smoothstep(FLEET_JOIN.x + 0.25 * float(i), FLEET_JOIN.y + 0.25 * float(i), t)
+		var q := rest.basis.orthonormalized().get_rotation_quaternion().slerp(rx.basis.orthonormalized().get_rotation_quaternion(), turn)
+		sh.global_transform = Transform3D(Basis(q), own.lerp(form, w))
+		var ti := IGNITE_T + lag
+		var k := 0.0
+		if t >= ti:
+			var g := clampf((t - ti) / FLEET_FLAME_GROW, 0.0, 1.0)
+			k = 1.0 - (1.0 - g) * (1.0 - g)
+			if _once("fleet_ignite_%s" % id):
+				_beat("fleet ignite %s t=%.2f" % [id, t])
+		_fleet.call("set_flame", id, k, t)
+
+
 # ============================================================================= flash, dust, rock
 func _update_fx(t: float) -> void:
 	if t >= HIT_T and t < HIT_T + FLASH_LIFE + 0.1:
@@ -1251,10 +1430,24 @@ func _update_crowd(t: float) -> void:
 				if t >= DANCE_T[k] and _once("dance%d" % k):
 					n.call("play_emote", "dance")
 		else:
-			if t >= CHEER_T + 0.11 * float(i) and _once("cheer_%d" % i):
+			# Ruling 2.14 (b): never in unison - each starts at its own offset, tenths of a second apart.
+			if t >= CHEER_T + cheer_offset(i, _crowd.size()) and _once("cheer_%d" % i):
 				n.call("play_emote", "happy")
-			if i % 2 == 0 and t >= CHEER2_T + 0.13 * float(i) and _once("cheer2_%d" % i):
+			if i % 2 == 0 and t >= CHEER2_T + cheer_offset(i + 2, _crowd.size()) and _once("cheer2_%d" % i):
 				n.call("play_emote", "happy")
+
+
+## Member `i` of `n`'s cheer offset in seconds, 0 .. `spread`: evenly spaced (spread / n apart) but shuffled,
+## so neighbours standing side by side never go one after the other (docs/STORY_HOME_SPEC.md ruling 2.14 (b):
+## "stagger their celebrations so it looks more natural"). FinaleGift uses the same spread.
+static func cheer_offset(i: int, n: int, spread: float = CHEER_SPREAD_S) -> float:
+	n = maxi(n, 1)
+	var m := 1
+	for c: int in [3, 7, 11, 13]:
+		if n % c != 0:
+			m = c
+			break
+	return float((i * m) % n) / float(n) * spread
 
 
 func _freeze_player() -> void:
@@ -1267,6 +1460,11 @@ func _freeze_player() -> void:
 
 func _update_astronaut(t: float) -> void:
 	if _player == null or not is_instance_valid(_player):
+		return
+	if not _player.visible:
+		# Hidden (a probe or an older path): nothing to pose; keep them still.
+		if _player.is_physics_processing():
+			_player.velocity = Vector3.ZERO
 		return
 	var w := smoothstep(0.3, 1.5, t)
 	var face := _astro_face0.slerp(_astro_face1, w).normalized() if _astro_face0.dot(_astro_face1) > -0.99 else _astro_face1
@@ -1295,6 +1493,8 @@ func _update_audio(t: float) -> void:
 			AudioManager.start_loop("rocket_loop", -8.0, 0.5)
 		# §2: the music fades at ignition.
 		AudioManager.play_music("", MUSIC_FADE)
+	if t >= IGNITE_T + FLEET_IGNITE_GAP * 2.0 and _fleet != null and _once("sfx_fleet_ignite"):
+		_sfx_at("rocket_ignite", _c + _up_c * 1.0, -5.0)
 	if t >= HIT_T and _once("loop_off"):
 		AudioManager.stop_loop("rocket_loop", 0.3)
 	if t >= IMPACT_SFX_T and _once("sfx_impact"):
@@ -1518,7 +1718,7 @@ static func _is_skip_press(event: InputEvent) -> bool:
 
 
 ## Director taps (Input.action_press sends no InputEvent). `_skip_primed` swallows an action already
-## held when the shot began - the tap that chose "Send her", say.
+## held when the shot began - the tap that chose "Send my rocket", say.
 func _poll_skip_actions() -> void:
 	var edge := false
 	for a: String in SKIP_ACTIONS:
@@ -1672,6 +1872,8 @@ func _exit_tree() -> void:
 		if _rocket != null and is_instance_valid(_rocket):
 			_rocket.set_engine(false)
 			_rocket.global_transform = _rest
+		if _fleet != null and is_instance_valid(_fleet) and _fleet.has_method("park_all"):
+			_fleet.call("park_all")
 		AudioManager.stop_loop("rocket_loop", 0.1)
 		_restore_clock()
 		_thaw_player()

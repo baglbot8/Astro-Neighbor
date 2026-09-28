@@ -120,6 +120,21 @@ const BOOST_LOOP_DB := -13.0
 ## system's stop_loop kill the other's sound.
 const BOOST_LOOP_CANDIDATES := ["jetpack_loop", "thruster_loop", "rocket_loop"]
 
+# ============================================================================= planet safari (P1)
+## docs/PLANET_SAFARI_SPEC.md 1 (ruling 6) and 5.1: *"I dont want to be able to fully walk around the
+## planet too fast. So going to one side of the planet should feel like a bit of a commitment"*. The
+## rule the number has to meet: from an event's 8 s warning, a player on the far side cannot arrive
+## before a 12-20 s event ends, and one a quarter of the way round can. On Bolt (radius 10.5 m, half
+## circumference 33.0 m) that is about 1.5 m/s: far side 22 s, a quarter 11 s. One constant for now,
+## to be made per planet once the user has played it. Normal walking is untouched — this applies only
+## while `set_safari_walk(true)`.
+const SAFARI_WALK_SPEED := 1.5
+## Apex of the hop kept during a safari, in metres (5.1: "a small hop is kept"). The normal jump peaks
+## at 1.20 m (JUMP_VELOCITY^2 / 2g), which at eye height is a 2.3 m leap; the launch speed is solved
+## from this height and the body's own gravity at the moment of the hop, so it stays this height on any
+## planet. A design number, to be tuned with the walk after the user plays it.
+const SAFARI_HOP_HEIGHT := 0.5
+
 const EMOTE_CYCLE := ["wave", "happy", "dance"]
 ## Extra seconds allowed past an emote's nominal length before the watchdog force-clears it.
 const EMOTE_GRACE := 0.75
@@ -191,6 +206,13 @@ var _rig: CameraRig = null
 ## once in `_build_shadow`; only `from`/`to` change per call.
 var _shadow_query: PhysicsRayQueryParameters3D
 var _dev_teleport_checked := false
+# ---- planet safari
+var _safari_walk := false
+var _move_locked := false
+## instance id -> the `layers` a GeometryInstance3D under this player had before first person moved it
+## onto the hidden layer (see `set_first_person_hidden`).
+var _fp_saved_layers: Dictionary = {}
+var _fp_hide_bit: int = 0
 
 
 func _ready() -> void:
@@ -414,6 +436,76 @@ func _consume_pending_dev_teleport() -> void:
 		dev_teleport(dir)
 
 
+# ============================================================================= planet safari API
+## Safari walking (docs/PLANET_SAFARI_SPEC.md 5.1): top speed SAFARI_WALK_SPEED, no run, no jetpack,
+## and a SAFARI_HOP_HEIGHT hop instead of the full jump. Everything else about movement is unchanged.
+func set_safari_walk(on: bool) -> void:
+	_safari_walk = on
+
+
+func is_safari_walk() -> bool:
+	return _safari_walk
+
+
+## Camera up (5.3, and every photo game the research studied): the stick stops walking the astronaut —
+## no walk, no hop, no jetpack — while gravity, collisions, the shadow and the interaction finder keep
+## running, so the body settles and stays on the ground. The camera's look input is not affected.
+func set_move_locked(on: bool) -> void:
+	_move_locked = on
+
+
+func is_move_locked() -> bool:
+	return _move_locked
+
+
+## FIRST PERSON HIDES THE ASTRONAUT BY RENDER LAYER, NEVER BY `visible` (docs/PLANET_SAFARI_SPEC.md
+## 5.3). `visible` is out because EventBus forces the player's visible, physics and input back on after
+## 12 s (event_bus.gd:151-175). Instead every GeometryInstance3D under this node — the model's meshes,
+## its sparkles and jet puffs, the blob shadow, the landing and run dust, and anything else parented
+## here — is moved onto `bit` alone, and the CameraRig's first-person camera stops drawing that bit.
+## Lights are left alone on purpose: a light's layers decide which cameras it lights for.
+##
+## Geometry that joins the subtree while this is on (a style change rebuilds the whole model, a carry
+## item, a new puff) is caught by the tree's `node_added`. Off puts back exactly the layers each node
+## had. Called by `CameraRig.set_first_person`.
+func set_first_person_hidden(on: bool, bit: int) -> void:
+	var tree := get_tree()
+	if on:
+		_fp_hide_bit = bit
+		_fp_hide_subtree(self)
+		if tree and not tree.node_added.is_connected(_on_fp_node_added):
+			tree.node_added.connect(_on_fp_node_added)
+		return
+	if tree and tree.node_added.is_connected(_on_fp_node_added):
+		tree.node_added.disconnect(_on_fp_node_added)
+	for id: int in _fp_saved_layers:
+		var o := instance_from_id(id)
+		if o != null and is_instance_valid(o) and o is GeometryInstance3D:
+			(o as GeometryInstance3D).layers = int(_fp_saved_layers[id])
+	_fp_saved_layers.clear()
+	_fp_hide_bit = 0
+
+
+func _fp_hide_subtree(n: Node) -> void:
+	_fp_hide_one(n)
+	for c: Node in n.get_children():
+		_fp_hide_subtree(c)
+
+
+func _fp_hide_one(n: Node) -> void:
+	if not (n is GeometryInstance3D) or _fp_hide_bit == 0:
+		return
+	var id := n.get_instance_id()
+	if not _fp_saved_layers.has(id):
+		_fp_saved_layers[id] = (n as GeometryInstance3D).layers
+	(n as GeometryInstance3D).layers = _fp_hide_bit
+
+
+func _on_fp_node_added(n: Node) -> void:
+	if n is GeometryInstance3D and is_ancestor_of(n):
+		_fp_hide_one(n)
+
+
 func is_running() -> bool:
 	return _speed_factor > 1.2
 
@@ -470,6 +562,22 @@ func _physics_process(delta: float) -> void:
 		interact_pressed = Input.is_action_pressed("interact")
 		emote_pressed = Input.is_action_pressed("emote")
 		boost_pressed = Input.is_action_pressed("boost")
+	# Planet safari (see `set_safari_walk` / `set_move_locked`). Both default off.
+	if _safari_walk:
+		running = false
+		boost_pressed = false
+		# No talking during a safari (Q3, 2026-09-24, spec 8.2 integration traps): the photo-mode gate
+		# already hides the talk prompt and the phone's talk button, but E still opened a conversation
+		# on a desktop, and DialogueRunner tweened the first-person lens to its 30 deg push-in (measured).
+		# Its finish() tweens the lens back to whatever it saved - a talk still open when the three
+		# minutes end would put a zoomed safari lens on the follow camera. Neighbours are photo subjects
+		# while their world is awake; the talk is there again after it.
+		interact_pressed = false
+	if _move_locked:
+		move = Vector2.ZERO
+		running = false
+		jump_pressed = false
+		boost_pressed = false
 	var jump_just := jump_pressed and not _jump_was_pressed
 	var interact_just := interact_pressed and not _interact_was_pressed
 	var emote_just := emote_pressed and not _emote_was_pressed
@@ -500,6 +608,8 @@ func _physics_process(delta: float) -> void:
 	# While boosting the horizontal cap is RUN_SPEED whether or not `run` is held — R2.8 asks for
 	# "about as fast as sprinting while floating in the air", i.e. boosting IS a way to travel.
 	var max_speed := RUN_SPEED if (running or _boosting) else WALK_SPEED
+	if _safari_walk:
+		max_speed = SAFARI_WALK_SPEED
 	var target_vel := wish * max_speed * wish_len
 	var tv := get_tangent_velocity()
 	var accel := ACCEL if wish_len > 0.01 else DECEL
@@ -514,6 +624,10 @@ func _physics_process(delta: float) -> void:
 		face_direction(_face_override_pos - global_position, 22.0, delta)
 	elif wish_len > 0.01:
 		face_direction(wish, TURN_SPEED, delta)
+	elif _rig_first_person():
+		# First person, standing still: the body turns to where the eyes look, so "facing" (which the
+		# interaction finder's `require_facing` reads) is the view, not the last step taken.
+		face_direction(_camera_planar_forward(), TURN_SPEED, delta)
 
 	# ---- jump: buffer + coyote + anticipation + variable height
 	_coyote = COYOTE_TIME if on_floor_before else maxf(_coyote - delta, 0.0)
@@ -770,7 +884,10 @@ func is_boosting() -> bool:
 
 func _launch_jump() -> void:
 	_jump_anticipation = -1.0
-	do_jump(JUMP_VELOCITY)
+	if _safari_walk:
+		do_jump(sqrt(2.0 * gravity_strength * SAFARI_HOP_HEIGHT))
+	else:
+		do_jump(JUMP_VELOCITY)
 	_jumping = true
 	_jump_cut_done = false
 	_was_on_floor = false
@@ -868,6 +985,12 @@ func _release_emote_camera() -> void:
 	var rig := _camera_rig()
 	if rig:
 		rig.release_orbit()
+
+
+## True while the CameraRig is in its first-person view (the planet safari).
+func _rig_first_person() -> bool:
+	var rig := _camera_rig()
+	return rig != null and rig.is_first_person()
 
 
 ## The rig is a sibling of the player under World (docs/ARCHITECTURE.md 3), with a fallback search

@@ -85,10 +85,10 @@ extends RefCounted
 ##   stays at 8 - there is no reason to move it, and CLAUDE.md's "no fitted constants" rule argues
 ##   against tuning it without a timed play-through showing it is actually too tight (Phase 6).
 ##
-## Voice (docs/CORE_LOOP "World problems": Bolt; src/characters/npc_data.gd "bolt" entry): a robot
-## groundskeeper, orderly and warm, counts everything twice, short declarative sentences, precise
-## numbers, no Animal Crossing words (docs/ARCHITECTURE.md §1.1: no "favor", "bells", "Nook").
-## Every line <= 60 characters, 1-3 lines per list (project_system.gd "Writing").
+## Voice (docs/CAST_VOICES_DRAFT.md, approved 2026-09-27, with docs/STORY_HOME_SPEC.md 8.1): 
+## Bolt is the literal, loyal fix-it robot and the ONLY neighbour who uses numbers as a joke;
+## plain whole sentences, no robot jargon (detected, logged, nominal).
+## Plain English a 10-year-old reads once. Every line <= 60 characters.
 
 const ITEM_ID := "bolt_yard_regulator"
 const CATCH_COUNT := 5
@@ -100,16 +100,18 @@ static func definition() -> Dictionary:
 		"part": "part_bolt",
 		"part_fit_scrap": 8,
 		"intro": [
-			"Problem detected. Three machines: broken.",
+			"Hello. I have a problem. 3 machines are broken.",
+			"We leave soon. I will not leave them broken.",
 			"Please find them. I will count while you walk.",
 		],
 		"part_lines": [
-			"Yard fully repaired. Confirmed. Twice.",
-			"Take this gear. I have three thousand more.",
-			"Logged as: excellent friend. Final answer.",
+			"The yard is fixed. I checked twice. All good.",
+			"Take this gear. I have 3,000 more.",
+			"Good luck finding a new home. I think you will.",
+			"You are an excellent friend. That is my answer.",
 		],
 		"part_again": [
-			"You lost the gear? I logged a spare. Predictable.",
+			"You lost the gear? I kept a spare. I always do.",
 		],
 		"items": [
 			{
@@ -136,18 +138,18 @@ static func definition() -> Dictionary:
 				"marker_label": "broken machine",
 				"lines": {
 					"ask": [
-						"Three machines stopped today. Precisely three.",
-						"Walk the yard. I trust your legs more than mine.",
+						"3 machines stopped today. Exactly 3.",
+						"Walk the yard. Your legs are faster than mine.",
 					],
 					"progress": [
-						"Still searching? I believe in you. Statistically.",
+						"Still looking? I believe in you. 100 percent.",
 					],
 					"done": [
-						"All three found. My count agrees with yours.",
-						"Good work. Accuracy logged at 100 percent.",
+						"You found all 3. My count matches yours.",
+						"Good work. You got every single one.",
 					],
 					"tomorrow": [
-						"That is enough counting for today. Rest those legs.",
+						"That is enough for today. Rest your legs.",
 					],
 				},
 			},
@@ -164,18 +166,18 @@ static func definition() -> Dictionary:
 				},
 				"lines": {
 					"ask": [
-						"Five bolts. Rattled loose. Airborne now.",
-						"Fly. Catch them. I cannot reach that high.",
+						"5 bolts shook loose. Now they are flying.",
+						"Please fly up and catch them. I can't reach.",
 					],
 					"progress": [
-						"Bolts still drifting. I am not chasing them.",
+						"The bolts are still flying. I can't chase them.",
 					],
 					"done": [
-						"All five caught. I counted your catches. Twice.",
-						"I will assemble the regulator tonight. Efficient.",
+						"You caught all 5. I counted your catches.",
+						"Tonight I build a regulator. It keeps machines calm.",
 					],
 					"tomorrow": [
-						"Assembly takes a few hours. Return then. Confirmed.",
+						"Building takes a few hours. Come back then.",
 					],
 				},
 			},
@@ -189,17 +191,51 @@ static func definition() -> Dictionary:
 				"give": {ITEM_ID: 1},
 				"lines": {
 					"ask": [
-						"Regulator assembled. Five bolts, one part. Exact.",
-						"Place it by the first machine. I marked the spot.",
+						"The regulator is ready. I used all 5 bolts.",
+						"Put it by the first machine. I marked the spot.",
 					],
 					"progress": [
-						"Not placed yet. The ring on the ground still glows.",
+						"Not placed yet. Look for the glowing ring.",
 					],
 					"done": [
-						"Installed. All three machines: green. Confirmed.",
+						"It works! All 3 machines are green again.",
 					],
 					"tomorrow": [
-						"Already installed today. Admire it again shortly.",
+						"Already done today. Come admire it later.",
+					],
+				},
+			},
+			{
+				# STORY_SPINE (PLANET_SAFARI_SPEC.md 15.2, migrated from the retired sky "photo" step,
+				# same appended 4th-step slot, same neighbour lines shape - see project_system.gd's
+				# "planet_photo" schema entry). Subject id "tune_up" is the exact roster id from Bolt's
+				# own safari manifest (res://src/planet_safari/worlds/bolt.gd MANIFEST "roster" - "Bolt's
+				# Tune-up", himself climbing the mast), checked at load against that same manifest.
+				"type": "planet_photo",
+				"title": "Photo: my own tune-up",
+				"planet": "bolt",
+				"kind": "subject",
+				"subject": "tune_up",
+				"grade": "Fair",
+				"lines": {
+					"ask": [
+						"One last thing. A photo of my home, before we go.",
+						"Next safari here, I climb the mast. Snap me there!",
+					],
+					"progress": [
+						"Not yet? I climb the mast every safari. Watch.",
+					],
+					"already_have": [
+						"You already have it? That was fast.",
+						"I did not even need to ask. Good.",
+					],
+					"smudge": [
+						"That photo is blurry. Please try again.",
+						"Hold the shutter down. Let the picture bloom.",
+					],
+					"done": [
+						"That is me, on the mast. Very good photo.",
+						"That mast fits me just right. I climbed it 412 times.",
 					],
 				},
 			},

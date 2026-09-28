@@ -280,6 +280,23 @@ func debug_start_conversation() -> void:
 		start_conversation(p)
 
 
+## TEST-ONLY HOOK (P2 GATE evidence, docs/PLANET_SAFARI_SPEC.md 7): one line a Director timeline can
+## assert the "!" against before/after `PhotoMode.active` flips. Prints only.
+func debug_marker_report(tag: String = "") -> void:
+	print("NPCMARKER %s id=%s visible=%s photo_active=%s" % [
+		tag, npc_id, str(_marker != null and _marker.visible), str(PhotoMode.active)])
+
+
+## TEST-ONLY HOOK (P2 GATE evidence): forces the "!" on regardless of favours/project state, so a
+## timeline can prove the safari gate hides a marker that would otherwise be showing, on a save with
+## no favour active. `_update_marker`'s own `_refresh_marker` poll (MARKER_POLL=0.45s) will overwrite
+## this the moment it next runs if the real favour state disagrees - call right before the report.
+func debug_force_marker(v: bool) -> void:
+	if not Director.is_active() or _marker == null:
+		return
+	_marker.visible = v
+
+
 ## Turns wandering on/off (shopkeepers behind a counter, cutscenes).
 func wander_enabled(enabled: bool) -> void:
 	_wander_on = enabled
@@ -952,6 +969,13 @@ func _update_marker(delta: float) -> void:
 	if _marker_timer <= 0.0:
 		_marker_timer = MARKER_POLL
 		_refresh_marker()
+	# PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): the "!" is a favour/project
+	# cue that has nothing to do with a safari, and the safari has its own subjects and photo asks.
+	# `_refresh_marker()` above still runs on its own timer regardless, so `_marker.visible` holds the
+	# correct up-to-date favour state the instant PhotoMode.active goes false again - no extra delay.
+	if PhotoMode.active:
+		_marker.visible = false
+		return
 	if not _marker.visible:
 		return
 	_marker_t += delta

@@ -7,7 +7,8 @@ extends Control
 ##
 ## HIDDEN DEVELOPER MENU (added 2026-09-12, user request). Five taps on the SETTINGS title within
 ## DEV_GESTURE_WINDOW seconds open `src/ui/pause/dev_menu.gd`'s DevMenu — see `_on_title_gui_input`.
-## No button, no line in the main list, no hint anywhere: this is the only trigger.
+## No button, no line in the main list, no hint anywhere. On the DESKTOP (never the web build) F1 opens
+## it too (docs/PLANET_SAFARI_SPEC.md 15.6) - see `_on_dev_key`.
 
 signal closed
 
@@ -26,6 +27,8 @@ const SENS_MAX := 2.20
 ## HIDDEN DEVELOPER MENU gesture: this many presses on the Settings title within this many seconds.
 const DEV_GESTURE_TAPS := 5
 const DEV_GESTURE_WINDOW := 2.0
+## The desktop's own door to the dev menu (spec 15.6); see `_on_dev_key`.
+const DEV_KEY := KEY_F1
 
 var is_open := false
 
@@ -431,5 +434,39 @@ func _process(delta: float) -> void:
 		close()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and k.keycode == DEV_KEY and _on_dev_key():
+			get_viewport().set_input_as_handled()
+			return
 	if is_open:
 		UIFocus.consume_nav_event(self, event)
+
+
+## F1 OPENS THE DEV MENU on the desktop (docs/PLANET_SAFARI_SPEC.md 15.6: "so testing does not need the
+## hidden five-click gesture"). Never in the web build or on a phone/tablet export - the web build is
+## what the phone plays, and there the five-tap gesture stays the only door. F1 again closes it. Refused
+## (returns false, key left alone) while a scene change is in flight, or while something ELSE has paused
+## the tree - a planet safari's teaching pause, a cutscene - because the dev menu un-pauses the tree when
+## it closes and would release that pause early. Over the open pause menu it behaves like the gesture:
+## the pause menu closes and comes back when the dev menu does.
+func _on_dev_key() -> bool:
+	if not dev_key_allowed() or not is_inside_tree():
+		return false
+	if SceneRouter.is_busy():
+		return false
+	var host: Node = get_tree().root.get_node_or_null("World/HUD")
+	var menu: Node = host.get_node_or_null(DevMenu.NODE_NAME) if host != null else null
+	if menu != null and bool(menu.get("is_open")):
+		menu.call("close")
+		return true
+	if get_tree().paused and not is_open:
+		return false
+	DevMenu.open_over(self)
+	print("[PauseMenu] F1 -> dev menu")
+	return true
+
+
+## Desktop only: false in the web build (OS feature "web") and on any mobile export.
+static func dev_key_allowed() -> bool:
+	return not OS.has_feature("web") and not OS.has_feature("mobile")

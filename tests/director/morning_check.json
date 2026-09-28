@@ -1,0 +1,56 @@
+[
+ {
+  "t": 0.4,
+  "log": "morning check: the dawn comet after sunrise"
+ },
+ {
+  "t": 1.6,
+  "capture": "m1_world_0630"
+ },
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_show_forecast",
+   "args": []
+  }
+ },
+ {
+  "t": 2.8,
+  "capture": "m2_forecast_morning"
+ },
+ {
+  "t": 3.2,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_close",
+   "args": []
+  }
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "start_watch_index",
+   "args": [
+    1
+   ]
+  }
+ },
+ {
+  "t": 4.4,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_lock",
+   "args": []
+  }
+ },
+ {
+  "t": 4.6,
+  "capture": "m3_comet_in_daylight"
+ },
+ {
+  "t": 5.2,
+  "quit": true
+ }
+]

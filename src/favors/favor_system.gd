@@ -558,6 +558,12 @@ func refresh_progress(item_id: String) -> void:
 
 
 func _on_planet_loaded(_planet_id: String) -> void:
+	# A skipped flight swaps worlds with no space scene between them: journey_state.gd `swap_scene`
+	# removes the old World (this node with it) from the tree and only queue_frees it, then the new
+	# World's _ready emits planet_loaded in the same frame. This stale copy is out of the tree then
+	# (get_tree() is null) and must not act; the new World's own FavorSystem restores the favours.
+	if not is_inside_tree():
+		return
 	_planet = null
 	_restore()
 

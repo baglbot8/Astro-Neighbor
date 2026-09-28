@@ -28,6 +28,10 @@ const BUILD_BENCH_SCENE := "res://src/projects/build_bench.tscn"
 ## Phase 2 builder N: the short cutscene when a rocket part is fitted (it listens for
 ## EventBus.rocket_part_fitted). Home only - the bench and the rocket are both at the crash site.
 const PART_CELEBRATION_SCENE := "res://src/campaign/part_celebration.tscn"
+## Builder HOMEALBUM (docs/STORY_HOME_SPEC.md 8.1): the home-planet-only photo album camera - a
+## camera button on Home any time, no safari and no life/event system. Same guard as the two consts
+## above; the node itself decides moment to moment whether it may show (home_album_camera.gd).
+const HOME_ALBUM_SCRIPT := "res://src/home_album/home_album_camera.gd"
 ## Phase 2 builder E: loaded by path, not class_name, so this file parses without it.
 const PROJECT_SYSTEM_PATH := "res://src/projects/project_system.gd"
 ## Phase 3a builder BOARD (docs/CORE_LOOP.md "Replays from the Commons"): the Commons game board, and
@@ -84,6 +88,8 @@ func _ready() -> void:
 	if pid == "home":
 		_spawn_optional(BUILD_BENCH_SCENE, "BuildBench")
 		_spawn_optional(PART_CELEBRATION_SCENE, "PartCelebration")
+		if ResourceLoader.exists(HOME_ALBUM_SCRIPT):
+			load(HOME_ALBUM_SCRIPT).attach(self)
 	_spawn_optional(HUD_SCENE, "HUD")
 	_spawn_optional("res://src/onboarding/onboarding.tscn", "Onboarding")  # ADDED BY THE ONBOARDING BUILDER
 	# Phase 3a builder BOARD. Last, because it reads the pad's landing state, the placed decorations

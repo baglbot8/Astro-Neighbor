@@ -31,6 +31,13 @@ for s in "${scenes[@]}"; do
   else
     echo "ok"
   fi
+  # nquiz_source_check (showcase/nquiz_source_check.gd) prints one "FAIL <id> ..." line per bad
+  # question and a final "NQUIZSOURCECHECK ... fail=N" summary; check.sh used to only grep for
+  # engine error text, so a FAIL here stayed green. Any FAIL line from this one probe fails check.sh.
+  if [[ "$s" == *nquiz_source_check.tscn ]] && echo "$out" | grep -qE "^FAIL "; then
+    echo "$out" | grep -E "^FAIL |NQUIZSOURCECHECK"
+    fail=1
+  fi
 done
 if [ $fail -ne 0 ]; then echo "CHECK FAILED"; exit 1; fi
 echo "CHECK PASSED"

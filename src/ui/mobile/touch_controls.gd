@@ -123,6 +123,15 @@ var _placement := false
 var _prompt := ""
 var _rig: Node
 
+## PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"). The stick and camera drag are
+## NOT in here on purpose - they stay live through a safari. Everything else the thumb could press
+## either duplicates the safari's own shutter layer (P3) or does something a safari should not (open
+## the bag, fly, emote): the context button, both satellites, and the three HUD-row buttons.
+## `TouchButton.contains()` already returns false while `visible` is false (touch_button.gd:74-75),
+## so hiding these also makes them INERT to a real finger, a late-adopted drag and the debug hooks in
+## one move - no change needed to the hit-test loops below.
+var _photo_gate_active := false
+
 @onready var _hud: Node = get_parent()
 
 
@@ -709,8 +718,27 @@ func _camera_rig() -> Node:
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	_update_photo_gate()
 	_drive_camera()
 	_fade(delta)
+
+
+## PhotoMode has no signal of its own (the safari flips a plain static var), so this polls it once a
+## frame - only while `visible` (mobile, no modal), and only acts on the frame it actually changes.
+## `_bag` / `_journal` / `_pause` / `_primary` / `_emote` / `_boost` are all visible=true whenever
+## this whole node is, so "restore" is simply "true again" - nothing here needs to remember a prior
+## dimmed/hidden state the way `_on_placement_changed` does for `_rot_l`/`_rot_r`/`_place_cancel`.
+func _update_photo_gate() -> void:
+	var active := PhotoMode.active
+	if active == _photo_gate_active:
+		return
+	_photo_gate_active = active
+	for b in [_primary, _emote, _boost, _bag, _journal, _pause]:
+		if b == null:
+			continue
+		if active:
+			b.release()
+		b.visible = not active
 
 
 ## Hands this frame's drag and pinch to the rig's public touch API. One call each, whatever
@@ -859,6 +887,30 @@ func debug_mouse_hover(x: float, y: float) -> void:
 	Input.parse_input_event(ev)
 
 
+## REAL `InputEventScreenTouch`, for evidence a real finger's whole path works (P2 GATE,
+## docs/PLANET_SAFARI_SPEC.md 7): unlike `debug_touch` (which calls `_pointer_down`/`_pointer_up`
+## directly), this goes through `Input.parse_input_event` so `_input()` itself, the `visible` gate,
+## `_saw_touch` and the hit tests all run exactly as they do for a finger on the glass. Position is
+## authored in viewport coordinates and mapped the same way `debug_mouse_hover` maps its own (see
+## `_window_pos`).
+func debug_touch_real(id: int, x: float, y: float, pressed: bool) -> void:
+	var ev := InputEventScreenTouch.new()
+	ev.index = id
+	ev.position = _window_pos(Vector2(x, y))
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+
+## REAL `InputEventScreenDrag` companion to `debug_touch_real` - a moved finger already down.
+## `relative` is left at its default: `_input()`'s own `InputEventScreenDrag` branch (see above) reads
+## only `d.position`, never `d.relative`, so there is nothing here for a timeline to need to author.
+func debug_drag_real(id: int, x: float, y: float) -> void:
+	var ev := InputEventScreenDrag.new()
+	ev.index = id
+	ev.position = _window_pos(Vector2(x, y))
+	Input.parse_input_event(ev)
+
+
 ## Left mouse button at a viewport position. `pressed` false lifts it.
 func debug_mouse_button(x: float, y: float, pressed: bool) -> void:
 	var ev := InputEventMouseButton.new()
@@ -915,12 +967,14 @@ func debug_report(tag: String = "") -> void:
 		if model != null and model.has_method("get_state"):
 			anim = str(model.call("get_state"))
 	var sa := MobileUI.safe_area()
-	print("TOUCH %s mobile=%s vis=%s modals=%s push=%.2f move=%.3f run=%s speed=%.2f ground=%.3f anim=%s dist=%.2f prompt='%s' | alpha layer=%.2f stick=%.2f primary=%.2f emote=%.2f chrome=%.2f | safe=(%.0f,%.0f,%.0f,%.0f)" % [
+	print("TOUCH %s mobile=%s vis=%s modals=%s push=%.2f move=%.3f run=%s speed=%.2f ground=%.3f anim=%s dist=%.2f prompt='%s' | alpha layer=%.2f stick=%.2f primary=%.2f emote=%.2f chrome=%.2f | safe=(%.0f,%.0f,%.0f,%.0f) | PHOTOGATE active=%s primary_vis=%s emote_vis=%s boost_vis=%s bag_vis=%s journal_vis=%s pause_vis=%s" % [
 		tag, str(MobileUI.is_mobile()), str(visible), str(EventBus.open_modals()), _stick.push,
 		Input.get_vector("move_left", "move_right", "move_forward", "move_back").length(),
 		str(Input.is_action_pressed("run")), speed, ground, anim, dist, _prompt,
 		_layer_alpha, _stick.modulate.a, _primary.modulate.a, _emote.modulate.a, _bag.modulate.a,
-		sa.x, sa.y, sa.z, sa.w])
+		sa.x, sa.y, sa.z, sa.w,
+		str(PhotoMode.active), str(_primary.visible), str(_emote.visible), str(_boost.visible),
+		str(_bag.visible), str(_journal.visible), str(_pause.visible)])
 
 
 ## POINTER TABLE DUMP, for the stuck-after-landing investigation.

@@ -81,9 +81,12 @@ const PLUM_DARK := Color("#4e414d")    ## S 0.169 V 0.306 — the dark value anc
 const AMBER := Color("#d8a25c")        ## the core and the rim lamps; emissive, and small
 const JADE := Color("#5f7d70")         ## smoked jade lens glass
 const INK := Color("#221d26")          ## the pupil — the darkest thing on her, which is AC grammar
-## THE BULB ENVELOPE, AND IT IS NOT LIT. No emission, no `lit_material`, no alpha — rule 4 of this
-## file's own hard-won list: `toon_soft` is OPAQUE, so an alpha-0 colour renders BLACK rather than
-## disappearing, and faking glass with transparency here would give her a lump of coal for a head.
+## THE BULB ENVELOPE IS NOT LIT AT REST. No alpha — rule 4 of this file's own hard-won list:
+## `toon_soft` is OPAQUE, so an alpha-0 colour renders BLACK rather than disappearing, and faking
+## glass with transparency here would give her a lump of coal for a head. Since CAST_VOICES_DRAFT.md
+## 8.1 (approved) the envelope DOES carry emission now — `_glass_mat` in `_build_bulb()` — but only
+## `_animate_extras` ever raises it above 0.0, on the happy/greet emotes; every frame outside those
+## still reads exactly as the measurements below describe.
 ##
 ## MEASURED, NOT GUESSED, AND THE FIRST TRY FAILED. Draft 1 used #c0c8ca (V 0.792) with the shade
 ## strength dropped to 0.20 and the rim raised to 0.060, on the theory that a light shade side reads
@@ -623,6 +626,14 @@ var _ankle: Array[Node3D] = []
 var _iris: Array[Node3D] = []
 var _lamps: Array[ShaderMaterial] = []
 var _core_mat: ShaderMaterial
+## The glass envelope's own material, duplicated so `_animate_extras` can lift its emission on
+## the happy/greet emotes without touching every other Vela sharing `_toon`'s static cache. Stays
+## at emission_strength 0.0 outside those emotes — see GLASS above for why the envelope must read
+## as unlit at rest.
+var _glass_mat: ShaderMaterial
+## Smoothed 0..1 toward `pose(P.EYE_HAPPY)`, so the bulb's glow ramps in/out over ~0.25 s instead
+## of popping with the emote cut. See `_animate_extras`.
+var _happy_glow: float = 0.0
 var _t: float = 0.0
 
 
@@ -899,11 +910,20 @@ func _build_bulb() -> void:
 	# 0.24 at size 300 is ONE very tight highlight — with the value now down where it belongs, this is
 	# the main thing left saying "glass", and it has to stay tight: broad and soft reads as shiny
 	# plastic. `rim` 0.030 is the cast default, i.e. a hint of wrap light and not a halo. If she still
-	# reads as switched on, darken GLASS again before touching any of these; do NOT reach for emission
-	# or `lit_material` under any circumstances.
-	var m_glass := _toon(GLASS, _matte({
+	# reads as switched on at REST, darken GLASS again before touching any of these.
+	#
+	# ONE NAMED EXCEPTION since CAST_VOICES_DRAFT.md 8.1 (approved): "his bulb glows when he is
+	# happy... he says so, because he has no mouth to smile with" is now his line, so the envelope
+	# has to be able to light up on cue. `_glass_mat` is a duplicate (own copy, not the shared
+	# `_toon` cache entry) held at emission_strength 0.0 here — still unlit at rest, still the same
+	# material everywhere else — and only `_animate_extras` ever raises it, gated on the same
+	# P.EYE_HAPPY signal that shows the happy-arc eyes, so the two read as one cue, not two.
+	var m_glass := (_toon(GLASS, _matte({
 		"spec": 0.24, "spec_size": 300.0, "rim": 0.030, "shade": 0.34,
-		"shade_tint": Color(0.64, 0.72, 0.86)}))
+		"shade_tint": Color(0.64, 0.72, 0.86)})).duplicate() as ShaderMaterial)
+	m_glass.set_shader_parameter("emission_color", AMBER)
+	m_glass.set_shader_parameter("emission_strength", 0.0)
+	_glass_mat = m_glass
 	# PLUM shank, TAUPE_DARK beads: a 0.11 value step, not the 0.37 an earlier pass had. See CAP_*.
 	# The SOCKET CUP is PLUM too as of this pass, so the shank, the cup and the torso's neck column are
 	# one value and the thread is the only warm band on the whole base — see `_build_neck`.
@@ -1169,6 +1189,18 @@ func _animate_extras(delta: float) -> void:
 	if _core_mat != null:
 		_core_mat.set_shader_parameter("emission_strength",
 			0.55 + 1.7 * talk * (0.55 + 0.45 * sin(TAU * _t * 3.1)) + 0.5 * think)
+
+	# ---- the bulb's own glow, said aloud in CAST_VOICES_DRAFT.md 8.1: "my bulb glows when I'm
+	# glad". `P.EYE_HAPPY` is the same 0/1 signal that shows the happy-arc eyes on "wave", "happy"
+	# and "dance" (see `_pose_wave`/`_pose_happy`), so the two turn on and off together instead of
+	# needing their own emote list here. Smoothed rather than snapped so the envelope visibly
+	# BRIGHTENS instead of jump-cutting, and capped at 1.0 strength — a warm lift, not a searchlight
+	# — so a large smooth surface still reads as cute rather than as the "switched on" look GLASS
+	# above spent three drafts avoiding at rest.
+	_happy_glow = move_toward(_happy_glow, clampf(pose(P.EYE_HAPPY), 0.0, 1.0), delta / 0.25)
+	if _glass_mat != null:
+		_glass_mat.set_shader_parameter("emission_strength",
+			1.0 * _happy_glow * (0.8 + 0.2 * sin(TAU * _t * 1.6)))
 
 	# ---- the iris. `_eye_open` is the shared blink clock; here it drives a shutter instead of a
 	# vertical squash. The leaves cross the centre at full close, so the pupil (which `_apply_face` is

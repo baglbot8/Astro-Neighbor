@@ -35,7 +35,21 @@ extends Node3D
 ## the real environment.tscn at time_scale 1, 06:00 back round to 06:00): 1500.017 s, one frame over.
 ## The finale's forced night does not read this at all - it holds the clock with `time_scale = 0` and
 ## jumps it with `set_time` - so it is unaffected.
-const DAY_LENGTH_SEC := 1500.0
+const DAY_LENGTH_SEC := WorldClock.DAY_LENGTH_SEC
+## SPIKE round 2 (2026-09-20, scratch only): A 20 REAL MINUTE DAY, NIGHT THE BIGGER HALF.
+## The arithmetic and the reasoning live in ONE place, src/world/world_clock.gd - read it there.
+## Short version: a whole day is 1200 real seconds; while the sun is below the horizon the clock
+## runs at half speed; those two facts DERIVE DAY_LENGTH_SEC (852.071 s), nothing is fitted. Dark
+## was 695.86 s (11.60 real min, 58% of the day), lit was 504.14 s (8.40 real min).
+## Round 1 halved the clock in the dark but left the cycle at 35.2 real minutes; round 2 replaced it.
+##
+## CLOCK spike (2026-09-21, scratch only): night is now EXACTLY HALF the 20-minute cycle, per the
+## user - "the night should only be 10 minutes with a full day as 20 minutes." world_clock.gd's
+## DARK_TIME_SCALE is no longer the chosen 0.5; it is now DERIVED (DARK_HOURS/LIT_HOURS = 49/71 =
+## 0.690141) so the dark half costs exactly as many real seconds as the lit half. Dark is now
+## 600.00 s (10.00 real min, 50% of the day), lit is 600.00 s (10.00 real min, 50%). The 20-minute
+## total and the 5.6/19.8 sun-arc boundaries (so dusk/dawn stay where they were) are unchanged.
+const DARK_TIME_SCALE := WorldClock.DARK_TIME_SCALE
 const EMIT_STEP_HOURS := 0.05
 const SKY_SHADER := preload("res://src/shaders/sky.gdshader")
 const VIGNETTE_SHADER := preload("res://src/shaders/vignette.gdshader")
@@ -43,8 +57,8 @@ const VIGNETTE_SHADER := preload("res://src/shaders/vignette.gdshader")
 ## default camera, so cast shadows fall toward the viewer like the reference), sets north-west.
 ## The sun crosses the sky between these hours. It sets at 19.8 (not 18.0) so the 18-20 "dusk"
 ## phase is a real golden hour with long readable shadows instead of an already-dark sky.
-const SUN_RISE_HOUR := 5.6
-const SUN_SET_HOUR := 19.8
+const SUN_RISE_HOUR := WorldClock.SUN_RISE_HOUR
+const SUN_SET_HOUR := WorldClock.SUN_SET_HOUR
 const SUN_RISE_AZ_DEG := -45.0
 const SUN_PEAK_AZ_DEG := -135.0
 ## Default noon elevation. Per-world now: `PlanetData.sun_peak_elev_deg` (52.0 default, so the four
@@ -80,6 +94,9 @@ const TONEMAP_WHITE := 6.0
 const SKY_DISPLAY_CAP := 0.82
 const GLOW_THRESHOLD := 1.15
 const UP_SMOOTHING := 4.0
+## float32's machine epsilon (2^-23), as an angle in radians: below it `_up` and its target are the same
+## direction to single precision. See `_update_frame` (Q3, 2026-09-24) - not a tuned number.
+const UP_SAME_RAD := 1.1920929e-7
 const PLAYER_SEARCH_INTERVAL := 0.5
 ## Star brightness in full daylight, relative to night. Never 0: with no air to scatter them out,
 ## the stars stay up all day (R2.1) - they just have to sit under the sunlit ground, not over it.
@@ -144,8 +161,46 @@ const GRADE_NIGHT := [
 ## Night-factor step that forces the grade LUT to be rebuilt (keeps it off the per-frame path).
 const GRADE_STEP := 0.02
 
-## Speed of the clock. 1.0 = DAY_LENGTH_SEC (1500 s) per day. 0.0 freezes time (showcases).
+## Speed of the clock. 1.0 = DAY_LENGTH_SEC per day. 0.0 freezes time (showcases).
 @export var time_scale := 1.0
+
+## SPIKE round 2: A ROCKET HOP COSTS CLOCK, NOT JUST PATIENCE.
+## The flight unloads the world, so until now the clock simply STOPPED for the whole liftoff-cruise-
+## descent sequence and travel was free in game hours: a window could never close while you flew.
+## That is half of why the reviewer found travel pointless. Now the Environment remembers, across
+## the scene change, the wall clock and the planet it last ran on; when it comes back on a DIFFERENT
+## planet it charges the seconds that really passed, at the speed the clock runs at that hour.
+## No new constant: the charge IS the elapsed real time. MAX_ABSENT_SEC only stops a paused or
+## debugged session from jumping the clock a whole night, and is longer than any measured hop.
+static var _absent_since_msec: int = 0
+static var _absent_planet: String = ""
+const MAX_ABSENT_SEC := 180.0
+## Real seconds the last hop charged, for probes and the forecast panel. -1 = no hop yet.
+static var last_hop_seconds: float = -1.0
+
+## EXACT-BILL OVERRIDE (SAFARI_FLIGHT_SPEC.md 12.2, G4b). Every hop above is billed by MEASURING the
+## real seconds the world was gone - correct for "Just travelling" and a Commons errand, where the
+## day should cost whatever it actually took. A photo flight is different: its price is RULED at
+## `SafariTransit.PHOTO_TRIP_HOURS`, the same whether it was boosted, paused for the tutorial, or sat
+## on a slow haul-card read. Measuring its real seconds and adding that to the flight's own clock
+## surcharge is exactly the bug this fixes - the two together drifted from PHOTO_TRIP_HOURS by
+## whatever the real seconds did. So `safari_flight.gd`, and only it, may call
+## `override_next_absence_hours()` right before the trip that will end this hop, handing over the
+## EXACT number of hours still owed to make its total land on PHOTO_TRIP_HOURS - an inversion of its
+## own already-billed surcharge, not a measurement. `_charge_absence()` spends it on the very next
+## hop and clears it immediately after, whether or not that hop turns out to be the flight's landing,
+## so a stale value can never leak into a later, unrelated hop. No other caller in the game sets
+## this, so every hop that is not a photo flight's own landing is billed real seconds exactly as
+## before - ledgered before and after on a plain hop and a Commons errand in this round's report.
+static var _absence_override_hours: float = -1.0
+static var _absence_override_set := false
+
+## See the block above. `hours` must already be the flight's own true-up arithmetic; this file does
+## not question it, the same way it never questioned the real seconds it used to measure instead.
+static func override_next_absence_hours(hours: float) -> void:
+	_absence_override_hours = maxf(0.0, hours)
+	_absence_override_set = true
+
 ## When set, used instead of looking up the planet (showcase scenes).
 @export var data_override: PlanetData
 ## Showcase override for the ring plane tilt in degrees. Negative = use the world's own
@@ -200,6 +255,10 @@ var _vignette_layer: CanvasLayer
 var _night_life: NightLife
 var _ring: PlanetRing
 var _sky_bodies: SkyBodies
+## STORY_HOME_SPEC.md rulings 2.6/2.7: a faint meteor streak in the sky, the same direction
+## everywhere, growing with rocket parts (not time). See src/sky/meteor_streak.gd for the geometry
+## and look; this node is fed every frame from `_apply()` below, same as `_sky_bodies`.
+var _meteor_streak: MeteorStreak
 
 func _ready() -> void:
 	_low_power = Platform.is_compatibility_renderer() or Platform.is_mobile()
@@ -212,18 +271,54 @@ func _ready() -> void:
 	_build_vignette()
 	_build_ring()
 	_build_sky_bodies()
+	_build_meteor_streak()
 	_build_night_life()
 	_hour = fposmod(GameState.time_of_day, 24.0)
 	_last_emit_hour = _hour
+	_charge_absence()
 	_init_frame()
 	_apply(_hour)
 	_phase = _phase_for(_hour)
+	print("[Clock] Environment ready on %s, wall %.2f s, clock %05.2f" % [
+		GameState.current_planet_id, float(Time.get_ticks_msec()) / 1000.0, _hour])
 	EventBus.day_phase_changed.emit.call_deferred(_phase)
 
+## Bills the clock for the real seconds this Environment did not exist, but only when we came back
+## somewhere else - that is a rocket hop. A pause-menu reload onto the same planet is free.
+func _charge_absence() -> void:
+	if _absent_since_msec <= 0 or _absent_planet == "" or time_scale <= 0.0:
+		# Nothing to charge - clear a set-but-unused override rather than let it wait for a later,
+		# unrelated hop to spend it.
+		_absence_override_set = false
+		return
+	if _absent_planet == GameState.current_planet_id:
+		_absence_override_set = false
+		return
+	if _absence_override_set:
+		# THE EXACT PATH. No `Time.get_ticks_msec()` read at all - the real seconds this hop took are
+		# exactly the thing PHOTO_TRIP_HOURS must not depend on. `last_hop_seconds` is left at -1 (no
+		# real seconds were measured) so a probe or the forecast panel cannot mistake this for a
+		# stopwatch value.
+		var hours: float = _absence_override_hours
+		_absence_override_set = false
+		last_hop_seconds = -1.0
+		_advance(hours)
+		print("[Clock] hop %s -> %s cost EXACT %.2fh (override, no wall seconds read), clock now %05.2f" % [
+			_absent_planet, GameState.current_planet_id, hours, _hour])
+		return
+	var gap: float = clampf(float(Time.get_ticks_msec() - _absent_since_msec) / 1000.0, 0.0, MAX_ABSENT_SEC)
+	last_hop_seconds = gap
+	_advance(WorldClock.hours_for_seconds(_hour, gap))
+	print("[Clock] hop %s -> %s cost %.1f s, clock now %05.2f" % [
+		_absent_planet, GameState.current_planet_id, gap, _hour])
+
+
 func _process(delta: float) -> void:
+	_absent_since_msec = Time.get_ticks_msec()
+	_absent_planet = GameState.current_planet_id
 	_update_frame(delta)
 	if time_scale > 0.0:
-		_advance(delta * time_scale * 24.0 / DAY_LENGTH_SEC)
+		_advance(delta * time_scale * clock_rate(_hour) * 24.0 / DAY_LENGTH_SEC)
 	_apply(_hour)
 
 # ----------------------------------------------------------------------------- public API
@@ -282,6 +377,15 @@ func get_sky_body_ids() -> PackedStringArray:
 func get_sky_body_direction(id: String) -> Vector3:
 	return _sky_bodies.direction_of(id) if _sky_bodies != null else Vector3.ZERO
 
+## World-space unit direction from the eye toward the meteor streak (STORY_HOME_SPEC.md rulings
+## 2.6/2.7 - "the meteor, far off"), or Vector3.ZERO before it has built. Same shape as
+## `get_sky_body_direction`, for the finale (ruling 6: "lines up the photos... finds where it is").
+func get_meteor_streak_direction() -> Vector3:
+	if _meteor_streak == null:
+		return Vector3.ZERO
+	var d: Vector3 = _meteor_streak.global_position - _eye
+	return d.normalized() if d.length_squared() > 0.000001 else Vector3.ZERO
+
 
 ## Restarts the opening-bearing lock (see `_body_az_lock` / BODY_AZ_LOCK_SEC above) so the
 ## neighbouring worlds re-track the REAL camera from scratch over the next BODY_AZ_LOCK_SEC.
@@ -323,6 +427,11 @@ func _check_phase() -> void:
 	if p != _phase:
 		_phase = p
 		EventBus.day_phase_changed.emit(p)
+
+## How fast the clock runs at `hour`, relative to DAY_LENGTH_SEC. 1.0 while the sun is up,
+## DARK_TIME_SCALE while it is below the horizon. Owned by WorldClock.
+static func clock_rate(hour: float) -> float:
+	return WorldClock.rate(hour)
 
 static func _phase_for(hour: float) -> String:
 	var h := fposmod(hour, 24.0)
@@ -413,7 +522,17 @@ func _update_frame(delta: float) -> void:
 	_anchor = a
 	var target_up := a.normalized()
 	var w := clampf(delta * UP_SMOOTHING, 0.0, 1.0)
-	_up = _up.slerp(target_up, w).normalized()
+	# Vector3.slerp normalises the cross product of its two inputs as its rotation axis. Converging on
+	# a target with an exactly-zero component - a player standing on a coordinate plane, e.g. exactly
+	# at world.gd's spawn pole (0, R, 0), where dev_teleport and the planet safari's restore can put
+	# them back - that cross product shrinks to ~1e-21, its squared length becomes a float32 denormal,
+	# the "unit" axis comes out 0.1 % short and Basis() logs "The axis Vector3 must be normalized" once
+	# a frame until it underflows to zero (measured 2026-09-24: 34-399 a run, with or without a safari).
+	# Below float precision the two directions are the same one, so take the target exactly.
+	if _up.angle_to(target_up) <= UP_SAME_RAD:
+		_up = target_up
+	else:
+		_up = _up.slerp(target_up, w).normalized()
 	# Parallel-transport east so the sun's azimuth never jumps as the player walks.
 	_east = (_east - _up * _up.dot(_east))
 	if _east.length_squared() < 0.0001:
@@ -692,6 +811,12 @@ func _build_sky_bodies() -> void:
 	add_child(_sky_bodies)
 	_sky_bodies.setup(planet_data.id)
 
+## STORY_HOME_SPEC.md rulings 2.6/2.7: the meteor, far off. See src/sky/meteor_streak.gd.
+func _build_meteor_streak() -> void:
+	_meteor_streak = MeteorStreak.new()
+	_meteor_streak.name = "MeteorStreak"
+	add_child(_meteor_streak)
+
 func _build_ring() -> void:
 	if not planet_data.has_ring:
 		return
@@ -890,6 +1015,13 @@ func _apply(hour: float) -> void:
 		var clock: float = float(GameState.day_count) * 24.0 + hour
 		_sky_bodies.update_state(_eye, _up, _east, _body_az_origin, _sun_dir, _night, clock,
 			sun_col.lerp(Color.WHITE, 0.5))
+
+	# --- the meteor streak (STORY_HOME_SPEC 2.6/2.7). Per-frame, like everything else in this
+	# function: a one-shot value here would be overwritten the next time _apply() runs (_process()
+	# calls it every frame - see the file header and CLAUDE.md's environment.gd note).
+	if _meteor_streak != null:
+		_meteor_streak.update_state(_eye, _up, _east, _body_az_origin, _limb_dir, _limb_angle,
+			_band_top, GameState.rocket_part_count())
 
 	# --- ring / night life / vignette
 	if _ring != null:

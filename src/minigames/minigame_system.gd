@@ -345,7 +345,7 @@ func _end(success: bool, _reason: String) -> void:
 func _show_ui() -> void:
 	if _ui == null:
 		_build_ui()
-	_ui.visible = not EventBus.is_modal_open()
+	_apply_ui_visibility()
 	_update_ui()
 	UIStyle.pop_in(_pill, 0.22, 0.86)
 
@@ -433,8 +433,16 @@ func _title() -> String:
 
 
 func _on_modal_changed() -> void:
+	_apply_ui_visibility()
+
+
+## PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): the progress pill and its
+## chevron go with the rest of the chrome while a safari runs, same as under a modal. PhotoMode has
+## no signal of its own (the safari flips a plain static var), so `_process` below polls it every
+## frame a game is actually running - the same cost as the existing pointer-direction poll.
+func _apply_ui_visibility() -> void:
 	if _ui != null:
-		_ui.visible = not EventBus.is_modal_open()
+		_ui.visible = not EventBus.is_modal_open() and not PhotoMode.active
 
 
 ## A FILLED triangle, not MobileUI.draw_chevron: at this size (9 px) the open chevron read as a
@@ -457,6 +465,7 @@ func _process(delta: float) -> void:
 	if not is_running():
 		set_process(false)
 		return
+	_apply_ui_visibility()
 	_pointer_timer -= delta
 	if _pointer_timer > 0.0:
 		return

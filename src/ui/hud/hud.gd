@@ -159,6 +159,11 @@ var _open_modals: Dictionary = {}
 var _toast_spot: ToastSpot = ToastSpot.CORNER
 var _pending_toasts: Array = []
 var _flush_timer := 0.0
+## PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): last polled value of
+## `PhotoMode.active`, so `_update_photo_gate` only re-applies chrome/prompt visibility on the
+## frame it actually changes. PhotoMode has no signal of its own - the safari flips a plain static
+## var - so this is polled once a frame in `_process`, same as the existing per-frame updates below.
+var _photo_gate_active := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -415,7 +420,7 @@ func _block_pill_position() -> Vector2:
 func _update_placement_hint(delta: float) -> void:
 	if _block_pill == null:
 		return
-	var reason := "" if EventBus.is_modal_open() else _placement_block_reason()
+	var reason := "" if (EventBus.is_modal_open() or PhotoMode.active) else _placement_block_reason()
 	var text := str(BLOCK_REASONS.get(reason, BLOCK_REASON_FALLBACK)) if reason != "" else ""
 	var want := text != ""
 	if want:
@@ -747,8 +752,29 @@ func _on_modal_closed(modal_name: String) -> void:
 		_open_modals.erase(modal_name)
 	else:
 		_open_modals[modal_name] = left
-	_set_chrome_shown(not EventBus.is_modal_open())
+	_set_chrome_shown(_chrome_wanted())
 	_apply_toast_spot()
+	_refresh_prompt_visibility()
+
+
+## Single source of truth for whether `_chrome` (world-facing pills + the arrival banner) should be
+## up: no modal open, AND no planet safari running. See `_update_photo_gate`.
+func _chrome_wanted() -> bool:
+	return not EventBus.is_modal_open() and not PhotoMode.active
+
+
+## PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): takes the whole world-facing
+## chrome (stardust, scrap, clock, jet fuel, control hints, floaters - everything under `_chrome`)
+## away for the safari's three minutes, the same fade a modal already uses, and gives it back exactly
+## as it was the moment `PhotoMode.active` goes false again. Polled from `_process` (see that var's
+## comment for why); the interact prompt and the placement "why not here?" pill live outside `_chrome`
+## on `root` directly and are handled by their own visibility checks below.
+func _update_photo_gate() -> void:
+	var active := PhotoMode.active
+	if active == _photo_gate_active:
+		return
+	_photo_gate_active = active
+	_set_chrome_shown(_chrome_wanted())
 	_refresh_prompt_visibility()
 
 func _on_stardust_changed(amount: int, delta: int) -> void:
@@ -854,7 +880,7 @@ func _on_prompt_changed(text: String) -> void:
 	_refresh_prompt_visibility()
 
 func _refresh_prompt_visibility() -> void:
-	var want := _prompt_text != "" and not EventBus.is_modal_open()
+	var want := _prompt_text != "" and not EventBus.is_modal_open() and not PhotoMode.active
 	# MOBILE: the prompt lives at TOP-centre (the bottom belongs to the thumbs), which is also where
 	# the arrival banner plays. The banner wins for its ~3.5 s - the context button in the action
 	# cluster is already showing the same verb, so nothing is actually lost.
@@ -866,7 +892,7 @@ func _refresh_prompt_visibility() -> void:
 		UIStyle.pop_in(_prompt, 0.22, 0.8)
 	elif not want and _prompt.visible:
 		UIStyle.pop_out(_prompt, 0.14, 0.85)
-	_hints.visible = _hints_timer > 0.0 and not EventBus.is_modal_open()
+	_hints.visible = _hints_timer > 0.0 and not EventBus.is_modal_open() and not PhotoMode.active
 
 func _on_toast(text: String, icon: String) -> void:
 	if _toast_spot == ToastSpot.HELD:
@@ -894,8 +920,31 @@ func _on_toast(text: String, icon: String) -> void:
 func toast(text: String, icon: String = "") -> void:
 	_on_toast(text, icon)
 
+
+# ----------------------------------------------------------------------------- QA (P2 GATE)
+## TEST-ONLY HOOK, gated the same way npc.gd's `debug_start_conversation` is: a no-op outside a
+## Director run. `src/planet_safari/photo_mode.gd` (the shared gate, the lead's file, not mine) has no
+## in-tree node of its own for a Director "call" step to target, so this flips it for a timeline in
+## place of the real safari system (P3), which is not built yet.
+func debug_photo_mode(planet_id: String, on: bool) -> void:
+	if not Director.is_active():
+		return
+	if on:
+		PhotoMode.begin(planet_id)
+	else:
+		PhotoMode.end()
+
+
+## One line a Director timeline can assert the chrome/prompt gate against. Prints only.
+func debug_report(tag: String = "") -> void:
+	print("HUD %s photo_active=%s chrome_visible=%s chrome_alpha=%.2f prompt_visible=%s block_pill_visible=%s" % [
+		tag, str(PhotoMode.active), str(_chrome != null and _chrome.visible),
+		_chrome.modulate.a if _chrome != null else -1.0,
+		str(_prompt != null and _prompt.visible), str(_block_pill != null and _block_pill.visible)])
+
 # ----------------------------------------------------------------------------- process
 func _process(delta: float) -> void:
+	_update_photo_gate()
 	_update_jet_fuel(delta)
 	_update_arrival_hold(delta)
 	_update_placement_hint(delta)

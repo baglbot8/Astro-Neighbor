@@ -2075,3 +2075,31 @@ always present, and the 3 that landed between the renames recovered from tmp; a 
   and driven in a browser - it prints "autosave: on (interactive session)", writes in 0.9-3.5 ms, and a real page reload
   resumed the session. Still unproven: the iOS tab-HIDE path. The browser pane keeps background tabs "visible", so
   `visibilitychange` never fired there; only `pagehide` was exercised. A real device would settle it.
+
+## 70. Five rounds of "PASS" and the first real player caught nothing (2026-09-21)
+
+**What happened.** The photo safari was graded over five builder/critic rounds. Every round passed:
+lanes covered all 21 planet pairs, 45 of 51 sights read distinctly, prices paid skill over luck, the
+journal survived a reload. Then a human being flew it twice and came back with **0 of 6 both times**
+and the report "the sky was empty, just little star dots ... I couldn't tell if I was looking up or
+down sideways or backwards."
+
+**The cause was in the design the whole time, not in a regression.** `safari_run.gd:1012` draws a
+subject only when it is within `1.65` field radii of the crosshair, and `FIELD_HALF_DEG = 7.0`
+(`safari_catalog.gd:109`) - so nothing exists on screen beyond 11.5 degrees of where you point, while
+the reachable sky is 360 x 108 degrees (`EL_MIN -52`, `EL_MAX 56`, `safari_run.gd:90-91`). About one
+percent of the sky is drawn at a time. There is no way to find anything except by luck. The only
+instruction, `safari_cockpit.gd:341-347`, is 13*k px at the bottom edge and fades out at 9 seconds.
+
+**Why every critic missed it.** Each gate was measured *after* pointing the scope at a known subject:
+"hold it for 1.4 s and it exposes", "two subjects 40 degrees apart cost you both". Those are all true.
+Not one asked the question a player asks first - **can someone who has never seen this find anything
+at all?** A probe that starts from the answer cannot measure discoverability. The player's own log
+made it unmistakable: `seen=0.00` for all 12 sights, where `seen` is the maximum centred-ness ever
+reached (`safari_run.gd:1018`), not a duration. The crosshair never came near a single sight.
+
+**The rule this buys.** A loop that a player has to *learn* gets a first-time gate: a run driven only
+by what is on screen, by an agent told nothing about where the content is, before any skill gate is
+believed. And a build the user has never touched is not "five rounds deep", it is unproven - the
+first real session is the measurement, and it should happen early and cheaply. The rebuild contract
+is `docs/SAFARI_FLIGHT_SPEC.md`.

@@ -13,6 +13,43 @@ const STARTING_STARDUST := 40
 ## is meant to come from picking it up (every world, including home) rather than a starting stash.
 ## FIRST GUESS, small on purpose; BUILD_PLAN Phase 6 tunes it from a timed play-through.
 const STARTING_SCRAP := 5
+## DAY round (2026-09-21, scratch only). PLATES ARE PER TRIP, AND THIS CONSTANT IS LIVE AGAIN.
+##
+## THE LEAD'S RULING, from the user's own words ("You should have limited film for each trip"):
+## film is per TRIP, not per day. Every "Photo time!" flight loads a full magazine; what a flight
+## did not shoot does not carry forward and what it did shoot is not deducted from anything. The
+## limit on how much safari a day holds is the CLOCK (src/sky/safari_transit.gd PHOTO_TRIP_HOURS),
+## not the film box. The WIRE round's day box (`film_day` / `film_used`) is DELETED, not disabled.
+##
+## WHY FIVE, MEASURED THAT ROUND (kept for the history; superseded below, 2026-09-22): the FILM
+## round justified 5 with a re-run of ten auto-piloted flights over five lanes - four plates lost a
+## fully-held sight to the magazine on grig->vela, five never did, six and seven were never touched.
+##
+## THE OLD DUPLICATE, AND WHY IT IS GONE (SAFARI_FLIGHT_SPEC.md item 5, 2026-09-22, G4). This
+## constant used to live HERE, live at 5, while `SafariScoring.FILM_BASE` sat dead at 4 in another
+## builder's file - a known papercut the lead flagged rather than silently picking one. There is
+## now ONE constant: `SafariScoring.FILM_BASE`, re-measured and re-sized for the R4 rebuild's
+## 14-18 sight casts (see that file's own FILM section for the derivation). This name is KEPT, as
+## an alias, only because `showcase/rev_film_probe.gd` still reads `GameState.FILM_BASE` directly -
+## the value can never again drift from SafariScoring's, because it is not a second number, it is
+## the same number under two names.
+const FILM_BASE := SafariScoring.FILM_BASE
+## THE UPGRADE (point 4). The one real way to carry more than FILM_BASE: a one-time camera upgrade,
+## bought with stardust, that raises capacity for every trip after.
+##
+## ROUND 2 CORRECTION: the "60-200 stardust a flight" this comment used to cite was never measured
+## and CORE_LOOP.md has no safari, film or stardust figure at all - the round-1 critic caught both.
+## The real number, measured this round (`showcase/film_price_probe.gd`, a real auto-piloted
+## home_zorp flight through the actual `SafariHaul` sale path, PrintBag's own pricing, no fitted
+## constant): a clean flight sells its catch for 292 dust at film=5 (this round's default) and 255
+## at film=4 (one fewer plate, one fewer sight landed) - both printed as "SAFARI LANDED: ... worth
+## N dust". FILM_UPGRADE_COST is priced against THAT range: more than the best single haul (292)
+## but less than two of the worst (2 * 255 = 510) - a save-up goal across a couple of flights, not
+## a toll on every one. Capped at FILM_UPGRADE_MAX buys so the choice point 3 is built around never
+## goes away entirely.
+const FILM_UPGRADE_COST := 340
+const FILM_UPGRADE_ADD := 2
+const FILM_UPGRADE_MAX := 2
 
 var current_planet_id: String = "home"
 var previous_planet_id: String = ""
@@ -79,6 +116,14 @@ var favors: Dictionary = {}
 ## Time of day in hours (0..24). Day cycle length in real minutes lives in day_night.gd.
 var time_of_day: float = 9.5
 var day_count: int = 1
+
+## FILM builder pass: how many camera upgrades have been bought. WIRE round: the cap and the cost
+## are SafariScoring's (FILM_UPGRADE_MAX_TIER 2, FILM_UPGRADE_COSTS [400, 850] scrap), not the FILM
+## round's own 2 x 340 stardust - "film numbers come from SafariScoring".
+var film_upgrades: int = 0
+## DAY round: `film_day` / `film_used` (the WIRE round's day box) ARE GONE. There is no per-day
+## film state left to persist, because there is no per-day film. A save that still carries those
+## two keys just ignores them (see `from_dict`), and a save written now does not write them.
 
 ## Planet display name chosen at Town Hall.
 var home_planet_name: String = "Little Orbit"
@@ -295,6 +340,105 @@ func set_flag(key: String, value: bool = true) -> void:
 func flag(key: String) -> bool:
 	return bool(flags.get(key, false))
 
+# ----------------------------------------------------------------------------- safari film
+## DAY round (2026-09-21): FILM IS PER TRIP. The store holds exactly one number - how many
+## permanent camera upgrades have been bought - and every flight loads `film_capacity()` plates,
+## always, however many flights the day has already held.
+##
+## WHERE THE NUMBERS COME FROM, ONE PLACE NOW (SAFARI_FLIGHT_SPEC.md item 5, 2026-09-22, G4): all
+## of it is `SafariScoring` - `FILM_BASE` (10), `FILM_UPGRADE_COSTS`/`FILM_UPGRADE_MAX_TIER`/
+## `FILM_UPGRADE_STEP` (400 then 850 scrap, 2 tiers, +3 plates a tier) and `FILM_BUY_PRICE`/
+## `FILM_BUY_MAX` (23 dust, up to 4). This file used to carry its own live `FILM_BASE` (5) beside
+## SafariScoring's dead one (4) - the papercut the lead flagged rather than silently pick a side on.
+## `FILM_BASE` here is now an alias (see its own comment, above `film_upgrades`), so there is one
+## number, not two that can drift apart again.
+
+## THE CEILING ON ONE TRIP'S MAGAZINE. RE-SIZED FOR THE R4 REBUILD (SAFARI_FLIGHT_SPEC.md #6.3,
+## 2026-09-22, G4): 16, so it lands exactly where a full upgrade tops out (FILM_BASE 10 +
+## FILM_UPGRADE_MAX_TIER(2) * FILM_UPGRADE_STEP(3) = 16) - the same relationship this constant had
+## before (7 == old FILM_BASE(5) + old MAX_TIER(2), each tier +1), just at the new scale. That
+## keeps `film_spare_max()`'s "a fully upgraded camera is offered no spares" true without a second
+## number to keep in sync.
+##
+## WHAT IS NOT RE-VERIFIED: the OLD 7 was sized to the cockpit's own pixel budget (measured
+## `--ui=mobile` capture, `dayshop/shop_cabin.png`: a 191 px band, 21.4 px a plate, 7 fits at 178 px
+## and 8 already trips the "too tight" fallback). 16 plates is far past that budget on the same
+## math (16 plates + toast is well over 300 px) - but the plate stack is DRAWN in `safari_run.gd`
+## (SAFARI_FLIGHT_SPEC.md #7.3 moved that deliverable to whoever owns that file, not this one), so
+## whether 16 plates actually fits the hull is UNPROVEN by this file and belongs in needs_from_others.
+const PLATES_MAX := 16
+
+## Plates loaded for a trip - EVERY trip, with no day box in front of it. Upgrades raise this for
+## every flight after, which is what "buying or upgrading raises the plates PER TRIP" means.
+## Each tier now adds SafariScoring.FILM_UPGRADE_STEP (3) plates, not 1 - see FILM_BASE's comment.
+func film_capacity() -> int:
+	return mini(PLATES_MAX,
+		FILM_BASE + clampi(film_upgrades, 0, SafariScoring.FILM_UPGRADE_MAX_TIER)
+			* SafariScoring.FILM_UPGRADE_STEP)
+
+
+## How many spare plates this trip may still be sold, on top of `film_capacity()`. SafariScoring
+## prices them (FILM_BUY_PRICE) and caps them (FILM_BUY_MAX 4); PLATES_MAX caps them again, so a
+## fully upgraded camera (16) is offered none - the scrap ladder has already bought, for ever, what
+## the dust was renting one flight at a time. At 0 upgrades the offer is the full FILM_BUY_MAX (4),
+## since PLATES_MAX(16) - film_capacity()(10) = 6 is already past it; only after the first upgrade
+## tier does PLATES_MAX itself start pinching the offer below FILM_BUY_MAX.
+func film_spare_max() -> int:
+	return clampi(PLATES_MAX - film_capacity(), 0, SafariScoring.FILM_BUY_MAX)
+
+
+## DEPRECATED NAME, KEPT SO NOTHING ELSE HAD TO CHANGE. There is no "today" any more: this returns
+## the same full magazine `film_capacity()` does, so a caller that shows "film N of M" (the pad's
+## `[PadTime]` line, the run's startup print, the reload probes) now always reads "10 of 10" (0
+## upgrades) - which is the truth, not a rounding of it.
+func film_left_today() -> int:
+	return film_capacity()
+
+
+## DEPRECATED, AND DELIBERATELY A NO-OP. Plates do not carry over, so a landed flight has nothing
+## to book against tomorrow. Left callable because showcase probes still call it; the fact that it
+## changes nothing IS the "plates never carry over" rule, and a test can check it that way.
+func spend_film(_n: int) -> void:
+	pass
+
+
+func film_upgrade_available() -> bool:
+	return film_upgrades < SafariScoring.FILM_UPGRADE_MAX_TIER
+
+
+## Spends the next tier's SCRAP (SafariScoring.film_upgrade_cost) to raise `film_capacity()` by
+## FILM_UPGRADE_STEP plates ON EVERY TRIP, permanently: 10 -> 13 -> 16. Returns false, spending
+## nothing, if maxed or unaffordable. DAY round: it used to read "one plate a day"; the plates it
+## buys are per trip now.
+func buy_film_upgrade() -> bool:
+	if not film_upgrade_available():
+		return false
+	var cost := SafariScoring.film_upgrade_cost(film_upgrades)
+	if cost < 0 or not spend_scrap(cost):
+		return false
+	film_upgrades += 1
+	return true
+
+# ----------------------------------------------------------------------------- the day clock
+## DAY round (2026-09-21): ADVANCE THE CLOCK FROM OUTSIDE A WORLD SCENE.
+##
+## `src/world/environment.gd` owns the clock while you are standing on a planet, and it already
+## bills the day for the real seconds a rocket hop took (`_charge_absence`). But a photo safari is
+## not a hop: the flight IS the game, so it costs the day more than the seconds it took (the whole
+## of `src/sky/safari_transit.gd`'s PHOTO_TRIP_HOURS). That extra has to be added while no
+## Environment exists at all, and `time_of_day` / `day_count` live here, so the wrap and the day
+## rollover live here too instead of being copied into the flight scene.
+##
+## Same arithmetic environment.gd `_advance` does: wrap at 24 and carry the whole days.
+func advance_clock(hours: float) -> void:
+	if hours <= 0.0:
+		return
+	var h := time_of_day + hours
+	if h >= 24.0:
+		day_count += int(floor(h / 24.0))
+	time_of_day = fposmod(h, 24.0)
+
+
 # ----------------------------------------------------------------------------- serialization
 func to_dict() -> Dictionary:
 	return {
@@ -315,6 +459,7 @@ func to_dict() -> Dictionary:
 		"projects": projects,
 		"time_of_day": time_of_day,
 		"day_count": day_count,
+		"film_upgrades": film_upgrades,
 		"home_planet_name": home_planet_name,
 		"home_planet_size": home_planet_size,
 		"flags": flags,
@@ -350,6 +495,13 @@ func from_dict(d: Dictionary) -> void:
 	projects = _pj if _pj is Dictionary else {}
 	time_of_day = float(d.get("time_of_day", 9.5))
 	day_count = int(d.get("day_count", 1))
+	# A save from before this round, or from the old per-day box, has no key here: 0 upgrades bought,
+	# the honest default - it does not owe anyone a free upgrade they never paid for.
+	film_upgrades = clampi(int(d.get("film_upgrades", 0)), 0, SafariScoring.FILM_UPGRADE_MAX_TIER)
+	# DAY round: a save written by the WIRE round still has "film_day"/"film_used" in it. They are
+	# read by nobody now - film is per trip - so they are dropped on the floor here and not written
+	# back out. A player mid-day in an old save gets a full magazine on their next flight, which is
+	# the new rule applied honestly rather than a debt carried across a rule change.
 	home_planet_name = str(d.get("home_planet_name", "Little Orbit"))
 	# Saves written before R2.11 have no key here: they are level 0, the starting size.
 	home_planet_size = int(d.get("home_planet_size", 0))

@@ -50,6 +50,15 @@ func go_to_space(from_planet_id: String) -> void:
 func go_to_title() -> void:
 	await _transition_to(TITLE_SCENE)
 
+## MODE round: generic fade-transition to an arbitrary scene, for a leg that is not a planet arrival
+## and not the space map - today just the "Photo time!" flight (src/sky/safari_flight.tscn). Callers
+## carry their own state across the cut (SafariTransit, the same pattern RocketJourney uses for the
+## normal launch) rather than this function knowing about any of them.
+func go_to(path: String) -> void:
+	if _busy:
+		return
+	await _transition_to(path)
+
 func start_game() -> void:
 	await _transition_to(WORLD_SCENE)
 

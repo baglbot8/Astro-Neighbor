@@ -100,7 +100,7 @@ extends Node
 ## STEP - every step has a "type" and "lines"; the other keys depend on the type:
 ##
 ##   common:
-##     "type": "talk" | "find" | "collect" | "build" | "place" | "minigame"
+##     "type": "talk" | "find" | "collect" | "build" | "place" | "minigame" | "photo"
 ##     "title": "Find the broken machines"   (optional) short journal line; a default is built.
 ##     "lines": {
 ##       "ask":      [...]   said the first time the step comes up (the first talk on a game day it
@@ -110,6 +110,13 @@ extends Node
 ##       "done":     [...]   said on the talk that completes the step.
 ##       "tomorrow": [...]   said when you talk again the SAME game day after this step was completed
 ##                           (the next step is locked until tomorrow). Unused on the last step.
+##       "already_have": [...]  (optional) said INSTEAD of "ask" when the step is already met at the
+##                           moment it is asked (the step then completes in the same talk, "done"
+##                           lines and all, exactly as before). Falls back to "ask". Never used for a
+##                           plain "talk" step, which is always met when asked. STORY_SPINE_SPEC 2.1.
+##       "smudge":   [...]   (optional, "photo" steps only) said INSTEAD of "progress" when the sky
+##                           journal holds the sight but below the step's grade. Falls back to
+##                           "progress". Should say how: hold the shutter and let it bloom.
 ##       "with":     [...]   "talk" STEP WITH "npc" SET ONLY (see the "talk" entry below): said by the
 ##                           NAMED neighbour when the link completes, right after THAT talk's own
 ##                           greeting - replacing "done", which a linked step never speaks. Lives
@@ -212,6 +219,43 @@ extends Node
 ##              promise that the script exists: a build without that game's file logs a warning from
 ##              MinigameSystem.start() and the step simply never starts. `MinigameSystem.has_game()`
 ##              is the runtime test.
+##   "photo"    A picture of one sky sight, in the sky journal (docs/STORY_SPINE_SPEC.md 2.1-2.4).
+##              "sight": "zorp_moon_rim"   a SafariCatalog id.
+##              "grade": "Fair"            the lowest grade that counts, one of SafariScoring.GRADES
+##                                         ("Smudge", "Fair", "Fine", "Gallery").
+##              "lane": "lantern"          the SafariLanes.LANES id the ask points at...
+##              "from": "home", "to": "zorp"   ...and one of that lane's pairs (either order).
+##              "hours": [16, 7]           (optional, default [0, 24]) departure hours; wraps midnight.
+##              MET when the journal holds the sight at "grade" or better (SkyJournal
+##              .has_grade_at_least, which reads the page's `top_grade`) - never by a carried print.
+##              ASKING it opens a two-way ask through PhotoAsks.add (the trip is then guaranteed to
+##              carry the sight, spec 2.3); COMPLETING it closes the ask with PhotoAsks.remove. Nothing
+##              here touches GameState.flags["photo_asks"] except through PhotoAsks.
+##              Meant as a project's LAST step: the part is handed over only after it.
+##   "planet_photo"  A request about a NEIGHBOUR'S OWN PLANET SAFARI (PLANET_SAFARI_SPEC.md 15.2 - the
+##              space safari's "photo" step above still exists for whichever neighbour has not been
+##              moved onto their own planet yet). Two kinds:
+##                "kind": "subject"   "planet": "<id>", "subject": "<safari subject id, from that
+##                          world's own MANIFEST roster - res://src/planet_safari/worlds/<planet>.gd>",
+##                          "grade": "Fair"   MET when the PLANET journal holds that subject, on that
+##                          planet, at "grade" or better (SkyJournal.planet_record_for("<planet>:
+##                          <subject>")["grade"], ranked by SkyJournal.grade_rank - the KEPT photo only,
+##                          exactly like the sky "photo" step's own journal-only rule: a photo taken and
+##                          not kept, or kept below the required grade, never counts). "already_have"
+##                          and "smudge" (kept below grade) work exactly as the sky "photo" step's do.
+##                "kind": "score"     "planet": "<id>", "target": <stardust>   MET when
+##                          GameState.flags["planet_safari_best_total"][<planet>] (the shared flag ONE
+##                          safari's stardust total is written to, by the review - PLANET_SAFARI_SPEC.md
+##                          15.2; nothing here writes it) is "target" or more. No "sight"/"subject": the
+##                          whole planet's best single safari counts, not one photo.
+##              No PhotoAsks entry of any kind (that system is the SKY safari's own guaranteed-carry
+##              rule; a planet safari needs no trip to guarantee). MIGRATION: a save whose live step
+##              WAS the old sky "photo" step at this index, mid-ask, keeps working once this index's
+##              definition changes to "planet_photo" - `sync_photo_asks` closes the now-orphaned
+##              PhotoAsks entry (nothing in the new steps names its sight any more) and clears "asked"
+##              so the next talk introduces the new ask properly, instead of jumping straight to
+##              "still waiting" lines for a request the player was never actually given.
+##              Meant as a project's LAST step, exactly like "photo": the part is handed over after it.
 ##
 ## Writing (docs/STYLE_GUIDE.md "Writing"): each string <= 60 characters, 1-3 strings per list.
 ##
@@ -241,7 +285,10 @@ extends Node
 const NODE_NAME := "ProjectSystem"
 const DATA_DIR := "res://src/projects/data/"
 const TEST_DEF_ARG := "--project-def="
-const STEP_TYPES: PackedStringArray = ["talk", "find", "collect", "build", "place", "minigame"]
+const STEP_TYPES: PackedStringArray = ["talk", "find", "collect", "build", "place", "minigame", "photo", "planet_photo"]
+## SafariScoring.GRADES by value (safari_scoring.gd:35), lowest first. The ordering itself lives in
+## SkyJournal.grade_rank; this list is only what a definition may name.
+const PHOTO_GRADES: PackedStringArray = ["Smudge", "Fair", "Fine", "Gallery"]
 const SPOT_WORDS: PackedStringArray = ["npc", "pad", "spawn"]
 const SCRAP_ID := "scrap"
 ## Prefix on every mini-game this system owns, so `MinigameSystem.sync_owners` can tidy up after a
@@ -312,6 +359,11 @@ func _ready() -> void:
 	EventBus.scrap_changed.connect(_on_progress_signal.unbind(2))
 	EventBus.decoration_placed.connect(_on_progress_signal.unbind(3))
 	EventBus.decoration_removed.connect(_on_progress_signal.unbind(2))
+	# A print filed into the sky journal while this world is up re-checks a live photo step. A print
+	# filed during a flight (no world, no ProjectSystem) is picked up by `_refresh_world` on landing.
+	var jn := _journal()
+	if jn != null and jn.has_signal("page_filed"):
+		jn.connect("page_filed", _on_progress_signal.unbind(2))
 	EventBus.planet_loaded.connect(_on_planet_loaded)
 	# A load (GameState.from_dict) or the story's end can switch the gates off while a world is up;
 	# redraw so no marker or ring is left standing on a world with no project.
@@ -507,6 +559,87 @@ static func _invalid_reason(d: Dictionary) -> String:
 					return "step %d (minigame) needs \"count\" >= 1" % i
 				if s.has("config") and not (s["config"] is Dictionary):
 					return "step %d (minigame) \"config\" must be a Dictionary" % i
+			"photo":
+				var why := _photo_invalid_reason(s)
+				if why != "":
+					return "step %d (photo) %s" % [i, why]
+			"planet_photo":
+				var why2 := _planet_photo_invalid_reason(s)
+				if why2 != "":
+					return "step %d (planet_photo) %s" % [i, why2]
+	return ""
+
+
+## "" when a photo step's data is usable, else why (without the "step n (photo)" prefix).
+static func _photo_invalid_reason(s: Dictionary) -> String:
+	var sight := str(s.get("sight", ""))
+	if SafariCatalog.by_id(sight).is_empty():
+		return "\"sight\" '%s' is not a SafariCatalog id" % sight
+	var grade := str(s.get("grade", ""))
+	if not PHOTO_GRADES.has(grade):
+		return "\"grade\" '%s' is not one of %s" % [grade, str(PHOTO_GRADES)]
+	var lane := str(s.get("lane", ""))
+	if not SafariLanes.LANES.has(lane):
+		return "\"lane\" '%s' is not a SafariLanes.LANES id" % lane
+	var f := str(s.get("from", ""))
+	var t := str(s.get("to", ""))
+	var pair_ok := false
+	for pr: Variant in (SafariLanes.LANES[lane] as Dictionary).get("pairs", []):
+		var a := str((pr as Array)[0])
+		var b := str((pr as Array)[1])
+		if (a == f and b == t) or (a == t and b == f):
+			pair_ok = true
+	if not pair_ok:
+		return "\"from\"/\"to\" '%s'-'%s' is not a pair on lane '%s'" % [f, t, lane]
+	if s.has("hours"):
+		var h: Variant = s["hours"]
+		if not (h is Array) or (h as Array).size() != 2:
+			return "\"hours\" must be [h0, h1]"
+		for x: Variant in h:
+			if not (x is int or x is float) or float(x) < 0.0 or float(x) > 24.0:
+				return "\"hours\" values must be numbers from 0 to 24"
+	return ""
+
+
+## "" when a planet_photo step's data is usable, else why (without the "step n (planet_photo)"
+## prefix). Checked at load, same rule as every other type: nothing here should be discoverable only
+## by playing three game days into a project.
+static func _planet_photo_invalid_reason(s: Dictionary) -> String:
+	var planet := str(s.get("planet", ""))
+	if planet == "" or not ResourceLoader.exists("res://src/planet/data/%s.tres" % planet):
+		return "\"planet\" '%s' is not a planet id" % planet
+	var kind := str(s.get("kind", ""))
+	if kind != "subject" and kind != "score":
+		return "\"kind\" '%s' must be \"subject\" or \"score\"" % kind
+	if kind == "score":
+		if int(s.get("target", 0)) < 1:
+			return "\"target\" (kind \"score\") must be an int >= 1"
+		return ""
+	var subject := str(s.get("subject", ""))
+	if subject == "":
+		return "\"subject\" is required for kind \"subject\""
+	var grade := str(s.get("grade", ""))
+	if not PHOTO_GRADES.has(grade):
+		return "\"grade\" '%s' is not one of %s" % [grade, str(PHOTO_GRADES)]
+	# The roster cross-check below loads the planet's safari world script (the whole safari script
+	# graph sky_journal.gd warns against pulling in at boot) just to confirm the subject id is real.
+	# Worth paying in dev/CI, where a typo should fail loudly, but not on every player launch:
+	# OS.is_debug_build() is false in the exported web build, so release players skip it and pay only
+	# the cheap checks above (planet, kind, grade, target). check.sh and dev runs are debug builds,
+	# so they still catch a bad subject id.
+	if OS.is_debug_build():
+		var world_path := "res://src/planet_safari/worlds/%s.gd" % planet
+		if ResourceLoader.exists(world_path):
+			var script := load(world_path) as GDScript
+			var manifest: Dictionary = script.get_script_constant_map().get("MANIFEST", {}) if script != null else {}
+			var roster: Array = manifest.get("roster", [])
+			var found := false
+			for row: Variant in roster:
+				if row is Dictionary and str((row as Dictionary).get("id", "")) == subject:
+					found = true
+					break
+			if not found:
+				return "\"subject\" '%s' is not in %s's safari roster (%s)" % [subject, planet, world_path]
 	return ""
 
 
@@ -759,9 +892,16 @@ func handle_conversation(runner: DialogueRunner, npc: NPC, _player: Node3D) -> b
 	var i := int(st["step"])
 	if i >= steps.size():
 		# Every step is done but the part was never handed over: the talk that finished the last
-		# step was cut short after its commit. Hand it over now.
-		await _hand_over_part(runner, npc, npc_id, d)
-		return _handled(npc_id)
+		# step was cut short after its commit. Hand it over now - UNLESS a photo step was never
+		# actually done (the journal does not hold that sight at its grade): the part only ever
+		# comes after the photo (STORY_SPINE_SPEC SP6), so rewind to it and ask for the photo.
+		var j := _first_unmet_photo(npc_id, d)
+		if j < 0:
+			await _hand_over_part(runner, npc, npc_id, d)
+			return _handled(npc_id)
+		st["step"] = j
+		st["asked"] = false
+		i = j
 	if not step_unlocked(npc_id):
 		var tomorrow: Array = _lines(steps[i - 1], "tomorrow") if i > 0 else []
 		await _say(runner, npc, tomorrow if not tomorrow.is_empty() else DEFAULT_TOMORROW)
@@ -770,9 +910,26 @@ func handle_conversation(runner: DialogueRunner, npc: NPC, _player: Node3D) -> b
 	if not bool(st["asked"]):
 		var given := _ask(npc_id, d, i)
 		var met := _step_met(npc_id, d, i)
+		# ALREADY MET when asked (STORY_SPINE_SPEC 2.1): the step still completes in this same talk,
+		# but the neighbour opens with their delighted "already_have" lines instead of the ask. A plain
+		# talk step is met by definition, so it keeps its "ask".
+		var opening := _lines(step, "ask")
+		if met and not _is_plain_talk(step):
+			var have := _lines(step, "already_have")
+			if not have.is_empty():
+				opening = have
+		elif not met and (_photo_below_grade(step) or _planet_photo_below_grade(step)):
+			# SMUDGE AT THE MOMENT OF ASKING (STORY_SPINE_SPEC.md 6.4): the player already holds a
+			# Smudge of this sight the FIRST time the step is asked. Say the ask AND the smudge
+			# lines (which teach hold-to-bloom) in the SAME talk - previously the smudge lines only
+			# showed up on the next talk, so the lesson arrived a talk late. The same rule covers a
+			# planet_photo "subject" step's kept photo sitting below the required grade.
+			var smudge := _lines(step, "smudge")
+			if not smudge.is_empty():
+				opening = opening + smudge
 		# A step that is not met yet ends on its status line ("(You have 5 of 12 scrap.)"), so the
 		# player leaves the talk knowing the number, not only the request.
-		await _say(runner, npc, _lines(step, "ask") + ([] if met else _status_lines(npc_id, d, i)))
+		await _say(runner, npc, opening + ([] if met else _status_lines(npc_id, d, i)))
 		for item_id: String in given:
 			AudioManager.play_sfx("pickup_item")
 			EventBus.toast_requested.emit("You got %s!" % _count_name(item_id, int(given[item_id])), item_id)
@@ -781,8 +938,19 @@ func handle_conversation(runner: DialogueRunner, npc: NPC, _player: Node3D) -> b
 	elif _step_met(npc_id, d, i):
 		await _complete(runner, npc, d, i)
 	else:
-		await _say(runner, npc, _lines(step, "progress") + _status_lines(npc_id, d, i))
+		# A photo in the journal, but below the step's grade: the "smudge" lines (ask for a clearer
+		# one, and say how), falling back to "progress". Same rule for a planet_photo "subject" step.
+		var talk := _lines(step, "progress")
+		if _photo_below_grade(step) or _planet_photo_below_grade(step):
+			var smudge := _lines(step, "smudge")
+			if not smudge.is_empty():
+				talk = smudge
+		await _say(runner, npc, talk + _status_lines(npc_id, d, i))
 	return _handled(npc_id)
+
+
+static func _is_plain_talk(step: Dictionary) -> bool:
+	return str(step.get("type", "")) == "talk" and not step.has("npc")
 
 
 func _start(npc_id: String) -> void:
@@ -803,6 +971,8 @@ func _ask(npc_id: String, d: Dictionary, i: int) -> Dictionary:
 		if n > 0:
 			GameState.add_item(item_id, n)
 			given[item_id] = n
+	if str(step["type"]) == "photo":
+		_open_photo_ask(npc_id, step)
 	_show_step_world(npc_id, d, i, st)
 	_met_cache[npc_id] = _step_met(npc_id, d, i)
 	return given
@@ -821,6 +991,8 @@ func _complete(runner: DialogueRunner, npc: NPC, d: Dictionary, i: int) -> void:
 	st["asked"] = false
 	GameState.project_step_day[npc_id] = _clock_minutes()
 	GameState.add_friendship(npc_id, int(step.get("friendship", FRIENDSHIP_PER_STEP)))
+	if str(step["type"]) == "photo":
+		PhotoAsks.remove(str(step.get("sight", "")))
 	_clear_step_world(npc_id, i)
 	_met_cache.erase(npc_id)
 	EventBus.project_step_completed.emit(npc_id, i)
@@ -885,8 +1057,21 @@ static func _say(runner: DialogueRunner, npc: NPC, lines: Array) -> void:
 static func _lines(step: Dictionary, key: String) -> Array:
 	var out: Array = []
 	for l: Variant in (step.get("lines", {}) as Dictionary).get(key, []):
-		out.append(str(l))
+		out.append(_format_line(step, key, str(l)))
 	return out
+
+
+## A planet_photo "score" step's "done" line names the REAL session total, not the target repeated
+## back (docs/STORY_HOME_SPEC.md 5.4 / PLANET_SAFARI_SPEC.md 17.1 rule 12: "Grig's done line quotes
+## the target ('140.'), not the amount") - one %d placeholder in a "done" line, filled from the same
+## shared flag the step's own "met" rule reads (`_planet_best_total`), never a second source of truth.
+## Every other line (every other step type, every other key) is untouched.
+static func _format_line(step: Dictionary, key: String, line: String) -> String:
+	if key != "done" or str(step.get("type", "")) != "planet_photo" or str(step.get("kind", "")) != "score":
+		return line
+	if not line.contains("%d"):
+		return line
+	return line % _planet_best_total(str(step.get("planet", "")))
 
 
 # ============================================================================= conversation: light links
@@ -1027,7 +1212,199 @@ static func _progress(npc_id: String, d: Dictionary, i: int) -> Vector2i:
 				if (mst.get("found", []) as Array).has(_minigame_mark(i, m)):
 					gn += 1
 			return Vector2i(gn, need)
+		"photo":
+			# One picture, at the step's grade or better, in the sky journal (spec 2.4).
+			return Vector2i(1, 1) if _photo_have(step) else Vector2i(0, 1)
+		"planet_photo":
+			# "score": the shared best-total flag against the target, shown as an actual count so the
+			# status line can say "(112 of 140 stardust)" instead of a bare met/not-met. "subject": one
+			# kept photo, at the step's grade or better, exactly like "photo" above (spec 15.2).
+			if str(step.get("kind", "")) == "score":
+				var target := maxi(1, int(step.get("target", 1)))
+				return Vector2i(mini(_planet_best_total(str(step.get("planet", ""))), target), target)
+			return Vector2i(1, 1) if _planet_photo_have(step) else Vector2i(0, 1)
 	return Vector2i(0, need)
+
+
+# ============================================================================= step logic: photo
+## The sky journal autoload (key "SkyBook", node renamed "SkyJournal" - see project.godot), or null.
+static func _journal() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return null
+	return tree.root.get_node_or_null("SkyJournal")
+
+
+## THE photo rule: the journal holds `step.sight` at `step.grade` or better. Asks the live journal
+## when it exists (always, in the game); a bare probe with no journal node reads the saved flag
+## with the same ladder (SkyJournal.saved_grade_at_least).
+static func _photo_have(step: Dictionary) -> bool:
+	var sight := str(step.get("sight", ""))
+	var grade := str(step.get("grade", "Fair"))
+	var j := _journal()
+	if j != null and j.has_method("has_grade_at_least"):
+		return bool(j.call("has_grade_at_least", sight, grade))
+	return SkyJournal.saved_grade_at_least(sight, grade)
+
+
+## The highest grade the journal holds for a photo step's sight, or "".
+static func _photo_top(step: Dictionary) -> String:
+	var sight := str(step.get("sight", ""))
+	var j := _journal()
+	if j != null and j.has_method("top_grade"):
+		return str(j.call("top_grade", sight))
+	return SkyJournal.saved_top_grade(sight)
+
+
+## A photo step whose sight IS in the journal, but only below the step's grade (a Smudge, when Fair
+## is asked for): the case the "smudge" lines are for.
+static func _photo_below_grade(step: Dictionary) -> bool:
+	if str(step.get("type", "")) != "photo":
+		return false
+	return _photo_top(step) != "" and not _photo_have(step)
+
+
+## The PhotoAsks entry a photo step opens: two-way, on the step's lane and pair, in its hours.
+static func _photo_ask_entry(npc_id: String, step: Dictionary) -> Dictionary:
+	var hours: Variant = step.get("hours", [0, 24])
+	return {"by": npc_id, "lane": str(step.get("lane", "")), "from": str(step.get("from", "")),
+		"to": str(step.get("to", "")), "hours": (hours as Array).duplicate() if hours is Array else [0, 24],
+		"one_way": false}
+
+
+static func _open_photo_ask(npc_id: String, step: Dictionary) -> void:
+	PhotoAsks.add(str(step.get("sight", "")), _photo_ask_entry(npc_id, step))
+
+
+## Index of the first photo/planet_photo step whose picture is NOT held at its grade, or -1.
+static func _first_unmet_photo(_npc_id: String, d: Dictionary) -> int:
+	var steps: Array = d["steps"]
+	for j in steps.size():
+		var s: Dictionary = steps[j]
+		var t := str(s["type"])
+		if (t == "photo" and not _photo_have(s)) or (t == "planet_photo" and not _planet_photo_have(s)):
+			return j
+	return -1
+
+
+## Makes PhotoAsks agree with this neighbour's saved project state, through PhotoAsks only: the ask
+## for their photo step is open exactly while that step is the current, ASKED step of an unfinished
+## project, and every other ask BY this neighbour for one of this project's photo sights is closed.
+## Asks by anyone else (the Professor) are never touched. Called after every dev jump and on every
+## world refresh, so a dev tool that rewrites `GameState.projects` directly (dev_menu.gd) or an
+## inconsistent save cannot leave a sight guaranteed forever or an asked step with no ask.
+##
+## MIGRATION (PLANET_SAFARI_SPEC.md 15.2): a neighbour's step at this index used to be the sky
+## "photo" step and now is not (typically "planet_photo") - a save mid-ask on the old step opened a
+## PhotoAsks entry that nothing in the CURRENT `steps` names any more, so the loop below (which only
+## ever looks at steps still typed "photo") can never reach it. The second loop closes every ask still
+## credited to this neighbour that no current step defines, whatever it is - and when that fires while
+## the live step is asked but not itself a "photo" step, the "asked" flag is cleared too, since it was
+## set for a request the player was never actually given under the new definition; the next talk
+## introduces it properly instead of jumping straight to "still waiting" lines for it.
+static func sync_photo_asks(npc_id: String) -> void:
+	var d := definition_for(npc_id)
+	if d.is_empty():
+		return
+	var st := _state(npc_id)
+	if st.is_empty():
+		return
+	var steps: Array = d["steps"]
+	var live_i := int(st["step"])
+	var live_type := str((steps[live_i] as Dictionary)["type"]) if live_i < steps.size() else ""
+	var live_sight := ""
+	if not bool(st["done"]) and bool(st["asked"]) and live_i < steps.size() and CampaignData.gates_on():
+		if live_type == "photo":
+			var cur: Dictionary = steps[live_i]
+			live_sight = str(cur.get("sight", ""))
+			if not PhotoAsks.has(live_sight):
+				_open_photo_ask(npc_id, cur)
+	var defined_sights: Dictionary = {}
+	for s: Dictionary in steps:
+		if str(s["type"]) != "photo":
+			continue
+		var sid := str(s.get("sight", ""))
+		defined_sights[sid] = true
+		if sid == live_sight:
+			continue
+		if PhotoAsks.has(sid) and str(PhotoAsks.get_ask(sid).get("by", "")) == npc_id:
+			PhotoAsks.remove(sid)
+	var closed_stale := false
+	for sid: String in PhotoAsks.open().keys():
+		if defined_sights.has(sid):
+			continue
+		if str(PhotoAsks.get_ask(sid).get("by", "")) == npc_id:
+			PhotoAsks.remove(sid)
+			closed_stale = true
+	if closed_stale and live_type != "photo" and live_i < steps.size() and bool(st["asked"]):
+		st["asked"] = false
+
+
+# ============================================================================= step logic: planet_photo
+## The exact key a subject's planet-journal record is stored and read under: SkyJournal's own
+## "<planet>:<id>" scheme (sky_journal.gd `planet_offer_photo`/`planet_keep_new` - see its header's
+## PUBLIC API). Never touch GameState.flags["planet_journal"] directly; go through the journal node.
+static func _planet_subject_key(step: Dictionary) -> String:
+	return "%s:%s" % [str(step.get("planet", "")), str(step.get("subject", ""))]
+
+
+## The KEPT record for a planet_photo (kind "subject") step's subject, or {} when never kept - never
+## a photo taken and not kept, exactly like the sky "photo" step's journal-only rule.
+static func _planet_record(step: Dictionary) -> Dictionary:
+	var j := _journal()
+	if j == null or not j.has_method("planet_record_for"):
+		return {}
+	var rec: Variant = j.call("planet_record_for", _planet_subject_key(step))
+	return rec if rec is Dictionary else {}
+
+
+## THE planet_photo "subject" rule: the journal's KEPT record for the subject is at "grade" or better.
+static func _planet_subject_have(step: Dictionary) -> bool:
+	var rec := _planet_record(step)
+	if rec.is_empty():
+		return false
+	return SkyJournal.grade_rank(str(rec.get("grade", ""))) >= SkyJournal.grade_rank(str(step.get("grade", "Fair")))
+
+
+## A planet_photo (kind "subject") step whose subject IS kept, but only below the step's grade - the
+## case the "smudge" lines are for, exactly like the sky "photo" step's `_photo_below_grade`.
+static func _planet_photo_below_grade(step: Dictionary) -> bool:
+	if str(step.get("type", "")) != "planet_photo" or str(step.get("kind", "")) != "subject":
+		return false
+	var rec := _planet_record(step)
+	return not rec.is_empty() and not _planet_subject_have(step)
+
+
+## GameState.flags["planet_safari_best_total"][planet] - the shared flag ONE safari's stardust total
+## is written to by the review (spec 15.2; nothing in this file ever writes it, only reads it).
+static func _planet_best_total(planet_id: String) -> int:
+	var totals: Variant = GameState.flags.get("planet_safari_best_total", {})
+	if not (totals is Dictionary):
+		return 0
+	return int((totals as Dictionary).get(planet_id, 0))
+
+
+static func _planet_score_have(step: Dictionary) -> bool:
+	return _planet_best_total(str(step.get("planet", ""))) >= int(step.get("target", 0))
+
+
+## Dispatches a planet_photo step to its kind's own met rule.
+static func _planet_photo_have(step: Dictionary) -> bool:
+	if str(step.get("kind", "")) == "score":
+		return _planet_score_have(step)
+	return _planet_subject_have(step)
+
+
+## Once per photo step: the first time it is seen met while live (a print filed on a world, or the
+## first world loaded after a flight that filed it), toast so the player knows to go and tell them.
+## The mark rides in `found`, like a link's, so a reload never repeats it.
+func _photo_ready_toast(npc_id: String, i: int, st: Dictionary) -> void:
+	var mark := "s%d_photo_told" % i
+	var found: Array = st["found"]
+	if found.has(mark):
+		return
+	found.append(mark)
+	EventBus.toast_requested.emit("%s will want to see that photo!" % _npc_name(npc_id), "star")
 
 
 static func _have(item_id: String) -> int:
@@ -1131,7 +1508,42 @@ static func _status_lines(npc_id: String, d: Dictionary, i: int) -> Array:
 			return ["(%d of %d placed inside the ring.)" % [pr.x, pr.y]]
 		"minigame":
 			return ["(%d of %d so far.)" % [pr.x, pr.y], "(Use your jetpack - they fly high.)"]
+		"photo":
+			if pr.x >= pr.y:
+				return []
+			# THE ROUTE MUST NOT DISAPPEAR (STORY_SPINE_SPEC.md 6.4): a Smudge held for this sight
+			# used to end the status line on the grade alone ("Your best is a Smudge...") and never
+			# say the route again - a player whose Smudge came from another lane was never told the
+			# guaranteed trip a second time. The grade line (when there is one) and the route line
+			# now both show, every time.
+			var out: Array = []
+			var top := _photo_top(step)
+			var grade := str(step.get("grade", "Fair"))
+			if top != "":
+				out.append("(Your best is %s %s. %s or better, please.)" % [_article(top), top, grade])
+			var entry := _photo_ask_entry(npc_id, step)
+			out.append("(%s.)" % _cap(SkyJournal.ask_route(entry)))
+			var when := SkyJournal.ask_hours(entry.get("hours", [0, 24]))
+			if when != "any time":
+				out.append("(%s.)" % _cap(when))
+			return out
+		"planet_photo":
+			if pr.x >= pr.y:
+				return []
+			if str(step.get("kind", "")) == "score":
+				return ["(Best safari there so far: %d of %d stardust.)" % [pr.x, pr.y]]
+			var rec := _planet_record(step)
+			if rec.is_empty():
+				return []
+			var top2 := str(rec.get("grade", ""))
+			var grade2 := str(step.get("grade", "Fair"))
+			return ["(Your best is %s %s. %s or better, please.)" % [_article(top2), top2, grade2]]
 	return []
+
+
+## First letter up, the rest untouched ("fly the Lantern Lane..." -> "Fly the Lantern Lane...").
+static func _cap(t: String) -> String:
+	return t if t == "" else t.substr(0, 1).to_upper() + t.substr(1)
 
 
 static func _step_title(step: Dictionary) -> String:
@@ -1155,6 +1567,13 @@ static func _step_title(step: Dictionary) -> String:
 			if noun == "":
 				return "Play %s" % str(step.get("game", "")).capitalize()
 			return "Get all %d %s" % [n, noun]
+		"photo":
+			var sname := str(SafariCatalog.by_id(str(step.get("sight", ""))).get("name", "a sight"))
+			return "Photo: %s" % sname
+		"planet_photo":
+			if str(step.get("kind", "")) == "score":
+				return "Safari score: %d stardust" % int(step.get("target", 0))
+			return "Photo: %s" % str(step.get("subject", "")).capitalize()
 	return "Talk"
 
 
@@ -1197,7 +1616,13 @@ func _refresh_world() -> void:
 		if i >= (d["steps"] as Array).size():
 			continue
 		_show_step_world(npc, d, i, st)
+		# ALWAYS, not only for a live "photo" step: this is also what cleans up a stale PhotoAsks
+		# entry left by an OLD SAVE whose step at this index used to be "photo" and now is not (spec
+		# 15.2's migration) - the very first world load after the data changes, not only a dev jump.
+		sync_photo_asks(npc)
 		_met_cache[npc] = _step_met(npc, d, i)
+		if str(((d["steps"] as Array)[i] as Dictionary)["type"]) == "photo" and bool(_met_cache[npc]):
+			_photo_ready_toast(npc, i, st)
 
 
 func _show_step_world(npc_id: String, d: Dictionary, i: int, st: Dictionary) -> void:
@@ -1354,6 +1779,13 @@ func _on_progress_signal() -> void:
 		if t == "talk" or t == "find" or t == "minigame":
 			continue
 		var met := _step_met(npc, d, i)
+		if t == "photo":
+			# Re-checked on every journal filing (SkyJournal.page_filed, connected in `_ready`). Its
+			# own once-only toast, so the landing after a flight can say it too (`_refresh_world`).
+			_met_cache[npc] = met
+			if met:
+				_photo_ready_toast(npc, i, st)
+			continue
 		if t == "place" and _markers != null:
 			_markers.set_zone_met("%s:s%d_zone" % [npc, i], met)
 		var was: bool = bool(_met_cache.get(npc, met))
@@ -1593,6 +2025,7 @@ func dev_set_step(npc_id: String, i: int) -> String:
 	var asked_given := _ask(npc_id, d, target)
 	for item_id: String in asked_given:
 		given_all[item_id] = int(given_all.get(item_id, 0)) + int(asked_given[item_id])
+	sync_photo_asks(npc_id)
 	_refresh_world()
 	var msg := "%s: set to step %d/%d" % [_npc_name(npc_id), target + 1, steps.size()]
 	if not given_all.is_empty():
@@ -1737,6 +2170,40 @@ func dev_meet_step(npc_id: String) -> String:
 			msg = "ready to hand in"
 		"place":
 			msg = _dev_place_step_item(npc_id, d, step, i, st)
+		"photo":
+			# SYNTHETIC: a journal page filed at exactly the step's grade, no flight flown.
+			var sight := str(step.get("sight", ""))
+			var grade := str(step.get("grade", "Fair"))
+			var jn := _journal()
+			if _photo_have(step):
+				msg = "the journal already has it - ready to hand in"
+			elif jn == null or not jn.has_method("debug_file_grade"):
+				msg = "no sky journal to file the photo in"
+			elif bool(jn.call("debug_file_grade", sight, grade)):
+				msg = "filed a %s photo of %s - ready to hand in" % [grade, sight]
+			else:
+				msg = "could not file a photo of %s" % sight
+		"planet_photo":
+			if str(step.get("kind", "")) == "score":
+				# SYNTHETIC: writes the shared flag directly (spec 15.2), no safari played.
+				var planet := str(step.get("planet", ""))
+				var target := int(step.get("target", 0))
+				if _planet_score_have(step):
+					msg = "the best safari there already clears it - ready to hand in"
+				else:
+					var totals: Variant = GameState.flags.get("planet_safari_best_total", {})
+					var td: Dictionary = (totals as Dictionary).duplicate(true) if totals is Dictionary else {}
+					td[planet] = maxi(target, int(td.get(planet, 0)))
+					GameState.flags["planet_safari_best_total"] = td
+					msg = "set the best safari total on %s to %d - ready to hand in" % [planet, td[planet]]
+			else:
+				# No debug hook to file a KEPT planet photo without owning sky_journal.gd - honest
+				# about it, same spirit as the "no sky journal to file the photo in" case above.
+				if _planet_subject_have(step):
+					msg = "the journal already has it - ready to hand in"
+				else:
+					msg = "no dev hook to synthesize a kept planet photo - play a safari on %s and keep a %s or better photo of %s" \
+						% [str(step.get("planet", "")), str(step.get("grade", "Fair")), str(step.get("subject", ""))]
 	_met_cache[npc_id] = _step_met(npc_id, d, i)
 	if _markers != null and str(step["type"]) == "place":
 		_markers.set_zone_met("%s:s%d_zone" % [npc_id, i], _step_met(npc_id, d, i))
@@ -1794,6 +2261,7 @@ func dev_finish(npc_id: String) -> String:
 	GameState.add_item(part_id)
 	EventBus.project_completed.emit(npc_id, part_id)
 	_met_cache.erase(npc_id)
+	sync_photo_asks(npc_id)
 	_refresh_world()
 	return "%s: project finished, %s in your bag" % [_npc_name(npc_id), part_name(part_id)]
 
@@ -1811,6 +2279,7 @@ func dev_reset(npc_id: String) -> String:
 	if ms != null:
 		for i in 8:
 			ms.stop_owner(_minigame_owner(npc_id, i), "dev reset")
+	sync_photo_asks(npc_id)
 	_refresh_world()
 	return "%s: project reset" % _npc_name(npc_id)
 
@@ -1850,6 +2319,13 @@ func debug_marker(npc_id: String) -> void:
 ## replay board. Prints only.
 func debug_played_minigames() -> void:
 	print("PLAYED_MINIGAMES %s" % JSON.stringify(played_minigames()))
+
+
+## PhotoAsks.open(), printed - evidence for the planet_photo MIGRATION check (spec 15.2): a save mid
+## the old sky "photo" step can leave a PhotoAsks entry nothing in the current steps names any more;
+## `sync_photo_asks` should close it. Prints only.
+func debug_photo_asks(tag: String = "") -> void:
+	print("PHOTO_ASKS %s %s" % [tag, JSON.stringify(PhotoAsks.open())])
 
 
 ## How much of each place step's ring is legal to decorate, measured with the real placement rules

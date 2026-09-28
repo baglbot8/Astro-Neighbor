@@ -157,6 +157,13 @@ const IGNITION_LIFT := 1.45
 const ROCKET_SCENE := preload("res://src/rocket/rocket_model.tscn")
 const COMPASS_SCRIPT := preload("res://src/rocket/pad_compass.gd")
 const PICKER_SCRIPT := preload("res://src/rocket/pad_destination_picker.gd")
+## MODE round: the "Just travelling" / "Photo time!" card (src/rocket/pad_mode_picker.gd) that opens
+## right after the destination card closes — see that file's header for why it is a second card
+## rather than a third option on the first one.
+const MODE_PICKER_SCRIPT := preload("res://src/rocket/pad_mode_picker.gd")
+## "Photo time!"'s own scene (src/sky/safari_flight.gd) — a limited-film safari flight instead of
+## the scripted climb/cruise/descent below, which "Just travelling" still runs unchanged.
+const SAFARI_FLIGHT_SCENE := "res://src/sky/safari_flight.tscn"
 const SPACE_SCENE := "res://src/rocket/space_travel.tscn"
 ## Where a skipped launch goes straight to (the arrival install space_travel.gd `_arrive` does).
 const WORLD_SCENE := "res://src/world/world.tscn"
@@ -255,6 +262,8 @@ var _arrival_watchdog := 0.0
 var _cam: Camera3D
 var _rig_cam: Camera3D
 var _picker: PadDestinationPicker
+## MODE round: the mode card, up between the destination card closing and anything boarding.
+var _mode_picker: PadModePicker
 var _dest_id := ""
 ## Curve the climb / descent flies, as four world-space bezier points.
 var _arc: PackedVector3Array = PackedVector3Array()
@@ -311,6 +320,11 @@ var _desc_tween: Tween
 
 func _ready() -> void:
 	_reseat_off = OS.get_cmdline_user_args().has("--no-reseat")
+	# TEST DOOR for the retired space safari (docs/PLANET_SAFARI_SPEC.md 15.1): `--space-safari` turns
+	# the one switch on for this run only, the same thing the dev menu's World-tab row does, so the old
+	# `rocket_showcase.tscn --photo=<id>` probe can still reach the flight. Never saved.
+	if OS.get_cmdline_user_args().has("--space-safari"):
+		SafariTransit.SPACE_SAFARI = true
 	planet = _find_planet()
 	_pad_root = Node3D.new()
 	_pad_root.name = "Pad"
@@ -1055,6 +1069,9 @@ func _on_interacted(who: Node3D) -> void:
 	if p == null:
 		return
 	_busy = true
+	# WIRE round: TIMING MARKERS. Cheap prints so "a plain errand is one tap again" can be TIMED
+	# rather than argued. They cost one string a trip and only fire on a real interact.
+	print("[PadTime] interact -> destination card  t=%d ms" % Time.get_ticks_msec())
 	_open_picker(p)
 
 
@@ -1095,6 +1112,18 @@ func launch_to(dest_id: String, who: Player = null) -> void:
 
 
 func _on_destination_chosen(dest_id: String, p: Player) -> void:
+	var origin := planet_id()
+	var hour := GameState.time_of_day
+	# STORY_SPINE_SPEC.md 7.1 "A gated trip is silent": whether THIS trip carries an open ask even
+	# though it cannot be flown as a photo trip right now (the Professor's ask gating a neighbour's
+	# own ask elsewhere, e.g. home->zorp while his ask is open). Computed once so both the log line
+	# and the branch below read the same value.
+	var carries_ask := not PhotoAsks.for_trip(
+		SafariTransit.route_id_for(origin, dest_id), origin, dest_id, hour).is_empty()
+	print("[PadTime] destination %s chosen  t=%d ms  photo_possible=%s carries_ask=%s (film %d of %d)" % [
+		dest_id, Time.get_ticks_msec(),
+		str(SafariTransit.photo_possible(origin, dest_id)), str(carries_ask),
+		GameState.film_left_today(), GameState.film_capacity()])
 	_picker = null
 	_dest_id = dest_id
 	if not is_instance_valid(p):
@@ -1102,7 +1131,81 @@ func _on_destination_chosen(dest_id: String, p: Player) -> void:
 	if p == null:
 		_on_picker_cancelled()
 		return
-	_launch(p)
+	# WIRE round (2026-09-21). A PLAIN ERRAND IS ONE TAP AGAIN. The mode card used to open on EVERY
+	# trip, and on most of them its "Photo time!" tile was dead - so a quick run to the shops cost
+	# an extra tap to answer a question with one live answer. The card now opens only where a photo
+	# run is actually possible (`SafariTransit.photo_possible`: a lane exists, and the destination
+	# is not the Commons - UNLESS an open ask points there right now, S4 round,
+	# docs/STORY_SPINE_SPEC.md 2.5: `PhotoAsks.any_to`) - OR (S6 round, STORY_SPINE_SPEC.md 7.1 "A
+	# gated trip is silent") where a photo run is NOT possible but an ask still points at THIS trip
+	# (`PhotoAsks.for_trip`): the Professor's own gate (SafariTransit.is_professor_ask_open) can hide
+	# a neighbour's ask behind a silent one-tap errand, with no mode card and no reason - the player
+	# just finds no photo option and no explanation. That trip now still opens the mode card, with
+	# "Photo time!" disabled and `SafariTransit.photo_blocked_reason` on it (pad_mode_picker.gd's
+	# `setup` already reads that reason; nothing there needed to change). A trip with NO ask at all
+	# still falls straight through to `_launch(p)`, byte for byte the shipped launch - same walk to
+	# the hatch, same cutscene, same duration - exactly as it does in merge4. MEASURED, home ->
+	# Commons, 3 runs each, no ask open: the shipped build and this one both arrive in the
+	# 20.50-21.00 s bracket of the same Director timeline.
+	# THE SPACE SAFARI IS RETIRED (docs/PLANET_SAFARI_SPEC.md 15.1). With the one switch off, EVERY
+	# trip is the plain one-tap launch - no mode card, not even the "gated" one above, because an old
+	# save can still hold an open sky ask (a neighbour's old `photo` step, or the Professor's old
+	# lantern-fish ask) and `carries_ask` would otherwise open a card whose only live answer is
+	# "Just travelling". The flight path below stays on disk for the dev menu's switch.
+	if not SafariTransit.SPACE_SAFARI:
+		print("[PadTime] plain launch (space safari off)  t=%d ms  %s -> %s" % [
+			Time.get_ticks_msec(), origin, dest_id])
+		_launch(p)
+		return
+	var photo_possible := SafariTransit.photo_possible(origin, dest_id)
+	if not photo_possible and not carries_ask:
+		_launch(p)
+		return
+	if not photo_possible:
+		print("[PadTime] mode card opened GATED  t=%d ms  dest=%s reason=%s" % [
+			Time.get_ticks_msec(), dest_id, SafariTransit.photo_blocked_reason(origin, dest_id)])
+	_open_mode_picker(p)
+
+
+## MODE round: "Just travelling" or "Photo time!" (point 2), asked right after the destination is
+## picked and before anything boards. The cutscene modal from `_open_picker` is still up, so this is
+## just as safe from a stray hotkey as the destination card it replaces here. WIRE round: only
+## reached when a photo run is possible, so its "Photo time!" tile is never the dead one.
+func _open_mode_picker(p: Player) -> void:
+	print("[PadTime] mode card opened  t=%d ms" % Time.get_ticks_msec())
+	_mode_picker = MODE_PICKER_SCRIPT.new() as PadModePicker
+	_mode_picker.name = "ModePicker"
+	_mode_picker.setup(planet_id(), _dest_id)
+	add_child(_mode_picker)
+	_mode_picker.chosen.connect(_on_mode_chosen.bind(p))
+	_mode_picker.cancelled.connect(_on_picker_cancelled)
+
+
+func _on_mode_chosen(mode: String, p: Player) -> void:
+	_mode_picker = null
+	if not is_instance_valid(p):
+		p = _find_player()
+	if p == null:
+		_on_picker_cancelled()
+		return
+	if mode == "photo":
+		_launch_photo()
+	else:
+		_launch(p)
+
+
+## "Photo time!" — a limited-film safari flight (src/sky/safari_flight.gd) instead of the scripted
+## climb/cruise/descent below. No walk-to-hatch, no ignition: SafariRun plays its own 6 s "leaving
+## the pad" beat, so this trip only pays for one departure, not two stacked in front of each other.
+## `_busy` is left true (set by `_on_interacted`) and the pad is about to be freed by the scene
+## change anyway, so there is nothing to hand back on this side of the cut.
+func _launch_photo() -> void:
+	_interactable.enabled = false
+	if _compass != null:
+		_compass.retire()
+	EventBus.interact_prompt_changed.emit("")
+	SafariTransit.begin(planet_id(), _dest_id)
+	SceneRouter.go_to(SAFARI_FLIGHT_SCENE)
 
 
 ## `may_cut` is true only from `launch_to` (the replay board's "Fly back", Director timelines). The
@@ -1110,6 +1213,7 @@ func _on_destination_chosen(dest_id: String, p: Player) -> void:
 ## begun inside reach can measure 4.30-4.47 m by the time the card closes (polish critic round 2,
 ## 2026-09-13), and a distance test there turned ordinary Flys into the far-away cut.
 func _launch(p: Player, may_cut: bool = false) -> void:
+	print("[PadTime] shipped launch begins  t=%d ms  dest=%s" % [Time.get_ticks_msec(), _dest_id])
 	_begin_cutscene()
 	# The destination is known ~16 s before we land on it and the flight is dead time for the loader,
 	# so ask for everything the arrival is about to need NOW, on Godot's loader threads. See

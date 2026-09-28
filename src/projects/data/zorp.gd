@@ -112,12 +112,10 @@ extends RefCounted
 ## design land on the same bar. CLAUDE.md's "no fitted constants" rule argues against moving it without
 ## a timed play-through showing it is actually wrong (Phase 6).
 ##
-## Voice (docs/CORE_LOOP.md "World problems": Zorp is "the exclamation-heavy, curious alien who loves
-## floating"; npc_data.gd "zorp" entry - intro, greet and small_talk all read the same way: short
-## exclaiming bursts, a word repeated for emphasis ("Zorp is pleased. Zorp is very pleased!"), curious
-## asides, never quite certain his own guesses are right ("I grew a plant. It grew sideways. Rude.").
-## No Animal Crossing words (docs/ARCHITECTURE.md §1.1). Every line <= 60 characters, 1-3 lines per
-## list (project_system.gd "Writing").
+## Voice (docs/CAST_VOICES_DRAFT.md, approved 2026-09-27, with docs/STORY_HOME_SPEC.md 8.1): 
+## Zorp is a quirky, excitable grandpa who grows the glowing garden (his tentacles read as a
+## moustache; habit "Oh ho!"). No getting-Earth-wrong jokes (that is Norm's).
+## Plain English a 10-year-old reads once. Every line <= 60 characters.
 
 const ITEM_ID := "zorp_river_lamp"
 const RING_COUNT := 6
@@ -129,17 +127,19 @@ static func definition() -> Dictionary:
 		"part": "part_zorp",
 		"part_fit_scrap": 8,
 		"intro": [
-			"Oh no, oh no! My rivers are going DARK!",
-			"They used to glow all night! Now: barely.",
-			"You have a jetpack! Please, come look!",
+			"Oh no, oh no! My rivers are going dark!",
+			"They used to glow all night long. Now, barely.",
+			"I can't leave them dark. Not before I go!",
+			"You have a jetpack! Please, come and look!",
 		],
 		"part_lines": [
-			"The river HUMS again! Do you hear it? Hear it?!",
-			"Take this coil - wound from real river-light!",
-			"New fact: you are my best friend. Confirmed!",
+			"The river hums again! Can you hear it? Listen!",
+			"Take this coil. I wound it from river light!",
+			"Good luck out there! Find a home that sings!",
+			"You're my best friend now. My moustache says so!",
 		],
 		"part_again": [
-			"You lost the coil? I wound a spare. Obviously!",
+			"Lost the coil? Oh ho, I wound a spare!",
 		],
 		"items": [
 			{
@@ -171,17 +171,17 @@ static func definition() -> Dictionary:
 				},
 				"lines": {
 					"ask": [
-						"Fly the old course with me! Every ring, in order!",
-						"It shows where the glow used to reach. Come on!",
+						"Fly the old river path with me! Every ring!",
+						"It shows how far the glow used to go. Come on!",
 					],
 					"progress": [
-						"Still flying? The rings are not going anywhere!",
+						"Still flying? The rings will wait for you!",
 					],
 					"done": [
-						"Every ring! You really flew the whole old course!",
+						"Every ring! You flew the whole old river path!",
 					],
 					"tomorrow": [
-						"Rest that jetpack! It worked hard today.",
+						"Rest that jetpack now. It worked hard today.",
 					],
 				},
 			},
@@ -192,17 +192,17 @@ static func definition() -> Dictionary:
 				"marker_label": "dim spring",
 				"lines": {
 					"ask": [
-						"Three springs feed my river. All three: dim now.",
-						"Walk and find them? I will count from right here!",
+						"Three springs feed my river. All three are dim.",
+						"Can you find them? I'll wait right here!",
 					],
 					"progress": [
-						"Still searching? Dim springs hide in shadow.",
+						"Still looking? Dim springs hide in shadows.",
 					],
 					"done": [
-						"All three! Zorp knew you could do it. Zorp knew!",
+						"All three! I knew you could do it. I knew it!",
 					],
 					"tomorrow": [
-						"Enough searching for today! Rest a few hours!",
+						"That's enough looking for today! Rest a bit.",
 					],
 				},
 			},
@@ -216,17 +216,50 @@ static func definition() -> Dictionary:
 				"give": {ITEM_ID: 1},
 				"lines": {
 					"ask": [
-						"I made a river lamp! Stake it at the first spring.",
-						"One good light and the rest should catch. Should!",
+						"I made a river lamp! Put it at the first spring.",
+						"One good light, and the rest should catch. I hope!",
 					],
 					"progress": [
-						"Not glowing yet! The ring on the ground still waits.",
+						"Not glowing yet! Look for the ring on the ground.",
 					],
 					"done": [
-						"IT'S GLOWING! Oh look, look, it is really glowing!",
+						"IT'S GLOWING! Oh ho, look! It really glows!",
 					],
 					"tomorrow": [
-						"Already lit today! Come see it shine in a bit!",
+						"Already lit today! Come see it shine later.",
+					],
+				},
+			},
+			{
+				# STORY_SPINE (PLANET_SAFARI_SPEC.md 15.2, migrated from the retired sky "photo" step,
+				# same appended 4th-step slot, same neighbour lines shape - see project_system.gd's
+				# "planet_photo" schema entry). Subject id "crystal_chime" is the exact roster id from
+				# Zorp's own safari manifest (res://src/planet_safari/worlds/zorp.gd MANIFEST "roster"),
+				# checked at load against that same manifest.
+				"type": "planet_photo",
+				"title": "Photo: the Crystal Chime",
+				"planet": "zorp",
+				"kind": "subject",
+				"subject": "crystal_chime",
+				"grade": "Fair",
+				"lines": {
+					"ask": [
+						"One more thing before I go. My crystals SING!",
+						"Next safari here, snap one ringing. One last photo!",
+					],
+					"progress": [
+						"No chime yet? They ring by themselves. Wait!",
+					],
+					"already_have": [
+						"You already have one? Oh ho! Amazing!",
+					],
+					"smudge": [
+						"Ooh, a chime! But it's blurry. So blurry.",
+						"Hold the shutter down. Let the picture bloom!",
+					],
+					"done": [
+						"You got it! Ringing and sharp! Just like that!",
+						"That chime? It's what I fall asleep to. Every night.",
 					],
 				},
 			},

@@ -13,7 +13,7 @@ extends RefCounted
 ## First meeting ever, two short boxes shown once (NORM_SPEC §4.1).
 const INTRO: Array[String] = [
 	"Greetings, fellow Earth person. I am Norm. A normal human.",
-	"I would like to ask you normal human questions. A human custom, I believe.",
+	"I would like to ask normal human questions. A human custom.",
 ]
 
 ## The offer box (NORM_SPEC §4.2), asked with OFFER_OPTIONS as a 2-pill `ask()`.
@@ -47,7 +47,7 @@ const WRONG: Array[String] = [
 const WIN: Array[String] = [
 	"Three for three! A perfectly normal human score.",
 	"You know this game better than I know being human.",
-	"Excellent! I am filing you under 'suspiciously informed'.",
+	"Wow! You really know your human facts.",
 ]
 
 ## Picked as he waves and leaves, win or lose (NORM_SPEC §2 "one visit per appearance").
@@ -69,17 +69,17 @@ const HINTS: Array[String] = [
 ## _gold / norm_statue.
 const REWARD_LINES: Dictionary = {
 	"norm_trophy_bronze": [
-		"For you! A bronze trophy. I found it. Somewhere honest.",
+		"For you! A bronze trophy. A very normal gift.",
 	],
 	"norm_trophy_silver": [
-		"Silver this time! You are becoming disturbingly human.",
+		"Silver this time! Surprisingly human of you.",
 	],
 	"norm_trophy_gold": [
-		"Gold! The last rung. I am almost proud. Humans say that.",
+		"Gold! The top prize. I am almost proud. Humans say that.",
 	],
 	"norm_statue": [
 		"A statue of me! Put it anywhere. I will not mind. Much.",
-		"Another statue of me. I have lost count. You should keep one.",
+		"Another statue of me. I've lost count. You should keep one.",
 	],
 }
 

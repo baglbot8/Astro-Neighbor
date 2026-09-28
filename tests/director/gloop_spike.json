@@ -1,0 +1,289 @@
+[
+ {
+  "t": 0.5,
+  "log": "gloop spike: look, hand-over, next-morning payout"
+ },
+ {
+  "t": 4.0,
+  "log": "gloop spike: look + hand-over + morning payout"
+ },
+ {
+  "t": 4.4,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_look_from",
+   "args": [
+    2.6,
+    -5.6,
+    0.6,
+    1.6,
+    5.0
+   ]
+  }
+ },
+ {
+  "t": 5.8,
+  "capture": "a1_gameplay_distance"
+ },
+ {
+  "t": 6.2,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_stand_at",
+   "args": [
+    2.6,
+    3.2
+   ]
+  }
+ },
+ {
+  "t": 7.6,
+  "capture": "a2_close_idle"
+ },
+ {
+  "t": 8.2,
+  "capture": "a3_close_idle_2"
+ },
+ {
+  "t": 8.6,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_seed",
+   "args": [
+    3
+   ]
+  }
+ },
+ {
+  "t": 9.2,
+  "capture": "b1_three_prints_carried"
+ },
+ {
+  "t": 9.6,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "run_flow",
+   "args": []
+  }
+ },
+ {
+  "t": 10.6,
+  "capture": "b2_handover_intro"
+ },
+ {
+  "t": 11.0,
+  "tap": "interact"
+ },
+ {
+  "t": 11.6,
+  "tap": "interact"
+ },
+ {
+  "t": 12.4,
+  "capture": "b3_handover_talk"
+ },
+ {
+  "t": 12.8,
+  "tap": "interact"
+ },
+ {
+  "t": 13.4,
+  "tap": "interact"
+ },
+ {
+  "t": 14.1,
+  "capture": "b4_handover_juicy"
+ },
+ {
+  "t": 14.5,
+  "tap": "interact"
+ },
+ {
+  "t": 15.1,
+  "tap": "interact"
+ },
+ {
+  "t": 15.7,
+  "tap": "interact"
+ },
+ {
+  "t": 16.3,
+  "tap": "interact"
+ },
+ {
+  "t": 16.9,
+  "capture": "b5_handover_best"
+ },
+ {
+  "t": 17.3,
+  "tap": "interact"
+ },
+ {
+  "t": 17.9,
+  "tap": "interact"
+ },
+ {
+  "t": 18.5,
+  "tap": "interact"
+ },
+ {
+  "t": 19.1,
+  "tap": "interact"
+ },
+ {
+  "t": 19.7,
+  "tap": "interact"
+ },
+ {
+  "t": 20.3,
+  "tap": "interact"
+ },
+ {
+  "t": 21.1,
+  "capture": "b6_table_loaded"
+ },
+ {
+  "t": 21.5,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_look_from",
+   "args": [
+    2.6,
+    -5.6,
+    0.6,
+    1.6,
+    5.0
+   ]
+  }
+ },
+ {
+  "t": 22.55,
+  "capture": "b7_table_loaded_far"
+ },
+ {
+  "t": 23.0,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_next_day",
+   "args": []
+  }
+ },
+ {
+  "t": 24.8,
+  "capture": "c1_next_morning"
+ },
+ {
+  "t": 25.2,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_stand_at",
+   "args": [
+    2.6,
+    3.2
+   ]
+  }
+ },
+ {
+  "capture": "c1_next_morning",
+  "t": 25.6
+ },
+ {
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_stand_at",
+   "args": [
+    2.6,
+    3.2
+   ]
+  },
+  "t": 26.2
+ },
+ {
+  "capture": "c1b_morning_table",
+  "t": 27.6
+ },
+ {
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "run_flow",
+   "args": []
+  },
+  "t": 28.2
+ },
+ {
+  "capture": "c2_payout_open",
+  "t": 29.4
+ },
+ {
+  "tap": "interact",
+  "t": 29.85
+ },
+ {
+  "tap": "interact",
+  "t": 30.3
+ },
+ {
+  "tap": "interact",
+  "t": 30.75
+ },
+ {
+  "capture": "c3_payout_total",
+  "t": 31.65
+ },
+ {
+  "tap": "interact",
+  "t": 32.1
+ },
+ {
+  "tap": "interact",
+  "t": 32.55
+ },
+ {
+  "tap": "interact",
+  "t": 33.0
+ },
+ {
+  "capture": "c4_payout_best_seller",
+  "t": 33.9
+ },
+ {
+  "tap": "interact",
+  "t": 34.35
+ },
+ {
+  "tap": "interact",
+  "t": 34.8
+ },
+ {
+  "tap": "interact",
+  "t": 35.25
+ },
+ {
+  "capture": "c5_payout_reason",
+  "t": 36.15
+ },
+ {
+  "tap": "interact",
+  "t": 36.6
+ },
+ {
+  "tap": "interact",
+  "t": 37.05
+ },
+ {
+  "tap": "interact",
+  "t": 37.5
+ },
+ {
+  "tap": "interact",
+  "t": 37.95
+ },
+ {
+  "capture": "c6_table_empty",
+  "t": 39.15
+ },
+ {
+  "quit": true,
+  "t": 39.95
+ }
+]

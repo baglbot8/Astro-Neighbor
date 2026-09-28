@@ -99,6 +99,11 @@ var _player: Node3D
 var _last_pos := Vector3.ZERO
 var _walked := 0.0
 var _look_time := 0.0
+## Tips stay out of a planet safari (docs/PLANET_SAFARI_SPEC.md 8.2): every hint this file asks for,
+## key -> [text, icon, delay], until HintChannel has shown or retired it; and the ones pulled back
+## out of HintChannel's queue while `PhotoMode.active`, asked again the moment it ends.
+var _asked: Dictionary = {}
+var _held: Dictionary = {}
 
 
 func _ready() -> void:
@@ -110,6 +115,9 @@ func _ready() -> void:
 	EventBus.planet_leave_requested.connect(_on_leave_requested)
 	EventBus.scrap_changed.connect(_on_scrap_changed)
 	EventBus.ui_modal_opened.connect(_on_modal_opened)
+	# An old save still holding the retired lantern-fish sky ask becomes the Professor's new task
+	# (docs/PLANET_SAFARI_SPEC.md 15.3) on the first world it loads - before any trip or talk reads it.
+	ProfessorAsk.migrate_old_ask()
 
 	if not _intro_allowed():
 		return
@@ -193,10 +201,10 @@ func _complete_fly_on_arrival() -> void:
 	_set_beat(Beat.FLY, true)
 	var where := Journal.planet_name(GameState.current_planet_id)
 	if _campaign:
-		HintChannel.request("intro_flew", "You made it to %s! Ask around for help." % where, "check", 1.2)
+		_request_hint("intro_flew", "You made it to %s! Ask around for help." % where, "check", 1.2)
 	else:
-		HintChannel.request("intro_flew", "You flew! %s is all yours to poke about." % where, "check", 1.2)
-	HintChannel.request("intro_talk", _say_hello_text(), "heart", 3.0)
+		_request_hint("intro_flew", "You flew! %s is all yours to poke about." % where, "check", 1.2)
+	_request_hint("intro_talk", _say_hello_text(), "heart", 3.0)
 	# Flying is the last beat. A player who reached another world without doing the rest has
 	# plainly got the idea, so the rest is retired rather than nagged for.
 	_skip_all()
@@ -254,8 +262,55 @@ func _on_crash_finished(_skipped: bool) -> void:
 	_time = maxf(_time, GREET_DELAY - CRASH_TO_RADIO)
 
 
+# ============================================================================= tips vs the safari
+## Every hint this file asks for goes through here, so a planet safari can hold it back.
+func _request_hint(key: String, text: String, icon: String = "star", delay: float = 0.0) -> bool:
+	if key == "" or text == "" or HintChannel.was_shown(key):
+		return false
+	if _safari_on():
+		_held[key] = [text, icon, delay]
+		return true
+	_asked[key] = [text, icon, delay]
+	return HintChannel.request(key, text, icon, delay)
+
+
+## No tip on screen while the camera is the game (PhotoMode.active - a planet safari): anything of
+## ours still waiting in HintChannel's queue is taken back out (cancel: NOT marked seen) and asked
+## again, with a fresh wait, once the safari is over. HintChannel's own rules (once ever, never over a
+## modal, never stale) are untouched.
+func _hold_hints_for_photo_mode() -> void:
+	if _safari_on():
+		if _asked.is_empty():
+			return
+		# Only what is really still waiting: a hint HintChannel already showed, retired or dropped as
+		# stale must not come back after the safari.
+		var ch := HintChannel.get_or_create()
+		var pending: PackedStringArray = ch.pending_keys() if ch != null else PackedStringArray()
+		for key: String in _asked:
+			if pending.has(key):
+				HintChannel.cancel(key)
+				_held[key] = _asked[key]
+		_asked.clear()
+		return
+	if _held.is_empty():
+		return
+	var back := _held
+	_held = {}
+	for key: String in back:
+		var h: Array = back[key]
+		_request_hint(key, str(h[0]), str(h[1]), float(h[2]))
+
+
+## A planet safari is on from the moment it is agreed to until its review closes: PhotoMode covers the
+## three minutes, PlanetSafari.current the fades on either side (PhotoMode ends behind the black
+## before the review - a held tip let go there showed during the fade back, measured).
+func _safari_on() -> bool:
+	return PhotoMode.active or PlanetSafari.current != null
+
+
 # ============================================================================= per-frame
 func _process(delta: float) -> void:
+	_hold_hints_for_photo_mode()
 	if not _running or _greeting or _crashing:
 		return
 	_time += delta
@@ -299,7 +354,7 @@ func _tick_move(delta: float) -> void:
 	if _walked >= MOVE_DIST:
 		HintChannel.mark_acted(_hint_key(Beat.MOVE))
 		_set_beat(Beat.MOVE)
-		HintChannel.request("intro_moved", _moved_text(), "check")
+		_request_hint("intro_moved", _moved_text(), "check")
 		_advance()
 
 
@@ -325,7 +380,7 @@ func _rocket_seen() -> void:
 		return
 	HintChannel.mark_acted(_hint_key(Beat.ROCKET))
 	_set_beat(Beat.ROCKET)
-	HintChannel.request("intro_rocket_seen", "Rusty and dented. She'll only hop to nearby worlds.", "star", 0.3)
+	_request_hint("intro_rocket_seen", "Rusty and dented. She'll only hop to nearby worlds.", "star", 0.3)
 	if _beat == Beat.ROCKET:
 		_advance()
 
@@ -339,7 +394,7 @@ func _tick_hint() -> void:
 	if _beat_time < wait:
 		return
 	_hinted = true
-	HintChannel.request(_hint_key(_beat), _hint_text(_beat), _hint_icon(_beat))
+	_request_hint(_hint_key(_beat), _hint_text(_beat), _hint_icon(_beat))
 
 
 func _hint_key(b: int) -> String:
@@ -433,7 +488,7 @@ func _on_collectible_picked(kind: String, _world_pos: Vector3) -> void:
 	elif kind == "scrap":
 		line = "Scrap! It's handy for fixing things."
 		icon = _scrap_icon()
-	HintChannel.request("intro_collected", line, icon, 0.9)
+	_request_hint("intro_collected", line, icon, 0.9)
 	if _beat == Beat.COLLECT:
 		_advance()
 
@@ -443,7 +498,7 @@ func _on_scrap_changed(_new_amount: int, delta: int) -> void:
 		return
 	HintChannel.mark_acted(_hint_key(Beat.SCRAP))
 	_set_beat(Beat.SCRAP)
-	HintChannel.request("intro_scrapped", "Scrap! It mends rockets. Grab any you see.", _scrap_icon(), 0.9)
+	_request_hint("intro_scrapped", "Scrap! It mends rockets. Grab any you see.", _scrap_icon(), 0.9)
 	if _beat == Beat.SCRAP:
 		_advance()
 
@@ -453,7 +508,7 @@ func _on_decoration_placed(_planet_id: String, _instance_id: String, _item_id: S
 		return
 	HintChannel.mark_acted(_hint_key(Beat.PLACE))
 	_set_beat(Beat.PLACE)
-	HintChannel.request("intro_placed",
+	_request_hint("intro_placed",
 		"Yours now. Walk up and %s to move it." % MobileUI.interact_hint(), "check", 0.9)
 	if _beat == Beat.PLACE:
 		_advance()
@@ -493,7 +548,7 @@ func _on_leave_requested(_planet_id: String) -> void:
 func _on_favor_accepted(_favor_id: String) -> void:
 	var line := "Tap the journal button to see what you promised." if MobileUI.is_mobile() \
 		else "Press P, then Favours, to see what you promised."
-	HintChannel.request("journal_intro", line, "check", 2.6)
+	_request_hint("journal_intro", line, "check", 2.6)
 
 
 # ============================================================================= the radio call
@@ -631,6 +686,19 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
 		"Hello? Is this thing on? Oh! Professor Comet here.\nAre you all right down there?",
 		"Oh, thank the stars. I saw it all on my scope.\nWhat a tumble! Quite the landing, too.",
 	])
+	# THE METEOR (docs/STORY_HOME_SPEC.md 5.1): the story's very first mention of it, right after the
+	# crash, in the same unworried tone as the rest of this call - "not soon", never a countdown.
+	await runner.say(radio, [
+		"Bad timing, I'm afraid. There's a meteor coming.",
+		"Oh, not today! Not for ages. But folks are packing.",
+	])
+	# HIS FIRST TASK (docs/PLANET_SAFARI_SPEC.md 15.3, 2026-09-26; it replaces S4's lantern-fish sky ask,
+	# whose flight is retired): photograph a neighbour on their world and bring it to him at the
+	# Commons. Opened here, UNCONDITIONALLY, before the walkthrough choice below - both branches speak
+	# it in their own words. `ProfessorAsk.open_task` is a no-op once he has been paid (DONE_FLAG), so
+	# the dev menu's "replay call" can never re-open a finished task. He collects it in person -
+	# src/campaign/professor_ask.gd `run`, the only place the task is ever closed.
+	ProfessorAsk.open_task()
 	var solo: int = await runner.ask(radio, "Shall I talk you through it?", ["Yes, please", "I'll manage"])
 	if solo == 1:
 		# "I'll manage" tapped by accident is exactly the user's 2026-09-14 report - confirm before
@@ -639,6 +707,7 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
 		if skip_it:
 			await runner.say(radio, [
 				"Splendid. I'll keep my scope on you.\nShout if the sky misbehaves.",
+				"Oh — and when you visit a neighbour, snap\ntheir photo for my records? Bring it to the Commons.",
 			])
 			_skip_all()
 			return
@@ -648,6 +717,13 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
 		"Then check your rocket. I'm afraid she's badly\nbruised. She'll only reach the nearest worlds.",
 		"%s, Zorp and Bolt are a short hop.\nFly over and ask for help. Folk are kind here." % Journal.planet_name("hub"),
 		"I'll keep my scope on you. Off you go!",
+	])
+	# Come and see him at the Commons, with a neighbour's photo (spec 15.3) - one more box, right after
+	# his existing send-off above (kept intact). The first line is S4's, unchanged; the second used to
+	# ask for a lantern-fish from the retired flight.
+	await runner.say(radio, [
+		"Oh — one more thing. Come and see me at the\nCommons when you get a moment, would you?",
+		"And when you visit a neighbour, photograph them\nfor my records. Bring it along when you come.",
 	])
 
 

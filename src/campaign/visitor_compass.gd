@@ -107,6 +107,12 @@ func attach(n: NPC) -> void:
 	_icon_color = n.accent_color
 
 
+## TEST-ONLY HOOK (P2 GATE evidence, docs/PLANET_SAFARI_SPEC.md 7). Prints only.
+func debug_report(tag: String = "") -> void:
+	print("VISITORCOMPASS %s alpha=%.2f root_visible=%s photo_active=%s" % [
+		tag, _alpha, str(_root != null and _root.visible), str(PhotoMode.active)])
+
+
 func _ready() -> void:
 	layer = 4
 	_font = UIStyle.font()
@@ -120,7 +126,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_pulse += delta
-	var want := not EventBus.is_modal_open() and _evaluate()
+	# PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): a visitor pip is about today's
+	# story visit, never a safari subject.
+	var want := not EventBus.is_modal_open() and not PhotoMode.active and _evaluate()
 	var goal := 1.0 if want else 0.0
 	_alpha = move_toward(_alpha, goal, delta / FADE)
 	_root.visible = _alpha > 0.003

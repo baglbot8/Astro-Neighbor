@@ -1,0 +1,9 @@
+[
+  {"t": 1.0, "call": {"node": "/root/SkySpike/SkyWatch", "method": "debug_wait", "args": [1]}},
+  {"t": 1.2, "call": {"node": "/root/SkySpike/SkyWatch", "method": "debug_report", "args": ["waiting"]}},
+  {"t": 2.0, "capture": "W1_waiting"},
+  {"t": 5.0, "call": {"node": "/root/SkySpike/SkyWatch", "method": "debug_report", "args": ["arrived"]}},
+  {"t": 5.2, "call": {"node": "/root/SkySpike/SkyWatch", "method": "debug_lock"}},
+  {"t": 5.3, "capture": "W2_after_wait"},
+  {"t": 6.0, "quit": true}
+]

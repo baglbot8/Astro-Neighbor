@@ -8,6 +8,9 @@ extends Node3D
 ## rotates the camera; only the mouse / camera_left-right-up-down do (plus a slow auto-recenter
 ## while walking).
 ## Public: get_camera(), focus_on(pos, duration), release_focus(), orbit_front(), release_orbit().
+## First person (the planet safari, off by default — see the FP_* block): set_first_person(),
+## is_first_person(), set_fov_deg(), get_fov_deg(), get_view_camera(), set_look_sensitivity_scale(),
+## set_zoom_input_drives_fov(), get_view_pitch_deg().
 ## Touch front end (see the "external look / zoom" block): add_look(), add_look_px(), add_zoom(),
 ## set_zoom_distance(), get_zoom_distance(), get_zoom_range(), get_zoom_fraction().
 ## It also fades out any decoration standing between the camera and the astronaut, so hub props can
@@ -235,6 +238,42 @@ const LANDING_ORBIT_GRACE := 3.5
 ## deadzone by the time we see it — and comfortably below anything a player means as "walk".
 const GRACE_RELEASE_PUSH := 0.2
 
+# ============================================================================= first person (safari)
+## docs/PLANET_SAFARI_SPEC.md 3, 5.3, 7 (builder P1). The planet safari is played in FIRST PERSON, and
+## this rig's third-person follow can never look at the sky: its pitch is a HEIGHT angle over a pivot
+## above the player, clamped 6..72 deg, so the lens always points below the horizon. The first-person
+## branch is a separate mode of the same rig rather than a second camera, for one reason the spec
+## names: every look input the game has — captured mouse motion, the phone's drag-to-look
+## (`touch_controls.gd` -> `add_look_px`), the camera keys and the gamepad stick — already lands in
+## `_handle_input`, and the movement basis (`get_planar_forward`) already reads `_fwd`. A second
+## Camera3D would need all of that re-plumbed.
+##
+## OFF BY DEFAULT, and with it off not one line of the third-person path runs differently: every
+## first-person branch is behind `_fp`. While it is on the rig does NONE of the following: auto
+## recentre, prop fade, emote orbit, dialogue focus (`focus_on` / `orbit_front` are refused), spring
+## arm, look-at-a-pivot. The heading is the rig's own parallel-transported `_fwd` (pole-safe, see
+## `_process`), and the view has a real pitch `_fp_pitch` measured from the local horizon.
+##
+## Eye height: the centre of the astronaut's helmet dome, `AstronautModel.HELMET_CY` (1.087 m above
+## the feet), so the lens is exactly where the head is — not a second number that can drift from the
+## model.
+const FP_PITCH_MIN_DEG := -60.0
+const FP_PITCH_MAX_DEG := 80.0
+## The rig's own lens angle (see `_ready`), and the zoom stop the spec gives (5.3: "45 degrees down to
+## about 12").
+const FP_FOV_DEFAULT := 45.0
+const FP_FOV_MIN := 12.0
+## The render layer the astronaut is moved onto while first person is on (1-based, like
+## CrashAsteroid.FILL_LAYER = 20 and RocketModel.GROUND_LIGHT_LAYER = 19). Layer 17 is used by nothing
+## else in the project (grep `layers` / `cull_mask`, 2026-09-23: only layers 6, 19 and 20 are taken).
+## The first-person camera's cull mask drops this bit; the astronaut's `visible` is never touched,
+## because EventBus forces it back on after 12 s (event_bus.gd:151-175).
+const FP_HIDDEN_LAYER := 17
+const FP_HIDDEN_BIT := 1 << (FP_HIDDEN_LAYER - 1)
+## A physics step that moves the body further than this is a teleport (the safari's fade to the pad),
+## not a stride, and is not interpolated across.
+const FP_TELEPORT_STEP := 1.0
+
 var _player: PlanetBody
 var _camera: Camera3D
 var _up: Vector3 = Vector3.UP
@@ -358,6 +397,24 @@ var _ext_look := Vector2.ZERO
 ## Metres of zoom handed over since the last drain. Positive pulls the camera back.
 var _ext_zoom: float = 0.0
 
+# ---- first person (see the FP_* block above)
+var _fp := false
+## View pitch above the local horizon, radians; positive looks up at the sky.
+var _fp_pitch: float = 0.0
+var _fp_fov: float = FP_FOV_DEFAULT
+## Multiplies every look input while first person is on (the safari slows aiming with the camera up).
+var _look_scale: float = 1.0
+## When true, a pinch (`add_zoom`) and the wheel drive the first-person field of view instead of
+## being dropped. Off by default: the spec only zooms with the camera up, and the safari decides that.
+var _fp_zoom_drives_fov := false
+## The camera's cull mask before first person dropped FP_HIDDEN_BIT, restored on the way out.
+var _fp_saved_cull_mask: int = 0
+## The body's position at the last two physics steps, so the eye can be interpolated between them
+## (the body moves at the physics rate; a lens glued straight to it judders whenever a render frame
+## sees zero or two physics steps). Only recorded while first person is on.
+var _fp_prev_pos: Vector3 = Vector3.ZERO
+var _fp_cur_pos: Vector3 = Vector3.ZERO
+
 
 
 func _ready() -> void:
@@ -406,6 +463,10 @@ func _ready() -> void:
 	EventBus.ui_modal_opened.connect(_on_modal_changed)
 	EventBus.ui_modal_closed.connect(_on_modal_changed)
 	set_process_priority(10)
+	# First person records the body's position after the Player's own physics step (priority 0), and
+	# only while it is on - normal play never runs `_physics_process` here.
+	process_physics_priority = 10
+	set_physics_process(false)
 	_update_mouse_capture()
 
 
@@ -427,8 +488,13 @@ func _on_player_spawned(p: Node3D) -> void:
 
 
 func _bind_player(p: PlanetBody) -> void:
+	if _fp and _player != null and is_instance_valid(_player) and _player != p:
+		_set_player_fp_hidden(_player, false)
 	_player = p
 	_initialized = false
+	if _fp:
+		_set_player_fp_hidden(_player, true)
+		_fp_seed_positions()
 
 
 # ============================================================================= framing, per platform
@@ -515,6 +581,157 @@ func get_camera() -> Camera3D:
 	return _camera
 
 
+# ============================================================================= first person: public API
+## Turns the first-person view on or off (docs/PLANET_SAFARI_SPEC.md 5.3). Off by default. Both
+## directions are instant: the safari fades over the switch.
+##
+## ON: the lens moves to the helmet, level with the horizon along the current heading, at the
+## first-person field of view; the astronaut, its blob shadow and its dust move to FP_HIDDEN_LAYER and
+## the camera stops drawing that layer; any faded prop is put back solid; a running emote orbit or
+## dialogue focus is dropped. OFF: all of that is undone — the astronaut's own layers restored, the
+## cull mask restored, the lens back at FP_FOV_DEFAULT, the look scale back at 1 — and the follow
+## camera is snapped behind the astronaut on whatever heading first person left it on, at the zoom and
+## pitch the player had before. Calling it with the state it already has does nothing.
+func set_first_person(on: bool) -> void:
+	if on == _fp or _camera == null:
+		return
+	_fp = on
+	if on:
+		# Nothing cinematic may keep steering `_fwd` underneath the view.
+		if _focus_tween:
+			_focus_tween.kill()
+		if _orbit_tween:
+			_orbit_tween.kill()
+		_focus_weight = 0.0
+		_orbit_weight = 0.0
+		_has_saved_fwd = false
+		_restoring_fwd = false
+		_fp_pitch = 0.0
+		_fp_saved_cull_mask = _camera.cull_mask
+		_camera.cull_mask = _fp_saved_cull_mask & ~FP_HIDDEN_BIT
+		_camera.fov = _fp_fov
+		# The fade is a third-person tool (it ghosts props between the lens and the astronaut). Put every
+		# faded prop back solid NOW, the same way the cutscene guard in `_update_occluder_fade` does.
+		for id: int in _faded:
+			_force_solid(_faded[id] as Dictionary)
+		_faded.clear()
+		_probe_timer = 0.0
+		_lift = 0.0
+		_set_player_fp_hidden(_player, true)
+		_fp_seed_positions()
+		set_physics_process(true)
+		if _player != null and is_instance_valid(_player) and _initialized:
+			_snap_to_target()
+	else:
+		set_physics_process(false)
+		_camera.cull_mask = _fp_saved_cull_mask
+		_camera.fov = FP_FOV_DEFAULT
+		_look_scale = 1.0
+		_fp_zoom_drives_fov = false
+		_set_player_fp_hidden(_player, false)
+		_moving_time = 0.0
+		_lift = 0.0
+		if _player != null and is_instance_valid(_player) and _initialized:
+			_snap_to_target()
+
+
+func is_first_person() -> bool:
+	return _fp
+
+
+## The first-person field of view in degrees (vertical, Camera3D.fov), clamped to
+## FP_FOV_MIN..FP_FOV_DEFAULT (12..45). Remembered across on/off; applied to the lens only while first
+## person is on, so the follow camera always keeps its 45.
+func set_fov_deg(deg: float) -> void:
+	if not is_finite(deg):
+		return
+	_fp_fov = clampf(deg, FP_FOV_MIN, FP_FOV_DEFAULT)
+	if _fp and _camera:
+		_camera.fov = _fp_fov
+
+
+func get_fov_deg() -> float:
+	return _fp_fov
+
+
+## The Camera3D that renders the view — the same node as `get_camera()`, in either mode. For frame
+## capture, `unproject_position` and occlusion rays from the lens.
+func get_view_camera() -> Camera3D:
+	return _camera
+
+
+## Scales every look input (mouse, touch drag, keys, stick) while first person is on. 1.0 is normal;
+## the safari lowers it with the camera up so a zoomed lens aims finely. Clamped to 0.05..4. Reset to
+## 1.0 when first person turns off.
+func set_look_sensitivity_scale(k: float) -> void:
+	if not is_finite(k):
+		return
+	_look_scale = clampf(k, 0.05, 4.0)
+
+
+## Opt-in for the safari's camera-up mode: while first person is on and this is true, a pinch
+## (`add_zoom`, from the phone) and the mouse wheel change the field of view — the full pinch travel of
+## the third-person zoom range maps onto the full 45..12 deg lens range — instead of being dropped.
+## Reset to false when first person turns off.
+func set_zoom_input_drives_fov(on: bool) -> void:
+	_fp_zoom_drives_fov = on
+
+
+## First-person view pitch above the horizon, degrees (for a HUD or a test).
+func get_view_pitch_deg() -> float:
+	return rad_to_deg(_fp_pitch)
+
+
+## Moves the player's astronaut (model, blob shadow, dust, anything else parented under it) onto or
+## off FP_HIDDEN_LAYER. The Player owns its own node tree, so it does the walk; see
+## `Player.set_first_person_hidden`.
+func _set_player_fp_hidden(p: Node, on: bool) -> void:
+	if p == null or not is_instance_valid(p):
+		return
+	if p.has_method("set_first_person_hidden"):
+		p.call("set_first_person_hidden", on, FP_HIDDEN_BIT)
+
+
+func _fp_seed_positions() -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	_fp_prev_pos = _player.global_position
+	_fp_cur_pos = _fp_prev_pos
+
+
+## Runs only while first person is on (see `set_first_person`), after the Player's own step.
+func _physics_process(_delta: float) -> void:
+	if not _fp or _player == null or not is_instance_valid(_player):
+		return
+	var p := _player.global_position
+	_fp_prev_pos = _fp_cur_pos
+	_fp_cur_pos = p
+	if _fp_prev_pos.distance_to(_fp_cur_pos) > FP_TELEPORT_STEP:
+		_fp_prev_pos = _fp_cur_pos
+
+
+## Where the body is this render frame: between the last two physics positions by the engine's own
+## interpolation fraction. Exact, no smoothing constant; lags the physics by at most one step.
+func _fp_body_pos() -> Vector3:
+	# A teleport made outside the physics step (a fade to the pad) is picked up on this frame, not the
+	# next physics tick.
+	if _player.global_position.distance_to(_fp_cur_pos) > FP_TELEPORT_STEP:
+		_fp_seed_positions()
+	return _fp_prev_pos.lerp(_fp_cur_pos, clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0))
+
+
+## The first-person lens transform: eye at the helmet, heading `_fwd`, pitch `_fp_pitch`. Built from
+## the three axes directly rather than `Basis.looking_at`, which degenerates as the view nears `_up`.
+func _fp_transform() -> Transform3D:
+	var eye := _fp_body_pos() + _up * AstronautModel.HELMET_CY
+	var right := _fwd.cross(_up).normalized()
+	var c := cos(_fp_pitch)
+	var s := sin(_fp_pitch)
+	var look := _fwd * c + _up * s
+	var view_up := -_fwd * s + _up * c
+	return Transform3D(Basis(right, view_up, -look).orthonormalized(), eye)
+
+
 # ================================================================= external look / zoom (touch API)
 ## Orbits the camera by `delta_deg` DEGREES: x yaws (positive = the same direction a rightward mouse
 ## drag or `camera_right` turns it), y pitches (positive = the same direction a downward mouse drag
@@ -541,8 +758,13 @@ func add_look(delta_deg: Vector2) -> void:
 ## The same thing in SCREEN PIXELS, converted with the constants mouse look uses
 ## (MOUSE_YAW_DEG_PER_PX / MOUSE_PITCH_DEG_PER_PX). Use this for a finger drag and a touch drag will
 ## feel like a mouse drag of the same length, including when the player has changed the sensitivity.
+##
+## In first person a pixel is the same angle on both axes (the yaw rate): the third-person pitch is a
+## camera HEIGHT with a 66 deg range and was deliberately made slower, but a first-person drag moves
+## the view itself, and a diagonal drag that bent off its line would feel like aiming through syrup.
 func add_look_px(delta_px: Vector2) -> void:
-	add_look(Vector2(delta_px.x * MOUSE_YAW_DEG_PER_PX, delta_px.y * MOUSE_PITCH_DEG_PER_PX))
+	var pitch_per_px := MOUSE_YAW_DEG_PER_PX if _fp else MOUSE_PITCH_DEG_PER_PX
+	add_look(Vector2(delta_px.x * MOUSE_YAW_DEG_PER_PX, delta_px.y * pitch_per_px))
 
 
 ## Changes the follow distance by `delta_m` METRES. Positive pulls the camera back (fingers pinching
@@ -589,7 +811,11 @@ func is_look_input_allowed() -> bool:
 
 
 ## Dollies to frame the player and `pos` together (dialogue framing). Blends in over `duration`.
+##
+## Refused in first person: the view is the player's eyes and nothing else aims it.
 func focus_on(pos: Vector3, duration: float = 0.6) -> void:
+	if _fp:
+		return
 	_focus_pos = pos
 	if not _has_saved_fwd:
 		_fwd_saved = _fwd
@@ -659,6 +885,9 @@ func focus_on(pos: Vector3, duration: float = 0.6) -> void:
 ## away from the rocket, and being 151 deg wrong about which way "forward" is has now been reported
 ## three separate times. An emote the player asks for after the grace expires still gets its orbit.
 func orbit_front(duration: float = 0.5) -> void:
+	# First person: there is no astronaut on screen to swing round to.
+	if _fp:
+		return
 	if _focus_weight > 0.5:
 		return
 	if not _orbit_grace_off and Time.get_ticks_msec() < _orbit_grace_until_ms:
@@ -867,12 +1096,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("zoom_in"):
 		_zoom_from_event = true
 		if not EventBus.is_modal_open():
-			_set_zoom(_dist_target - ZOOM_STEP)
+			_zoom_step(-ZOOM_STEP)
 		return
 	if event.is_action_pressed("zoom_out"):
 		_zoom_from_event = true
 		if not EventBus.is_modal_open():
-			_set_zoom(_dist_target + ZOOM_STEP)
+			_zoom_step(ZOOM_STEP)
 		return
 	if event.is_action_pressed("ui_cancel") and _mouse_look:
 		_mouse_freed_by_player = true
@@ -1121,6 +1350,14 @@ func _process(delta: float) -> void:
 
 	_consume_orbit_grace()
 	_handle_input(delta)
+	if _fp:
+		# First person: the lens IS the view. No recentre, no smoothing, no spring arm, no prop fade,
+		# no pivot to look at. `_smoothed_*` are kept in step so nothing stale is left behind.
+		var t := _fp_transform()
+		_smoothed_pos = t.origin
+		_smoothed_quat = t.basis.get_rotation_quaternion()
+		_camera.global_transform = t
+		return
 	_auto_recenter(delta)
 
 	var pivot := _player.global_position + _up * PIVOT_HEIGHT
@@ -1196,6 +1433,13 @@ func _process(delta: float) -> void:
 
 
 func _snap_to_target() -> void:
+	if _fp:
+		_fp_seed_positions()
+		var t := _fp_transform()
+		_smoothed_pos = t.origin
+		_smoothed_quat = t.basis.get_rotation_quaternion()
+		_camera.global_transform = t
+		return
 	var pivot := _player.global_position + _up * PIVOT_HEIGHT
 	_smoothed_pos = pivot - _fwd * cos(_pitch) * _dist + _up * sin(_pitch) * _dist
 	_smoothed_quat = Basis.looking_at((pivot - _smoothed_pos).normalized(), _up).get_rotation_quaternion()
@@ -1236,6 +1480,10 @@ func _handle_input(delta: float) -> void:
 
 	# ---- external zoom (pinch). Applied straight to the distance with no tween, so it tracks the
 	# fingers; the wheel keeps its ease below.
+	if _fp:
+		if _fp_zoom_drives_fov and absf(ext_zoom) > 0.00001:
+			set_fov_deg(_fp_fov + ext_zoom * _fov_per_zoom_metre())
+		ext_zoom = 0.0
 	if absf(ext_zoom) > 0.00001:
 		if _zoom_tween:
 			_zoom_tween.kill()
@@ -1252,6 +1500,8 @@ func _handle_input(delta: float) -> void:
 	yaw_rad += deg_to_rad(ext_yaw_deg) * sens
 	if invert_x:
 		yaw_rad = -yaw_rad
+	if _fp:
+		yaw_rad *= _look_scale
 	if absf(yaw_rad) > 0.00001:
 		_fwd = _fwd.rotated(_up, -yaw_rad).normalized()
 		_moving_time = 0.0
@@ -1267,6 +1517,25 @@ func _handle_input(delta: float) -> void:
 	# ---- pitch. Mouse DOWN raises `_pitch`, which lifts the camera and tilts the view downward -
 	# the standard non-inverted third-person mapping, and the same direction camera_down already had.
 	var pitch_in := Input.get_axis("camera_down", "camera_up")
+	if _fp:
+		# FIRST PERSON. `pitch_rad` below keeps the third-person meaning — positive tilts the view
+		# further DOWN, which is what a downward mouse or finger drag does in both modes — so the view
+		# pitch takes it with the opposite sign. The keys and the stick are the one exception: in third
+		# person `camera_up` raises the CAMERA (so the view tips down), but with the lens at the eye
+		# "camera up" can only sensibly mean look up, so their sign is flipped here. A pixel is the yaw
+		# angle on both axes in first person (see `add_look_px`).
+		var fp_rad := -pitch_in * deg_to_rad(PITCH_SPEED_DEG) * delta
+		if _mouse_look:
+			fp_rad += mouse_y * deg_to_rad(MOUSE_YAW_DEG_PER_PX) * sens
+		fp_rad += deg_to_rad(ext_pitch_deg) * sens
+		if invert_y:
+			fp_rad = -fp_rad
+		fp_rad *= _look_scale
+		if absf(fp_rad) > 0.00001:
+			_fp_pitch = clampf(_fp_pitch - fp_rad, deg_to_rad(FP_PITCH_MIN_DEG), deg_to_rad(FP_PITCH_MAX_DEG))
+		pitch_in = 0.0
+		mouse_y = 0.0
+		ext_pitch_deg = 0.0
 	var pitch_rad := pitch_in * deg_to_rad(PITCH_SPEED_DEG) * delta
 	if _mouse_look:
 		pitch_rad += mouse_y * deg_to_rad(MOUSE_PITCH_DEG_PER_PX) * sens
@@ -1283,9 +1552,26 @@ func _handle_input(delta: float) -> void:
 	if zoom_by_event:
 		return
 	if Input.is_action_just_pressed("zoom_in"):
-		_set_zoom(_dist_target - ZOOM_STEP)
+		_zoom_step(-ZOOM_STEP)
 	elif Input.is_action_just_pressed("zoom_out"):
-		_set_zoom(_dist_target + ZOOM_STEP)
+		_zoom_step(ZOOM_STEP)
+
+
+## One wheel notch / zoom key. Third person: the follow distance, exactly as before. First person: the
+## field of view when the safari has opted in (`set_zoom_input_drives_fov`), otherwise nothing - the
+## follow distance must come back out of the safari where the player left it.
+func _zoom_step(step_m: float) -> void:
+	if _fp:
+		if _fp_zoom_drives_fov:
+			set_fov_deg(_fp_fov + step_m * _fov_per_zoom_metre())
+		return
+	_set_zoom(_dist_target + step_m)
+
+
+## Degrees of lens per metre of third-person zoom: the whole zoom range maps onto the whole lens range,
+## so a pinch that would take the follow camera from fully in to fully out takes the lens from 12 to 45.
+func _fov_per_zoom_metre() -> float:
+	return (FP_FOV_DEFAULT - FP_FOV_MIN) / maxf(dist_max() - dist_min(), 0.001)
 
 
 func _set_zoom(target: float) -> void:

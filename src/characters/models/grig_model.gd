@@ -136,6 +136,22 @@ const STALK_R := 0.052
 const LID_RING_R := 0.130
 const LID_TUBE := 0.018
 const LID_TILT := -0.20
+## THE UPPER EYELID (2026-09-27, the user: Grig should read "a little grumpy"). A skin-coloured cap
+## over the top of the eyeball, cut FLAT so its edge is a level line across the top of the pupil:
+## a heavy-lidded, unimpressed look, still one big soft eye. It is the SAME slot as the ridge (the
+## lid family of the hard vocabulary), not a third one, and it lifts clear for the happy "^" and the
+## surprised "O" so those expressions are unchanged.
+## AN ELLIPSOID, NOT A SPHERE. The pupil is a FLAT disc (0.088 x 0.092 x 0.030) centred 0.094 out
+## and pitched down 8 deg, so its upper rim stands 0.131-0.133 from the ball centre: a 0.128 sphere
+## rendered BEHIND the pupil, and a 0.140 sphere cleared it but overhung the 0.112 ball by 28 mm a side
+## and read as a mushroom hat (both measured on real-world frames). So the lid hugs the ball at the
+## sides (x 0.120) and reaches forward only where the pupil is (z 0.148). Sampled over the pupil
+## surface above the cut, the largest ellipsoid metric is 0.952, i.e. the pupil stays inside.
+## The cut at y 0.042 covers the top 20 % of the pupil (y -0.104..0.078) and leaves the glint clear.
+const EYELID_SEMI := Vector3(0.120, 0.124, 0.148)
+const EYELID_CUT_Y := 0.042
+const EYELID_RIM := 0.075            ## rim tube, in the lid's unit space (~9 mm)
+const EYELID_LIFT := 0.80            ## radians the lid swings back for happy / surprised
 ## How far the stalk is allowed to trail the head, and how fast it catches up.
 ## 2.8 rather than the first build's 3.4: measured on a real head turn the faster filter only trailed
 ## 0.053 rad, which on a 0.226 m stalk moves the eyeball 12 mm and does not read at all. At 2.8 an
@@ -259,6 +275,8 @@ const BELT_Y := 0.318
 
 var _eye_pivot: Node3D             ## everything on the stalk, rotated about the stalk base
 var _lid: Node3D
+var _eyelid: Node3D
+var _eyelid_lift: float = 0.0
 var _tally: Node3D
 var _eye_follow_yaw: float = 0.0
 var _eye_follow_pitch: float = 0.0
@@ -380,6 +398,18 @@ func _build_stalk() -> void:
 	_lid.rotation.x = LID_TILT
 	_mi(arc_tube(LID_RING_R, LID_TUBE, deg_to_rad(14.0), deg_to_rad(166.0), 14, 6),
 		_toon(SKIN_DEEP, _matte({"rim": 0.02})), _lid, Vector3.ZERO, "Ridge")
+	# The upper eyelid (see EYELID_R): a flat-cut cap on the ball centre plus a soft rim along its
+	# edge, so the lid has a thickness instead of a paper edge. Rotating `_eyelid` about X swings it.
+	# Built in unit space and scaled to EYELID_SEMI on the node, so rotating it swings it rigidly.
+	_eyelid = _node("Eyelid", _head, STALK_TIP)
+	_eyelid.scale = EYELID_SEMI
+	var h := EYELID_CUT_Y / EYELID_SEMI.y
+	var m_lid := _toon(SKIN, _matte({"spec": 0.04, "rim": 0.02}))
+	_mi(_cap_mesh(1.0, h, 5, 20), m_lid, _eyelid, Vector3.ZERO, "Cap")
+	var rim := _node("Rim", _eyelid, Vector3(0.0, h, 0.0))
+	rim.rotation.x = PI * 0.5
+	_mi(arc_tube(sqrt(1.0 - h * h), EYELID_RIM, PI - 0.35, TAU + 0.35, 12, 5),
+		m_lid, rim, Vector3.ZERO, "Edge")
 	# `_add_eyestalks` parents the stem and the eyeball to `_head` and re-positions `_eyes[0]` (which
 	# lives under `_face`). `_face` sits at the head origin with no rotation, so head-local and
 	# face-local are the same frame and the transforms below carry across untouched.
@@ -393,8 +423,48 @@ func _build_stalk() -> void:
 	if not _eyes.is_empty():
 		riders.append(_eyes[0])
 	riders.append(_lid)
+	riders.append(_eyelid)
 	for n: Node3D in riders:
 		_adopt(n, _eye_pivot, STALK_BASE)
+
+
+## A spherical cap of radius `r` above the plane y = `h`, open at the cut (the eyeball fills it).
+## Wound like Godot's own primitives - `(b-a) x (c-a)` points INWARD, which is what `toon_soft`'s
+## cull_back draws as the outside (see ChibiModel's winding note) - checked per triangle rather than
+## assumed, with outward normals.
+static func _cap_mesh(r: float, h: float, rings: int, segs: int) -> ArrayMesh:
+	var phi_max := acos(clampf(h / r, -1.0, 1.0))
+	var pts: Array[PackedVector3Array] = []
+	for i in rings + 1:
+		var phi := phi_max * float(i) / float(rings)
+		var row := PackedVector3Array()
+		for j in segs + 1:
+			var th := TAU * float(j) / float(segs)
+			row.append(Vector3(sin(phi) * cos(th), cos(phi), sin(phi) * sin(th)) * r)
+		pts.append(row)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in rings:
+		for j in segs:
+			var a := pts[i][j]
+			var b := pts[i + 1][j]
+			var c := pts[i + 1][j + 1]
+			var d := pts[i][j + 1]
+			var tris: Array = [[a, b, c]]
+			if i > 0:
+				tris.append([a, c, d])
+			for t: Array in tris:
+				var v0: Vector3 = t[0]
+				var v1: Vector3 = t[1]
+				var v2: Vector3 = t[2]
+				if (v1 - v0).cross(v2 - v0).dot(v0 + v1 + v2) > 0.0:
+					var tmp := v1
+					v1 = v2
+					v2 = tmp
+				for v: Vector3 in [v0, v1, v2]:
+					st.set_normal(v.normalized())
+					st.add_vertex(v)
+	return st.commit()
 
 
 ## Merges `extra` over a copy of `base`, so a const opts dict can be reused with a couple of keys
@@ -734,6 +804,15 @@ func _animate_extras(delta: float) -> void:
 		var think := clampf(-pose(P.EXTRA_A), 0.0, 1.0)
 		var talk := clampf(pose(P.EXTRA_A), 0.0, 1.0)
 		_lid.rotation.x = LID_TILT - 0.26 * think + 0.10 * talk
+	# The eyelid rests over the top of the pupil (the grumpy resting face) and swings back (+X
+	# rotation lifts the front edge) for the happy "^" and the surprised "O", so both still read.
+	if _eyelid != null:
+		var lift := 0.0
+		if pose(P.EYE_HAPPY) > 0.5 or pose(P.EYE_ROUND) > 0.5:
+			lift = 1.0
+		lift = maxf(lift, clampf((pose(P.EYE_WIDE) - 1.0) / 0.35, 0.0, 1.0))
+		_eyelid_lift = lerpf(_eyelid_lift, lift, 1.0 - exp(-14.0 * delta))
+		_eyelid.rotation.x = EYELID_LIFT * _eyelid_lift
 	# The tally slabs swing on their cord: same first-order trick, driven by the torso roll at 0.4x.
 	# `_torso_pivot` applies -TORSO_ROLL, so a positive difference here is the slabs hanging behind
 	# the body as it rolls out from under them.

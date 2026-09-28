@@ -1,0 +1,6 @@
+[{"t": 1.6, "capture": "day_card"},
+ {"t": 2.2, "call": {"node": "/root/SafariFlight", "method": "_start_flight"}},
+ {"t": 12.0, "capture": "day_cabin_a"},
+ {"t": 34.0, "capture": "day_cabin_b"},
+ {"t": 58.0, "capture": "day_cabin_c"},
+ {"t": 64.0, "quit": true}]

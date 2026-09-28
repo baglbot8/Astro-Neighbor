@@ -43,7 +43,7 @@ func _register_builtin() -> void:
 	# Fen and Grig. Without these two the ids in fen.tres / grig.tres `collectible_kind` resolve to
 	# an empty catalog entry: the pickup has no name, no icon colour and no journal line.
 	register({"id": "salt_bloom", "name": "Salt Bloom", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A crust flower grown at a pool's edge.", "icon_color": "#e6dcc4"})
-	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of step. Grig numbers them.", "icon_color": "#d8cba4"})
+	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of chalk from Grig's stairs.", "icon_color": "#d8cba4"})
 	# BUILD_PLAN Phase 1 "D: scrap and economy" (CORE_LOOP.md "Scrap and stardust"). Grows on every
 	# world, including home; picking one up calls GameState.add_scrap (collectible.gd). icon_color
 	# matches the metal/rust of its own pickup mesh and the HUD scrap pill (hud.gd ScrapIcon) - grey,

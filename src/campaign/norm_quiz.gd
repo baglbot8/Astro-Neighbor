@@ -13,6 +13,12 @@ extends RefCounted
 ##   "parts": int               GameState.rocket_part_count() must be >= this
 ##   "story": bool               true requires GameState.story_done; absent/false gates nothing
 ##
+## `dynamic` (S4 round, THE ORDER BUG fix below): when set, "answers" is IGNORED - `_eligible`
+## checks `_dynamic_known` instead of (or as well as) `needs`, and `_answers_for` builds the real
+## three answers from THIS SAVE at ask time, never from a literal. One of "order_first",
+## "order_last", or "part_of:<npc>" - see the ship-parts block below for why a fixed parts-count
+## gate cannot answer any of these three shapes of question.
+##
 ## SOURCES (NORM_SPEC §5: "every right answer is TRUE in the game's own data"): each answer below is
 ## a literal or structural fact from src/characters/npc_data.gd, the src/planet/data/*.tres files,
 ## src/campaign/campaign_data.gd, and the mini-game data (src/minigames/minigame_system.gd + the
@@ -44,21 +50,21 @@ const QUESTIONS: Array[Dictionary] = [
 	# ND: bolt.planet == "bolt"; PT bolt.tres display_name "Bolt's Chrome Yard".
 
 	# ---- neighbours: jobs ---------------------------------------------------------------------
-	{"id": "npc_job_zorp", "q": "Fellow human, what does Zorp collect?",
-		"answers": ["Facts about Earth", "Old bolts", "Falling stars"], "needs": {"met": ["zorp"]}},
-	# ND zorp.intro: "I am Zorp. I collect facts about Earth."
+	{"id": "npc_job_zorp", "q": "Fellow human, what does Zorp grow?",
+		"answers": ["The glowing garden", "Old bolts", "Carved stairs"], "needs": {"met": ["zorp"]}},
+	# ND zorp.intro: "I'm Zorp. I grow the glowing garden here."
 	{"id": "npc_job_bolt", "q": "Fellow human, what does Bolt count, endlessly?",
 		"answers": ["Bolts", "Stars", "Footsteps"], "needs": {"met": ["bolt"]}},
 	# ND bolt.intro: "I have counted 4,181 bolts. So far."
 	{"id": "npc_job_fen", "q": "Fellow human, how does Fen spend the day?",
-		"answers": ["Watching the pools", "Counting stars", "Selling clothes"], "needs": {"met": ["fen"]}},
-	# ND fen.intro: "I am Fen. I watch the pools. That is the work."
-	{"id": "npc_job_grig", "q": "Fellow human, what does Grig spend all day cutting?",
-		"answers": ["Steps", "Ribbons", "Wires"], "needs": {"met": ["grig"]}},
-	# ND grig.intro: "I am Grig. I cut the steps. All of them."
-	{"id": "npc_job_vela", "q": "Fellow human, what does Vela keep on her world?",
-		"answers": ["The sky array", "A herd of goats", "A radio station"], "needs": {"met": ["vela"]}},
-	# ND vela.intro: "I am Vela. I keep the array and its records."
+		"answers": ["Sunbathing", "Counting stars", "Selling clothes"], "needs": {"met": ["fen"]}},
+	# ND fen.small_talk: "Sunbathing is my job. I'm very good at it."
+	{"id": "npc_job_grig", "q": "Fellow human, what does Grig spend all day carving?",
+		"answers": ["Stairs", "Ribbons", "Wires"], "needs": {"met": ["grig"]}},
+	# ND grig.intro: "I'm Grig. I carved the big stairs up this hill."
+	{"id": "npc_job_vela", "q": "Fellow human, what do Vela's dishes hear?",
+		"answers": ["Songs from far away", "A herd of goats", "A radio station"], "needs": {"met": ["vela"]}},
+	# ND vela.intro: "I'm Vela. My dishes hear songs from far away."
 	{"id": "npc_job_pip_pop", "q": "Fellow human, which two run Cosmo Depot together?",
 		"answers": ["Pip and Pop", "Stella and Nova", "Grig and Fen"], "needs": {"met": ["pip", "pop"]}},
 	# ND pip.intro: "Welcome to Cosmo Depot! I'm Pip!"; pop.intro: "...and that's our shop! I'm Pop!"
@@ -73,36 +79,36 @@ const QUESTIONS: Array[Dictionary] = [
 	# ND mayor_orbit.intro: "I'm Professor Comet. I watch the sky."
 
 	# ---- neighbours: looks and sayings ---------------------------------------------------------
-	{"id": "npc_saying_pip", "q": "Fellow human, how many antennae does Pip have?",
-		"answers": ["One", "Two", "Three"], "needs": {"met": ["pip"]}},
-	# ND pip.small_talk: "One antenna. Best antenna. Fact."
-	{"id": "npc_saying_pop", "q": "Fellow human, how many antennae does Pop have?",
-		"answers": ["Two", "One", "None"], "needs": {"met": ["pop"]}},
-	# ND pop.intro: "Two antennae. Double the listening!"
-	{"id": "npc_family_pop", "q": "Fellow human, Pop is Pip's what?",
-		"answers": ["Brother", "Cousin", "Boss"], "needs": {"met": ["pip", "pop"]}},
-	# ND pip.intro: "That's my brother Pop. He has two antennae."
-	{"id": "npc_saying_stella", "q": "Finish Stella's line: visor tints are the new ___",
-		"answers": ["Hemlines", "Sunglasses", "Footwear"], "needs": {"met": ["stella"]}},
-	# ND stella.small_talk: "Visor tints are the new hemlines."
+	{"id": "npc_saying_pip", "q": "Fellow human, who drew the shop's star logo?",
+		"answers": ["Pip", "Pop", "Stella"], "needs": {"met": ["pip"]}},
+	# ND pip.small_talk: "Our star logo? I drew it. Mostly."
+	{"id": "npc_saying_pop", "q": "Fellow human, what is Pop known for?",
+		"answers": ["Great hugs", "Fast talk", "Loud singing"], "needs": {"met": ["pop"]}},
+	# ND pop.intro: "I give great hugs. Ask anyone."
+	{"id": "npc_family_pop", "q": "Fellow human, what does Pip call Pop?",
+		"answers": ["Best friend", "Cousin", "Boss"], "needs": {"met": ["pip", "pop"]}},
+	# ND pip.intro: "Pop's my best friend. He's the muscle."
+	{"id": "npc_saying_stella", "q": "Fellow human, finish Stella's rule: ___ first, always.",
+		"answers": ["Boots", "Hats", "Gloves"], "needs": {"met": ["stella"]}},
+	# ND stella.small_talk: "Boots first. Everything else follows boots."
 	{"id": "npc_saying_nova", "q": "Finish DJ Nova's rule two: there are no rules, rule two is ___",
 		"answers": ["Dance", "Silence", "Naps"], "needs": {"met": ["dj_nova"]}},
 	# ND dj_nova.intro: "Rule one: there are no rules. Rule two: dance."
 	{"id": "npc_saying_bolt", "q": "Fellow human, about how many bolts has Bolt counted?",
 		"answers": ["4,181", "212", "904"], "needs": {"met": ["bolt"]}},
 	# ND bolt.intro: "I have counted 4,181 bolts. So far." (literal numeral in source)
-	{"id": "npc_saying_grig", "q": "Fellow human, about how many steps has Grig cut?",
-		"answers": ["904", "4,181", "9,000"], "needs": {"met": ["grig"]}},
-	# ND grig.intro: "Nine hundred and four. I number every one." (904 = nine hundred and four)
-	{"id": "npc_saying_vela", "q": "Fellow human, how many hours of sky has Vela logged?",
-		"answers": ["Nine thousand", "Nine hundred", "Ninety"], "needs": {"met": ["vela"]}},
-	# ND vela.intro: "Nine thousand hours of sky, all of it filed."
-	{"id": "npc_saying_fen", "q": "Fellow human, how many years of notes has Fen kept?",
-		"answers": ["Nine", "Four", "Twelve"], "needs": {"met": ["fen"]}},
-	# ND fen.intro: "Nine years of notes. Pool four moved. Twice."
-	{"id": "npc_saying_professor", "q": "Fellow human, about how many stars has the Professor named?",
-		"answers": ["212", "904", "4,181"], "needs": {"met": ["mayor_orbit"]}},
-	# ND mayor_orbit.small_talk: "I've named 212 stars. I forget which ones."
+	{"id": "npc_saying_grig", "q": "Fellow human, what does Grig say is older than your planet?",
+		"answers": ["His chisel", "His boots", "His hat"], "needs": {"met": ["grig"]}},
+	# ND grig.small_talk: "My chisel is older than your planet. Probably."
+	{"id": "npc_saying_vela", "q": "Fellow human, what happens to Vela's glass in the cold?",
+		"answers": ["Gets foggy", "Cracks", "Turns blue"], "needs": {"met": ["vela"]}},
+	# ND vela.small_talk: "My glass gets foggy on cold mornings. Oops."
+	{"id": "npc_saying_fen", "q": "Fellow human, how many moons does Fen's world have?",
+		"answers": ["None", "One", "Two"], "needs": {"met": ["fen"]}},
+	# ND fen.small_talk: "No moon here. Just me and my big, warm sun."
+	{"id": "npc_saying_professor", "q": "Fellow human, what does the Professor keep a notebook of?",
+		"answers": ["Falling stars", "Broken clocks", "Lost socks"], "needs": {"met": ["mayor_orbit"]}},
+	# ND mayor_orbit.small_talk: "I keep a notebook of every falling star."
 
 	# ---- worlds: names --------------------------------------------------------------------------
 	{"id": "world_name_zorp", "q": "Fellow human, what is Zorp's world called?",
@@ -127,22 +133,43 @@ const QUESTIONS: Array[Dictionary] = [
 		"answers": ["Little Orbit", "The Commons", "Home Base"], "needs": {}},
 	# PT home.tres display_name. No gate: it is the player's own world, known from the start.
 
-	# ---- ship parts (CampaignData.PARTS, fitting order) -----------------------------------------
+	# ---- ship parts (CampaignData.PARTS names a part per world; the FITTING ORDER is the
+	# player's choice, not fixed - see THE ORDER BUG, found in the map) --------------------------
+	# THE ORDER BUG. CampaignData.PARTS is listed in RANGE-TIER order (Zorp/Bolt tier 0, Fen/Grig
+	# tier 2, Vela tier 4 - campaign_data.gd :10-13, :21-25), not the order any one save actually
+	# FITS its parts in. Zorp and Bolt are both reachable from the very start, in either order;
+	# Fen and Grig both unlock together at 2 parts, in either order too - only Vela is pinned last
+	# (she needs 4 parts already fitted just to be reached). So a raw "parts >= N" gate cannot say
+	# WHICH part that is: `part_order_first` assumed Zorp Coil ("needs": {"parts": 1}) and was
+	# wrong the moment a save did Bolt's project first; `part_name_fen` assumed 3 fitted parts must
+	# include Fen's ("needs": {"parts": 3}) and was wrong whenever the 3rd one fitted was Grig's
+	# instead (both tier 2, either order).
+	# THE FIX. Every one of these six questions is resolved from THIS SAVE's own fitted order
+	# (`GameState.rocket_parts`, appended in fitting order by `GameState.fit_rocket_part` -
+	# game_state.gd :96, :249-254 - not the order parts are RECEIVED, which `handle_conversation`
+	# controls and the player does not) at ask time, through the "dynamic" key below - see
+	# `_dynamic_known` (eligibility) and `_answers_for` (the actual answer). A question drops out
+	# entirely, not just gets answered wrong, the moment the fact it asks is not yet knowable in
+	# this save ("or drop it when it cannot be known" - the fix this round was asked to make). The
+	# "answers" arrays below are UNUSED for these six ids, kept empty only so every QUESTIONS entry
+	# has the same shape - `_answers_for` rebuilds real ones from the save and `CampaignData.PARTS`
+	# every time, so nothing here can go stale the way the literals it replaces did.
 	{"id": "part_name_zorp", "q": "Fellow human, what is the ship part from Zorp's world?",
-		"answers": ["Zorp Coil", "Bolt Gear", "Fen Cell"], "needs": {"parts": 1}},
+		"answers": [], "needs": {}, "dynamic": "part_of:zorp"},
 	{"id": "part_name_bolt", "q": "Fellow human, what is the ship part from Bolt's world?",
-		"answers": ["Bolt Gear", "Zorp Coil", "Grig Valve"], "needs": {"parts": 2}},
+		"answers": [], "needs": {}, "dynamic": "part_of:bolt"},
 	{"id": "part_name_fen", "q": "Fellow human, what is the ship part from Fen's world?",
-		"answers": ["Fen Cell", "Vela Core", "Bolt Gear"], "needs": {"parts": 3}},
+		"answers": [], "needs": {}, "dynamic": "part_of:fen"},
 	{"id": "part_name_grig", "q": "Fellow human, what is the ship part from Grig's world?",
-		"answers": ["Grig Valve", "Fen Cell", "Zorp Coil"], "needs": {"parts": 4}},
+		"answers": [], "needs": {}, "dynamic": "part_of:grig"},
 	{"id": "part_name_vela", "q": "Fellow human, what is the last ship part called?",
-		"answers": ["Vela Core", "Grig Valve", "Bolt Gear"], "needs": {"parts": 5}},
+		"answers": [], "needs": {}, "dynamic": "part_of:vela"},
 	{"id": "part_order_first", "q": "Fellow human, which ship part gets fitted first?",
-		"answers": ["Zorp Coil", "Vela Core", "Grig Valve"], "needs": {"parts": 1}},
+		"answers": [], "needs": {}, "dynamic": "order_first"},
 	{"id": "part_order_last", "q": "Fellow human, which ship part gets fitted last?",
-		"answers": ["Vela Core", "Zorp Coil", "Bolt Gear"], "needs": {"parts": 5}},
-	# CD CampaignData.PARTS, in array order: part_zorp, part_bolt, part_fen, part_grig, part_vela.
+		"answers": [], "needs": {}, "dynamic": "order_last"},
+	# CD CampaignData.PARTS: part_zorp/part_bolt/part_fen/part_grig/part_vela, each carrying its
+	# own "npc" and "name" - the source `_part_name`/`_part_id_for_npc` below read from directly.
 
 	# ---- mini-games (minigame_system.gd GAMES + src/projects/data/<npc>.gd "game") --------------
 	{"id": "minigame_zorp", "q": "Fellow human, which mini-game plays on Zorp's world?",
@@ -179,18 +206,19 @@ const QUESTIONS: Array[Dictionary] = [
 	# ND mayor_orbit.small_talk: "I oil my telescope on Sundays. Tradition." / "A good telescope is
 	# worth two maps."
 
-	# ---- the skiff, after the story only -----------------------------------------------------------
-	{"id": "skiff_gift", "q": "Fellow human, what do your friends give you after the story?",
-		"answers": ["A skiff", "A new rocket", "A trophy"], "needs": {"story": true}},
-	{"id": "skiff_replaces", "q": "Fellow human, what does the skiff stand in for on every pad?",
-		"answers": ["The rocket", "The telescope", "The mini-game"], "needs": {"story": true}},
-	# src/rocket/rocket_model.gd: `const LOOK_SKIFF := "skiff"`; header: "'skiff' is the friends' gift
-	# after the story"; `look()`/`set_look(s)` take "rocket" or "skiff", the two things it stands in
-	# for on the pad (model_height() 3.2 for the rocket, 2.3 for the skiff).
+	# ---- the fleet, after the story only (docs/STORY_HOME_SPEC.md §5.6, replacing skiff_gift and skiff_replaces)
+	{"id": "fleet", "q": "Fellow human, what broke the meteor into a shower?",
+		"answers": ["Every ship, together", "Your rocket, alone", "A very big net"], "needs": {"story": true}},
+	{"id": "streak", "q": "Fellow human, how did the Professor track the meteor?",
+		"answers": ["In your photos", "A letter from Bolt", "He tripped on it"], "needs": {"story": true}},
+	# src/campaign/finale_lines.gd MEETING (the Professor: "That streak is in your photos from every world." /
+	# "Put them together, and I can track its path.") and SEND ("6 ships, flying for all of us");
+	# src/campaign/finale_launch.gd flies all six ships into the meteor before it breaks into the shower.
 ]
 
 ## ============================================================================ picking
-## True when `q`'s "needs" are met by the CURRENT GameState (NORM_SPEC §5).
+## True when `q`'s "needs" are met by the CURRENT GameState (NORM_SPEC §5), AND, for a "dynamic"
+## question (the part-order fix below), the fact it asks is actually knowable in this save yet.
 static func _eligible(q: Dictionary) -> bool:
 	var needs: Dictionary = q.get("needs", {})
 	for npc_id in needs.get("met", []):
@@ -200,7 +228,77 @@ static func _eligible(q: Dictionary) -> bool:
 		return false
 	if bool(needs.get("story", false)) and not GameState.story_done:
 		return false
+	return _dynamic_known(q)
+
+
+## The part id CampaignData.PARTS gives `npc_id`'s world, or "" if that is not one of the five.
+static func _part_id_for_npc(npc_id: String) -> String:
+	for p in CampaignData.PARTS:
+		if str(p.get("npc", "")) == npc_id:
+			return str(p.get("id", ""))
+	return ""
+
+
+## The player-facing name CampaignData.PARTS gives `part_id`, or `part_id` itself if that id is not
+## one of the five (should not happen - defensive so a bad id degrades to something printable
+## rather than crashing a live quiz).
+static func _part_name(part_id: String) -> String:
+	for p in CampaignData.PARTS:
+		if str(p.get("id", "")) == part_id:
+			return str(p.get("name", part_id))
+	return part_id
+
+
+## Is `q`'s "dynamic" fact knowable RIGHT NOW in this save? True for every ordinary (non-dynamic)
+## question. THE ORDER BUG's fix lives here: "part_of:<npc>" only becomes true once that specific
+## part has actually been obtained (received from the neighbour OR already fitted - the same two
+## places `project_system.gd:867` already checks, so this reads the save the same way the rest of
+## the campaign does), never from a raw parts count; "order_first" needs at least one part fitted;
+## "order_last" needs every part fitted (only then is the LAST one fixed and knowable).
+static func _dynamic_known(q: Dictionary) -> bool:
+	var dyn := str(q.get("dynamic", ""))
+	if dyn == "":
+		return true
+	if dyn == "order_first":
+		return GameState.rocket_parts.size() >= 1
+	if dyn == "order_last":
+		return GameState.rocket_parts.size() >= CampaignData.PARTS.size()
+	if dyn.begins_with("part_of:"):
+		var pid := _part_id_for_npc(dyn.substr(8))
+		return pid != "" and (GameState.has_item(pid) or GameState.rocket_parts.has(pid))
 	return true
+
+
+## The three shown answers for `q`: the literal table entry for an ordinary question, or, for a
+## "dynamic" one, a FRESH correct answer read from `GameState.rocket_parts` (this save's own
+## fitted order) plus two distractors from the other four part names, shuffled with the caller's
+## `rng` so a seeded run stays reproducible (NORM_SPEC §5's own rule for `pick`, extended here to
+## `run`). Empty when a dynamic fact is not (or is no longer) knowable - `run` skips that question
+## rather than ask something it cannot answer; `_eligible`/`_dynamic_known` above should already
+## have kept it out of `pick`'s result, so this is the belt to that braces, not the normal path.
+static func _answers_for(q: Dictionary, rng: RandomNumberGenerator) -> Array:
+	var dyn := str(q.get("dynamic", ""))
+	if dyn == "":
+		return (q["answers"] as Array).duplicate()
+	var correct := ""
+	if dyn == "order_first" and GameState.rocket_parts.size() >= 1:
+		correct = _part_name(str(GameState.rocket_parts[0]))
+	elif dyn == "order_last" and GameState.rocket_parts.size() >= CampaignData.PARTS.size():
+		correct = _part_name(str(GameState.rocket_parts[-1]))
+	elif dyn.begins_with("part_of:"):
+		correct = _part_name(_part_id_for_npc(dyn.substr(8)))
+	if correct == "":
+		return []
+	var distractors: Array = []
+	for p in CampaignData.PARTS:
+		var nm := str(p.get("name", ""))
+		if nm != "" and nm != correct:
+			distractors.append(nm)
+	distractors = _shuffled(distractors, rng)
+	if distractors.size() < 2:
+		return []
+	return [correct, distractors[0], distractors[1]]
+
 
 static func _eligible_questions() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -262,7 +360,13 @@ static func run(runner: DialogueRunner, npc: Node3D) -> bool:
 	if picked.is_empty():
 		return false
 	for q in picked:
-		var answers: Array = (q["answers"] as Array).duplicate()
+		var answers := _answers_for(q, rng)
+		# Belt-and-braces (see `_answers_for`'s own header): `pick` already filtered through
+		# `_eligible`/`_dynamic_known`, so this should never fire in play - but a dynamic fact
+		# that stopped being knowable between pick and ask (nothing in this save can actually do
+		# that today; NormSystem's own talk is uninterrupted) is skipped, never asked half-blind.
+		if answers.size() < 3:
+			continue
 		var correct: String = str(answers[0])
 		var shown := _shuffled(answers, rng)
 		var correct_index: int = shown.find(correct)

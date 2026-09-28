@@ -31,7 +31,7 @@ extends ChibiModel
 ##   * eyestalks: NONE. Two small dark eyes sit flat on the bud face, no sclera (R2.3).
 ##   * wide toothy grin: NONE. No teeth of any kind.
 ##   * closed mouth KIND: a short STRAIGHT LIPLESS BAR (Zorp holds the one arc, Vela has none, Grig an
-##     under-bite).
+##     under-bite). Since 2026-09-27 its two corners turn up a little (MOUTH_CORNER_DEG): a slight smile.
 ##   * surface: `sd_scales` stays Fen's, spent as a FINE bud texture on the face only; the stem and
 ##     vines carry `wood` grain, the petals `cloth`. No `sd_skin`, no `sd_foliage`.
 ##   * hard vocabulary: NONE of {brow ridge, heavy lid, horns, tusks, fangs, shoulder yoke}; Fen is
@@ -76,6 +76,14 @@ const EYE_SPECS: Array[Dictionary] = [
 ]
 ## The bar mouth: 0.118 m on a 0.630 m head = 18.7 %, inside the 16-25 % band.
 const MOUTH_BAR := Vector3(0.118, 0.012, 0.014)
+## THE SLIGHT SMILE (2026-09-27, the user: Fen should read younger and friendly, not stoic). The bar
+## stays a straight lipless bar across the middle; only its two CORNERS turn up, each a short piece
+## hinged at the end of a shorter centre bar. Still the bar KIND (CAST_VARIETY ruling 6), not a
+## closed arc: the middle 0.070 m is dead straight. Span 0.070 + 2 * 0.030 * cos(24 deg) = 0.125 m
+## (19.8 % of the head, inside 16-25 %); each corner lifts 0.030 * sin(24 deg) = 12 mm.
+const MOUTH_CENTRE_W := 0.070
+const MOUTH_CORNER_W := 0.030
+const MOUTH_CORNER_DEG := 24.0
 const MOUTH_PITCH_FEN := -17.0
 
 const SLOW_BLINK_HOLD := 0.30
@@ -429,8 +437,17 @@ func _build_bar_mouth() -> void:
 		dead.visible = false
 		dead.queue_free()
 	var bar := _node("Bar", mouth_node, Vector3(0.0, 0.0, -0.004))
-	_mi(rounded_box(MOUTH_BAR, 0.0055, 10), _toon(MOUTH, {"spec": 0.0, "rim": 0.0, "shade": 0.06}),
+	var m_mouth := _toon(MOUTH, {"spec": 0.0, "rim": 0.0, "shade": 0.06})
+	_mi(rounded_box(Vector3(MOUTH_CENTRE_W, MOUTH_BAR.y, MOUTH_BAR.z), 0.0055, 10), m_mouth,
 		bar, Vector3.ZERO, "Slot")
+	# The upturned corners: hinged on the centre bar's end caps, overlapping by one cap radius so the
+	# joint is a smooth bend rather than a seam.
+	for sx: float in [-1.0, 1.0]:
+		var hinge := _node("Corner%s" % ("L" if sx < 0.0 else "R"), bar,
+			Vector3(sx * (MOUTH_CENTRE_W * 0.5 - 0.0055), 0.0, 0.0))
+		hinge.rotation.z = sx * deg_to_rad(MOUTH_CORNER_DEG)
+		_mi(rounded_box(Vector3(MOUTH_CORNER_W + 0.0055, MOUTH_BAR.y, MOUTH_BAR.z), 0.0055, 10), m_mouth,
+			hinge, Vector3(sx * (MOUTH_CORNER_W + 0.0055) * 0.5, 0.0, 0.0), "Slot")
 	# `_apply_face` closes the smile node out as the mouth opens, so the bar gives way to the open
 	# mouth instead of being drawn across it.
 	_mouth_smile = bar

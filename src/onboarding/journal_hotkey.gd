@@ -27,6 +27,9 @@ func _process(_delta: float) -> void:
 		return
 	# Never steal the key from a dialogue, shop, bag or pause menu, and never open during a
 	# scene transition. The pause menu keeps its own Favours entry for players who look there.
-	if EventBus.is_modal_open() or SceneRouter.is_busy():
+	# PLANET SAFARI GATE (docs/PLANET_SAFARI_SPEC.md 5.3, 7 "P2 GATE"): the FAVOURS journal (this
+	# file) is inert while a safari runs, same as its on-screen J key hint. The PHOTO journal's own
+	# button and J key are sky_journal.gd's - not touched here.
+	if EventBus.is_modal_open() or SceneRouter.is_busy() or PhotoMode.active:
 		return
 	JOURNAL_PANEL.open_over(self)

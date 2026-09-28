@@ -3,10 +3,10 @@ extends RefCounted
 ## Static data only; nothing here is saved.
 ##
 ## WRITING (docs/STYLE_GUIDE.md "Writing"): every line <= 60 characters, 1-3 lines per list, and in that
-## neighbour's own voice as their small_talk in src/characters/npc_data.gd has it:
-##   Zorp  enthusiastic, curious about Earth, loves floating       Bolt  literal, kind, counts things
-##   Fen   terse and weathered, watches the light, keeps a log      Grig  blunt, cuts and numbers steps
-##   Vela  formal and warm, hears the sky rather than sees it
+## neighbour's own voice (docs/CAST_VOICES_DRAFT.md, approved 2026-09-27, with STORY_HOME_SPEC.md 8.1):
+##   Zorp  quirky, excitable grandpa gardener ("Oh ho!")   Bolt  literal fix-it robot; the ONLY one who counts
+##   Fen   young, calm, sunny flower (sun and water)        Grig  grumpy stair carver, soft inside ("Hmph.")
+##   Vela  gentle, shy lightbulb (he); says when he glows
 ## No line names a key or a button: the player may be on a phone. The one control a line needs (the bag,
 ## to place a gift) is named by visitor_system.gd through MobileUI.bag_hint(), outside these tables.
 ##
@@ -23,85 +23,83 @@ extends RefCounted
 const LINES := {
 	"zorp": {
 		"ask_play": [
-			"Surprise! I floated over! Your planet is TINY!",
-			"I brought my rings. Fly the old course here?",
+			"Surprise! I flew over! Your planet is so small!",
+			"I brought my rings. Fly the old river path here?",
 		],
-		"progress_play": ["Keep flying! The rings are very patient!"],
-		"done_play": [
-			"Every ring, on YOUR planet! Fact: you are great.",
-		],
+		"progress_play": ["Keep flying! The rings will wait for you!"],
+		"done_play": ["Every ring, on YOUR planet! Oh ho, well done!"],
 		"ask_gift": [
-			"Surprise! I floated over! I brought a present!",
-			"Put it somewhere nice. Earth people do that, yes?",
+			"Surprise! I flew over! I brought a present!",
+			"Put it somewhere nice. Somewhere sunny, maybe.",
 		],
-		"progress_gift": ["Did you place it yet? My antenna is fizzing."],
-		"again_gift": ["You lost it? I brought a spare. I always do!"],
-		"done_gift": ["It looks perfect there! I will tell everyone."],
-		"bye": ["I will float here a little longer. Bliss!"],
+		"progress_gift": ["Did you put it out yet? My moustache is twitching."],
+		"again_gift": ["Lost it? I brought a spare. I always do!"],
+		"done_gift": ["It looks perfect there! I'll tell everyone."],
+		"bye": ["I'll sit here a little longer. Lovely spot!"],
 	},
 	"bolt": {
 		"ask_play": [
-			"Hello. I flew here. One flight. Zero problems.",
+			"Hello. I flew here. 1 flight. 0 problems.",
 			"Some bolts came with me. Please catch them.",
 		],
-		"progress_play": ["Bolts still airborne. I am counting them."],
-		"done_play": ["All caught. Counted. Correct. Thank you."],
+		"progress_play": ["The bolts are still flying. I am counting."],
+		"done_play": ["You caught them all. I counted. Thank you."],
 		"ask_gift": [
-			"Hello. I flew here. I carried one gift.",
-			"Please place it. Level ground is best.",
+			"Hello. I flew here. I brought 1 gift.",
+			"Please put it down. Flat ground is best.",
 		],
-		"progress_gift": ["The gift is not placed yet. I checked twice."],
-		"again_gift": ["Gift missing. I brought a spare. I plan ahead."],
-		"done_gift": ["Placed. Angle acceptable. Happiness: 91 percent."],
-		"bye": ["Visit logged. I will stand here efficiently."],
+		"progress_gift": ["The gift is not out yet. I checked twice."],
+		"again_gift": ["The gift is missing? I brought a spare."],
+		"done_gift": ["Good spot. I am 91 percent happy. That is a lot."],
+		"bye": ["I will stand here now. Standing is my hobby."],
 	},
 	"fen": {
 		"ask_play": [
-			"Your sun climbs so high here. I came to see it.",
+			"Your sun climbs so high here! I came to see it.",
 			"A few moths followed me. Guide them home?",
 		],
-		"progress_play": ["Come at them sideways. They run from you."],
-		"done_play": ["All home. Noted. Your planet gets a page now."],
+		"progress_play": ["Come at them sideways. They're a bit shy."],
+		"done_play": ["All home! Thank you. Your planet is lovely."],
 		"ask_gift": [
-			"Your sun climbs so high here. I came to see it.",
-			"I brought you something. Put it where it suits.",
+			"Your sun climbs so high here! I came to see it.",
+			"I brought you something. Put it somewhere sunny.",
 		],
-		"progress_gift": ["No hurry. Place it when a spot feels right."],
-		"again_gift": ["Lost it? I brought two. I always bring two."],
-		"done_gift": ["Good spot. It will catch the evening light."],
-		"bye": ["I will sit a while. The light here is kind."],
+		"progress_gift": ["No hurry. Put it where it feels right."],
+		"again_gift": ["Lost it? That's okay. I brought another one."],
+		"done_gift": ["Good spot! It'll get lots of sun there."],
+		"bye": ["I'll sit in your sun a while. It's so warm."],
 	},
 	"grig": {
 		"ask_play": [
-			"Your ground has no steps. Odd. Restful, though.",
-			"Water hides under here too. Dowse for it.",
+			"Your ground has no stairs. Odd. Restful, though.",
+			"Water hides under here too. Let's find it.",
 		],
-		"progress_play": ["Walk slow. Listen for the pulse."],
-		"done_play": ["Springs found. Counted twice. Correct."],
+		"progress_play": ["Walk slow. Feel for the pulse."],
+		"done_play": ["Found them all. Good work. Hmph."],
 		"ask_gift": [
-			"Your ground has no steps. Odd. Restful, though.",
-			"I brought this. Set it down level. Level.",
+			"Your ground has no stairs. Odd. Restful, though.",
+			"I brought this. Put it on flat ground.",
 		],
-		"progress_gift": ["Not placed yet? Pick a flat spot. Then place."],
-		"again_gift": ["Lost it? I cut a spare. Mind the corners."],
-		"done_gift": ["Level. Well placed. I approve. Mostly."],
-		"bye": ["Go on. I am studying your lack of steps."],
+		"progress_gift": ["Not out yet? Pick a flat spot. Then put it down."],
+		"again_gift": ["Lost it? Hmph. I made a spare. Here."],
+		"done_gift": ["Flat. Neat. I like it. Mostly."],
+		"bye": ["Go on. I'm just looking at your ground."],
 	},
 	"vela": {
 		"ask_play": [
-			"Good day. Your planet hums in a lovely key.",
-			"Would you answer my signal? Stand in the ring.",
+			"Hello. Your planet hums a pretty tune.",
+			"Want to answer my calls? Stand in the ring.",
 		],
-		"progress_play": ["The channel is still open. Do try again."],
-		"done_play": ["Received, every signal. Thank you, truly."],
+		"progress_play": ["The signal is still open. Try again?"],
+		"done_play": ["You answered them all! Thank you. I'm glowing."],
 		"ask_gift": [
-			"Good day. Your planet hums in a lovely key.",
-			"I brought a gift. Place it wherever you like.",
+			"Hello. Your planet hums a pretty tune.",
+			"I brought a gift. Put it anywhere you like.",
 		],
-		"progress_gift": ["No hurry at all. The gift will wait for you."],
-		"again_gift": ["Misplaced? I brought a second. Here you are."],
-		"done_gift": ["It sits beautifully there. I shall log it."],
-		"bye": ["I shall listen to your sky a while longer."],
+		"progress_gift": ["No hurry at all. The gift will wait."],
+		"again_gift": ["Lost it? Oh, that's okay. I brought another."],
+		"done_gift": ["It looks lovely there. My bulb flickered."],
+		"bye": ["I'll listen to your sky a little longer."],
 	},
 }
 

@@ -1,0 +1,8 @@
+[{"t": 0.7, "set": {"node": "/root/GameState", "property": "stardust", "value": 400}},
+ {"t": 0.9, "call": {"node": "/root/SafariFlight", "method": "_set_spares", "args": [3]}},
+ {"t": 1.4, "capture": "spares"},
+ {"t": 1.8, "set": {"node": "/root/GameState", "property": "scrap", "value": 2000}},
+ {"t": 2.0, "call": {"node": "/root/GameState", "method": "buy_film_upgrade"}},
+ {"t": 2.1, "call": {"node": "/root/SafariFlight", "method": "_refresh_card"}},
+ {"t": 2.6, "capture": "spares_after_upgrade"},
+ {"t": 3.0, "quit": true}]

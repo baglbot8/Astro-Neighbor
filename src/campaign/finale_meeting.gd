@@ -1,13 +1,22 @@
 extends Node
 ## THE MEETING AND THE CHOICE (docs/PHASE5_SPEC.md §2 "Meeting", "Choice"; §0 "The ending always plays at
-## night"; docs/BUILD_PLAN.md Phase 5 builder K2). finale.gd creates this node, by path, as
+## night"; docs/BUILD_PLAN.md Phase 5 builder K2). Since 2026-09-27 (later) THE GOODBYE PARTY
+## (docs/STORY_HOME_SPEC.md §8 and §8.1, the user's order): the staging and the camera grammar below are
+## unchanged; the script is finale_lines.gd MEETING - the party (Nova's party track, `PARTY_TRACK`), the
+## neighbours say one by one they are staying, everyone agrees (`cheer_crowd`, each at its own offset), Nova
+## reminds them the meteor is still coming (U, the crowd looking up at it; the music stops), Vela's idea,
+## everyone offers their ship, Stella's worry, the Professor holds up your scrapbook (`_hold_up_scrapbook`)
+## to track its path, and asks whether your rocket goes too: "Give me a moment" / "Send my rocket". The
+## send beat ends with everyone stepping back to watch (`_board`: nobody boards, the ships fly on
+## autopilot) before FinaleLaunch flies the six of them. After the send-off, finale_gift.gd (HOME) calls
+## `stage_home()` behind `dip()` to put everyone back on the Commons. finale.gd creates this node, by path, as
 ## /root/World/FinaleMeeting whenever the Commons loads at finale stage 1, 2 or 3, during World._ready.
 ##
 ## WHAT HAPPENS, by the stage it was created at:
 ##   1 CALLED  the crowd is already standing when you land; once the world is calm (no fade, no landing,
 ##             control in your hands) the astronaut walks to a mark 3.6 m out facing them, the §3 MEETING
 ##             lines play on this node's own camera, stage 2 is written and checkpointed, and the
-##             Professor asks. "Send her" emits `chose_send`; "Give me a moment" (or cancel) plays his
+##             Professor asks. "Send my rocket" emits `chose_send`; "Give me a moment" (or cancel) plays his
 ##             moment line and hands control back: free roam, flying allowed, a line from each friend when
 ##             you talk to them, and the Professor's "!" asks again.
 ##   2 MET     the crowd on its saved spots, free roam straight away, the Professor's "!" asks again.
@@ -87,7 +96,7 @@ extends Node
 ## turn to the rocket" (TURN_RULE), P then W for the send beat (SEND_RULES), and for the meeting's final
 ## ask (finale_lines.gd leaves it untagged) P - the Professor, framed left of the pills ("PA").
 ##
-## THE CHOICE (§2). `ask(prof, prompt, ["Give me a moment", "Send her"], ARM_DELAY)`: the focus starts on
+## THE CHOICE (§2). `ask(prof, prompt, ["Give me a moment", "Send my rocket"], ARM_DELAY)`: the focus starts on
 ## "moment" (index 0), cancel (-1) means moment, no timer. While the choice is open this node eats (at the
 ## press edge, in `_input`, before the GUI sees it) every touch or mouse press made before the pills show
 ## or within ARM_DELAY of their first frame - DialogueBox's own arm is checked on the button's release,
@@ -136,6 +145,7 @@ const LAUNCH_PATH := "res://src/campaign/finale_launch.gd"
 const ASTEROID_PATH := "res://src/campaign/giant_asteroid.gd"
 const VISITOR_SYSTEM_PATH := "res://src/campaign/visitor_system.gd"
 const VISITOR_LINES_PATH := "res://src/campaign/visitor_lines.gd"
+const SHIPS_PATH := "res://src/campaign/neighbour_ships.gd"
 const NPC_DIR := "res://src/characters/npcs/"
 const TRACE_TAG := "K2"
 const MODAL_NAME := "cutscene"
@@ -165,8 +175,35 @@ const LANDING_SIDE_M := 3.2
 ## The replay board (replay_board_prop.gd FOOTPRINT_M 0.95) plus VisitorSystem's DECO_GAP_M 0.6 and a
 ## neighbour's body radius (npc.gd BODY_RADIUS 0.34).
 const BOARD_CLEAR_M := 1.9
-## "The crowd steps back 1 m" (§2 Send).
+## "The crowd steps back 1 m" (§2 Send) - the ones staying on the ground; the five pilots walk to their ships.
 const STEP_BACK_M := 1.0
+## The astronaut boards the rocket from here: this far from the pad's centre toward the mark (the deck ring
+## is 2.55 m; the ladder foot).
+const BOARD_M := 2.3
+## The walk to the ships lasts this long on screen before the dip; whoever has not arrived by then is aboard
+## behind it.
+const BOARD_WALK_S := 1.9
+## The dip to navy that hides the boarding (and HOME's return): out, held, in.
+const DIP_OUT_S := 0.35
+const DIP_HOLD_S := 0.15
+const DIP_IN_S := 0.5
+const DIP_LAYER := 96
+## "Silence; nobody moves": the camera holds where it is. "A long pause": the camera pulls back to W.
+const SILENCE_S := 1.6
+const PAUSE_S := 1.4
+## "Everyone agrees": how long the staggered cheer holds the whole crowd before the next box.
+const CHEER_BEAT_S := 2.2
+const CHEER_SPREAD_S := 1.2
+## event_space.gd PARTY_TRACK: DJ Nova's party music.
+const PARTY_TRACK := "event"
+## The scrapbook prop (neighbour_ships.gd make_scrapbook): beside the Professor's face, at his side, a
+## little below the head's centre, turned toward the lens side. Local to the Professor (-Z forward).
+const BOOK_SIDE_M := 0.16
+## A chibi head is ~0.9 m across; the book is drawn this much larger than life so it reads beside it.
+const BOOK_SCALE := 1.7
+const BOOK_DROP_M := 0.22
+const BOOK_FWD_M := 0.16
+const BOOK_RISE_S := 0.35
 ## After the story: npc.gd samples wander targets 1.4 m and more out, VisitorSystem.WANDER_M.
 const RELEASED_WANDER_M := 1.6
 
@@ -310,8 +347,8 @@ const PILL_Y_PX := Vector2(340.0, 542.0)
 const CANVAS_H := 720.0
 ## The shots in the order the meeting and the send beat use them (each one's travel scored from the one
 ## before): Zorp's opening W, then each speaker, U, R for the turn, S, the ask, and the send beat.
-const SHOT_SEQUENCE: Array = [["W", ""], ["P", "grig"], ["P", "mayor_orbit"], ["U", ""], ["P", "bolt"], ["P", "vela"],
-	["P", "fen"], ["P", "pip"], ["P", "pop"], ["P", "zorp"], ["S", ""], ["PA", "mayor_orbit"], ["P", "bolt"], ["R", ""]]
+const SHOT_SEQUENCE: Array = [["W", ""], ["P", "zorp"], ["P", "grig"], ["P", "mayor_orbit"], ["P", "bolt"], ["P", "fen"],
+	["P", "vela"], ["P", "pip"], ["P", "pop"], ["U", ""], ["S", ""], ["PA", "mayor_orbit"], ["R", ""]]
 ## "All turn to the rocket" and the send beat's two boxes. R, the pad three-quarter, is not used by the
 ## meeting: over 12 decoration layouts its best framing left Pop 35-93% covered in the RENDERED frame (the
 ## back row only clears the front row's crowns from ~11 m out when the lens is 6-9 m up, and from there the
@@ -319,7 +356,7 @@ const SHOT_SEQUENCE: Array = [["W", ""], ["P", "grig"], ["P", "mayor_orbit"], ["
 ## solved for `camera_to("R")`.
 const TURN_RULE := "S"
 const SEND_RULES: Array = ["P", "W"]
-const CHOICE_ARM_OPTIONS: PackedStringArray = ["Give me a moment", "Send her"]
+const CHOICE_ARM_OPTIONS: PackedStringArray = ["Give me a moment", "Send my rocket"]
 const ARM_DELAY := 0.6
 const QUIET_MS := 400
 ## The longest the pills wait for the camera to settle (the S -> PA blend measured 6.3 s in round 2).
@@ -376,6 +413,11 @@ var _head_info: Dictionary = {}
 var _back_gaps_cache: Array[float] = []
 var _talk_off: Array[Node] = []
 var _asteroid: Node3D
+var _ships: Node3D
+var _book: Node3D
+var _board_dir := Vector3.UP
+var _dip_layer: CanvasLayer
+var _dip_rect: ColorRect
 var _opening: Array = []
 var _rock_half_v := 8.0
 var _rocket_rest := Transform3D.IDENTITY
@@ -467,6 +509,10 @@ func _ready() -> void:
 	var u3 := Time.get_ticks_usec()
 	_place_crowd()
 	_place_asteroid()
+	_place_ships()
+	# The ships stand under the pad node, so the lens test's occluder list is rebuilt with them in it (and
+	# the sight space below is rebuilt with them too).
+	_collect_occluders()
 	# FinaleLaunch's own sight lines reuse VisitorSystem's single occluder space: close ours first, then
 	# build it again for the shot search.
 	_close_sight()
@@ -531,6 +577,24 @@ func asteroid() -> Node3D:
 	return _asteroid if _asteroid != null and is_instance_valid(_asteroid) else null
 
 
+## The five neighbours' parked ships (neighbour_ships.gd), or null.
+func ships() -> Node3D:
+	return _ships if _ships != null and is_instance_valid(_ships) else null
+
+
+## `id`'s meeting spot as a surface direction (Vector3.ZERO when not in the crowd).
+func spot_dir(id: String) -> Vector3:
+	return _dirs.get(id, Vector3.ZERO)
+
+
+func mark_dir() -> Vector3:
+	return _mark_dir
+
+
+func crowd_centre() -> Vector3:
+	return _crowd_centre
+
+
 ## This node's camera, created (seeded from the camera drawing now) on first use.
 func camera() -> Camera3D:
 	_ensure_camera(false)
@@ -553,6 +617,14 @@ func camera_to(rule: String, ids: Array = [], seconds: float = 0.0) -> float:
 	if shot.has("w_for_p"):
 		_rule = "W<-" + _rule
 	return _set_goal(Transform3D(shot["basis"] as Basis, shot["eye"] as Vector3), float(shot["fov"]), seconds)
+
+
+## A rule's solved framing as [Transform3D, fov], or [] (HOME's "return" tips W up to the sky).
+func shot_xf(rule: String, ids: Array = []) -> Array:
+	var shot := _shot_for(rule, ids)
+	if shot.is_empty():
+		return []
+	return [Transform3D(shot["basis"] as Basis, shot["eye"] as Vector3), float(shot["fov"])]
 
 
 ## Blends to an explicit pose (for a later beat that frames something of its own).
@@ -1070,6 +1142,313 @@ func _place_asteroid() -> void:
 		_rock_half_v = box.size.y * 0.5
 
 
+## The five neighbours' packed ships round the square (neighbour_ships.gd, under the pad node so every
+## sight test sees them), clear of the crowd, its step-back spots, the mark, the astronaut's boarding
+## spot and every eye of FinaleLaunch's authored path. Also fixes the boarding spot.
+func _place_ships() -> void:
+	var toward_mark := _tangent(_mark - _pad_ground, _pad_dir, _axis)
+	_board_dir = planet.dir_of(_pad_ground + toward_mark * BOARD_M)
+	if not ResourceLoader.exists(SHIPS_PATH) or _pad == null:
+		_log("missing %s; no ships" % SHIPS_PATH)
+		return
+	var existing := _pad.get_node_or_null("NeighbourShips") as Node3D
+	if existing == null:
+		var script := load(SHIPS_PATH) as GDScript
+		if script == null:
+			return
+		existing = script.new() as Node3D
+		existing.name = "NeighbourShips"
+		_pad.add_child(existing)
+	_ships = existing
+	var up_c := planet.dir_of(_crowd_centre)
+	var left: Vector3 = planet.surface_point(_dirs.get("grig", _mark_dir) as Vector3)
+	var right_p: Vector3 = planet.surface_point(_dirs.get("vela", _mark_dir) as Vector3)
+	var right := _tangent(right_p - left, up_c, _axis.cross(up_c))
+	var avoid: Array = [_mark, planet.surface_point(_board_dir)]
+	for id in _dirs:
+		avoid.append(planet.surface_point(_dirs[id] as Vector3))
+	for id in _back_dirs:
+		avoid.append(planet.surface_point(_back_dirs[id] as Vector3))
+	# FinaleLaunch's crowd centre at play: nobody boards (the ships fly on autopilot, §8.1), so the whole
+	# crowd, on its step-back spots.
+	var acc := Vector3.ZERO
+	var cnt := 0
+	for id in _back_dirs:
+		acc += planet.surface_point(_back_dirs[id] as Vector3)
+		cnt += 1
+	var lc := planet.surface_point(planet.dir_of(acc / float(cnt))) if cnt > 0 else _crowd_centre
+	var eyes := PackedVector3Array()
+	if ResourceLoader.exists(LAUNCH_PATH):
+		var up_l := planet.dir_of(lc)
+		var b_c := _tangent(_pad_ground - lc, up_l, -_axis)
+		eyes = load(LAUNCH_PATH).call("eye_samples", planet, lc, b_c, up_l.cross(b_c).normalized())
+	var u0 := Time.get_ticks_usec()
+	_ships.call("place", planet, _crowd_centre, _pad_ground, right, avoid, eyes, Callable(self, "_ground"))
+	_stats["ships_ms"] = (Time.get_ticks_usec() - u0) / 1000.0
+	_beat("ships %s (%.1f ms)" % [str(_ships.get("note")), float(_stats["ships_ms"])])
+
+
+## "The Professor holds up the scrapbook": the book (neighbour_ships.gd make_scrapbook) appears in front of
+## him and rises beside his face over BOOK_RISE_S, pages toward the way he faces, and stays up through his
+## streak lines (his own close-ups frame it) until "silence".
+func _hold_up_scrapbook() -> void:
+	var prof := npc(PROF)
+	if prof == null or not ResourceLoader.exists(SHIPS_PATH):
+		return
+	_put_book_away(true)
+	_book = load(SHIPS_PATH).call("make_scrapbook") as Node3D
+	if _book == null:
+		return
+	prof.add_child(_book)
+	var hi: Dictionary = _head_info.get(PROF, HEAD_DEFAULT)
+	var y := float(hi["c_h"]) - BOOK_DROP_M
+	# Beside his face on the side toward the middle of his close-up (MEASURED, first run: on his right it
+	# sat on the frame's edge, cut in half), turned to the lens.
+	var inv := prof.global_transform.affine_inverse()
+	var eye_l := inv * (_cam.global_position if _cam != null else _mark_look())
+	var shot := _shot_for("P", [PROF])
+	var side := 1.0
+	if not shot.is_empty():
+		var eye_w: Vector3 = shot["eye"]
+		var head_w := prof.global_transform * Vector3(0.0, float(hi["c_h"]), 0.0)
+		var mid_w := eye_w - (shot["basis"] as Basis).z * eye_w.distance_to(head_w)
+		eye_l = inv * eye_w
+		side = 1.0 if (inv * mid_w).x >= 0.0 else -1.0
+	var x := side * (float(hi["r"]) + BOOK_SIDE_M)
+	var pos := Vector3(x, y, -BOOK_FWD_M - 0.05)
+	var to_eye := eye_l - pos
+	to_eye.y *= 0.3
+	var face := Basis.looking_at(to_eye.normalized() if to_eye.length_squared() > 1e-4 else Vector3.FORWARD, Vector3.UP)
+	var end := Transform3D(face * Basis(Vector3.RIGHT, 0.12) * Basis.from_scale(Vector3.ONE * BOOK_SCALE), pos)
+	var start := Transform3D(end.basis * Basis(Vector3.RIGHT, 0.9), Vector3(x * 0.6, y - 0.35, -BOOK_FWD_M))
+	if prof.has_method("play_emote"):
+		prof.call("play_emote", "happy")
+	var t := 0.0
+	while is_inside_tree() and t < BOOK_RISE_S and _book != null and is_instance_valid(_book):
+		t = minf(BOOK_RISE_S, t + minf(get_process_delta_time(), MAX_STEP))
+		var k := smoothstep(0.0, 1.0, t / BOOK_RISE_S)
+		var q := start.basis.get_rotation_quaternion().slerp(end.basis.get_rotation_quaternion(), k)
+		_book.transform = Transform3D(Basis(q).scaled(Vector3.ONE * BOOK_SCALE), start.origin.lerp(end.origin, k))
+		await get_tree().process_frame
+	if _book != null and is_instance_valid(_book):
+		_book.transform = end
+	_beat("scrapbook up at local %s" % str(end.origin))
+
+
+## He lowers the scrapbook (it shrinks into his hands) - or it goes at once (`now`).
+func _put_book_away(now: bool = false) -> void:
+	if _book == null or not is_instance_valid(_book):
+		_book = null
+		return
+	var b := _book
+	_book = null
+	if now or not b.is_inside_tree():
+		b.queue_free()
+		return
+	var tw := b.create_tween()
+	tw.tween_property(b, "scale", Vector3.ONE * 0.01, 0.3)
+	tw.parallel().tween_property(b, "position", b.position + Vector3(0.0, -0.3, 0.0), 0.3)
+	tw.tween_callback(b.queue_free)
+
+
+## A navy dip over the whole screen (above the dialogue box): `alpha` 1 covers, 0 lifts, over `secs`.
+## Awaitable. HOME uses it too.
+func dip(alpha: float, secs: float) -> void:
+	if _dip_layer == null or not is_instance_valid(_dip_layer):
+		_dip_layer = CanvasLayer.new()
+		_dip_layer.name = "FinaleDip"
+		_dip_layer.layer = DIP_LAYER
+		add_child(_dip_layer)
+		_dip_rect = ColorRect.new()
+		_dip_rect.color = Color(UIStyle.NAVY, 0.0)
+		_dip_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_dip_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_dip_layer.add_child(_dip_rect)
+	var a0 := _dip_rect.color.a
+	var t := 0.0
+	while is_inside_tree() and t < secs:
+		t = minf(secs, t + minf(get_process_delta_time(), MAX_STEP))
+		_dip_rect.color.a = lerpf(a0, alpha, smoothstep(0.0, 1.0, t / maxf(secs, 0.001)))
+		await get_tree().process_frame
+	if is_instance_valid(_dip_rect):
+		_dip_rect.color.a = alpha
+	_beat("dip -> %.2f (%.2f s)" % [alpha, secs])
+
+
+## Puts the camera exactly on `xf` / `fov`, with no blend (behind a dip only).
+func _snap_camera(xf: Transform3D, fov: float) -> void:
+	_ensure_camera(true)
+	_cam.global_transform = xf.orthonormalized()
+	_cam.fov = fov
+	_goal = _cam.global_transform
+	_goal_fov = fov
+	_has_goal = false
+	_k = 0.0
+
+
+## The camera straight onto a rule's framing, no blend (behind a dip). Returns false with no framing.
+func snap_to(rule: String, ids: Array = []) -> bool:
+	var shot := _shot_for(rule, ids)
+	if shot.is_empty():
+		return false
+	_rule = rule + (":" + str(ids[0]) if not ids.is_empty() else "") + " (snap)"
+	_snap_camera(Transform3D(shot["basis"] as Basis, shot["eye"] as Vector3), float(shot["fov"]))
+	return true
+
+
+## HOME (finale_gift.gd), behind its dip: everyone back on the Commons - the whole crowd visible on its
+## meeting spots facing the astronaut, the astronaut on the mark facing them, the five ships on their
+## spots, the rocket back on the pad with its ladder down, the book gone.
+func stage_home() -> void:
+	_put_book_away(true)
+	for id in _ids:
+		var n := npc(id) as NPC
+		if n == null:
+			continue
+		var d: Vector3 = _dirs.get(id, n.visit_home)
+		n.visible = true
+		n.place_on_planet(d, _mark - planet.surface_point(d), 0.06)
+	_hold_crowd(_mark_look())
+	# The five ships back on their spots (HOME then hides them again: they come down in its "return" beat).
+	if ships() != null:
+		_ships.call("park_all")
+	if _rocket != null and is_instance_valid(_rocket):
+		_rocket.global_transform = _rocket_rest
+		_rocket.visible = true
+		if _rocket.has_method("set_engine"):
+			_rocket.call("set_engine", false)
+		if _rocket.has_method("set_flame_scale"):
+			_rocket.call("set_flame_scale", 0.0)
+		if _rocket.has_method("set_ladder_deployed"):
+			_rocket.call("set_ladder_deployed", true)
+	if _player != null and is_instance_valid(_player):
+		_walking = false
+		_player.set("_speed_factor", 0.0)
+		var up := planet.up_at(_mark)
+		_player.global_transform = Transform3D(Basis.looking_at(_tangent(_crowd_centre - _mark, up, _axis), up), _mark + up * 0.02)
+		_player.velocity = Vector3.ZERO
+		_player.visible = true
+		_player.set_physics_process(true)
+		_player.input_enabled = false
+		var model := _player.get_model()
+		if model != null:
+			model.set_state("idle")
+	_beat("stage_home: crowd on its spots, ships %s, rocket on the pad" % ("none" if ships() == null or bool(_ships.get("gone")) else "parked"))
+
+
+## The last photo (docs/STORY_HOME_SPEC.md ruling 2.14 (a)): where the astronaut stands AMONG the neighbours
+## for the self-timer shot taken from `eye`. Candidates in front of the front row (PHOTO_FRONT_M toward the
+## mark from the row, PHOTO_LATS along it, 0 = between Zorp and the Professor); clear ground and PHOTO_CLEAR_M
+## from every neighbour. Each is scored by how much of any neighbour's head the astronaut's helmet and body
+## would cover as seen from `eye` (the angular-disc overlap of `_overlap`; MEASURED first run: dead centre
+## 0.75 m out hid two back-row heads): the most central spot that covers no head more than PHOTO_COVER_MAX
+## (§2's "no head more than 20% covered"), else the least covering. Returns [surface dir, worst cover].
+const PHOTO_FRONT_M: Array[float] = [0.55, 0.85, 1.15]
+const PHOTO_LATS: Array[float] = [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.5, -2.5, 3.0, -3.0, 3.5, -3.5]
+const PHOTO_CLEAR_M := 0.7
+const PHOTO_COVER_MAX := 0.2
+const PHOTO_BODY := {"c_h": 0.5, "r": 0.32}
+func photo_spot(eye: Vector3) -> Array:
+	var pa: Vector3 = planet.surface_point(_dirs.get("zorp", _mark_dir) as Vector3)
+	var pb: Vector3 = planet.surface_point(_dirs.get(PROF, _mark_dir) as Vector3)
+	var mid := planet.surface_point(planet.dir_of((pa + pb) * 0.5))
+	var up := planet.up_at(mid)
+	var toward := _tangent(_mark - mid, up, -_axis)
+	var side := up.cross(toward).normalized()
+	var heads := head_points()
+	var best_d := planet.dir_of(mid + toward * PHOTO_FRONT_M[0])
+	var best_s := INF
+	var best_cover := -1.0
+	for f: float in PHOTO_FRONT_M:
+		for lat: float in PHOTO_LATS:
+			var d := planet.dir_of(mid + toward * f + side * lat)
+			if _ground(d) != "":
+				continue
+			var p := planet.surface_point(d)
+			var ok := true
+			for id in _ids:
+				var n := npc(id)
+				if n != null and n.global_position.distance_to(p) < PHOTO_CLEAR_M:
+					ok = false
+					break
+			if not ok:
+				continue
+			var pu := planet.up_at(p)
+			var cover := 0.0
+			for h: Dictionary in heads:
+				var hc: Vector3 = h["c"]
+				var hd := hc.distance_to(eye)
+				var hr := asin(clampf(float(h["r"]) / hd, 0.0, 1.0))
+				var c_sum := 0.0
+				for disc: Dictionary in [ASTRO_HEAD, PHOTO_BODY]:
+					var ac := p + pu * float(disc["c_h"])
+					var ad := ac.distance_to(eye)
+					if ad >= hd:
+						continue
+					var ar := asin(clampf(float(disc["r"]) / ad, 0.0, 1.0))
+					var ang := (hc - eye).angle_to(ac - eye)
+					c_sum += _overlap(ang, ar, hr) / (PI * hr * hr)
+				cover = maxf(cover, minf(c_sum, 1.0))
+			# §2's own gate - no head more than PHOTO_COVER_MAX covered - then the most central, nearest the row.
+			var score := maxf(cover - PHOTO_COVER_MAX, 0.0) * 100.0 + absf(lat) * 0.1 + f * 0.05
+			if score < best_s:
+				best_s = score
+				best_d = d
+				best_cover = cover
+	return [best_d, best_cover]
+
+
+## Where control comes back after HOME: 5.0-5.8 m from the pad (outside the pad's 4.2 m Fly reach -
+## docs/PHASE5_SPEC.md §2), swung off the axis so the astronaut stands beside the crowd rather than in it;
+## clear ground (`_ground`), 1.2 m from every neighbour and clear of the ships. Vector3.ZERO if none passes.
+func control_spot() -> Vector3:
+	for rho: float in [5.2, 5.6, 5.0, 5.9]:
+		for deg: float in [48.0, -48.0, 60.0, -60.0, 38.0, -38.0, 72.0, -72.0, 90.0, -90.0]:
+			var ax := _axis.rotated(_pad_dir, deg_to_rad(deg))
+			var d := _slot_dir(ax, rho, 0.0)
+			if _ground(d) != "":
+				continue
+			var p := planet.surface_point(d)
+			var near := false
+			for id in _ids:
+				var n := npc(id)
+				if n != null and n.global_position.distance_to(p) < 1.2:
+					near = true
+					break
+			if near or (ships() != null and bool(_ships.call("blocks", d, 0.9))):
+				continue
+			return d
+	return Vector3.ZERO
+
+
+## Walks the astronaut to the surface direction `to`, facing `face` at the end. Awaitable (HOME).
+func walk_player_to(to: Vector3, face: Vector3) -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	var a := _player.global_position
+	var b := planet.surface_point(to)
+	# Face the way they walk (a point past the destination), then turn to `face`.
+	await _walk_player_to_async(to, b + (b - a).normalized() * 6.0)
+	if is_inside_tree() and _player != null:
+		var up := planet.up_at(_player.global_position)
+		var p := _player.global_position
+		var f0 := _tangent(-_player.global_basis.z, up, _axis)
+		var f1 := _tangent(face - p, up, f0)
+		var t := 0.0
+		while is_inside_tree() and t < TURN_S:
+			t = minf(TURN_S, t + minf(get_process_delta_time(), MAX_STEP))
+			var f := f0.slerp(f1, smoothstep(0.0, 1.0, t / TURN_S)).normalized()
+			_player.global_transform = Transform3D(Basis.looking_at(_tangent(f, up, f1), up), p)
+			await get_tree().process_frame
+
+
+## The meeting camera onto the gameplay rig within the §2 speed limits (the free-roam hand-back). Awaitable.
+func hand_back_to_rig() -> void:
+	_ensure_camera(false)
+	if _cam != null and _cam.current:
+		await _hand_back_to_rig()
+
+
 ## FinaleLaunch.opening_frame(self) as it will be after the send beat - the crowd STEP_BACK_M back, the
 ## astronaut on the mark - worked out inside the load: its sight lines (VisitorSystem.open_sight, ~40 ms
 ## measured) would otherwise stall a frame of the send beat. Everyone is put back before this returns, so
@@ -1082,15 +1461,21 @@ func _precompute_opening() -> void:
 	var script := load(LAUNCH_PATH) as Script
 	if script == null:
 		return
+	# Where the send beat leaves everyone (`_board_now`): the whole crowd on its step-back spots (nobody
+	# boards: the ships fly on autopilot), the astronaut on the mark facing the rocket. FinaleLaunch solves
+	# from the crowd standing, so this is the set its side pick and opening frame see again at play.
 	var saved := {}
+	var hid: Array[Node3D] = []
 	for id in _ids:
 		var n := npc(id)
-		if n != null and _back_dirs.has(id):
+		if n == null:
+			continue
+		if _back_dirs.has(id):
 			saved[id] = n.global_transform
 			var d: Vector3 = _back_dirs[id]
 			n.global_transform = planet.surface_transform(d, _mark - planet.surface_point(d))
 	var pxf := _player.global_transform
-	_player.global_transform = planet.surface_transform(_mark_dir, _crowd_centre - _mark)
+	_player.global_transform = planet.surface_transform(_mark_dir, _rocket_rest.origin - _mark)
 	var rxf := _rocket.global_transform
 	_rocket.global_transform = _rocket_rest
 	var u0 := Time.get_ticks_usec()
@@ -1098,6 +1483,8 @@ func _precompute_opening() -> void:
 	_stats["opening_ms"] = (Time.get_ticks_usec() - u0) / 1000.0
 	_rocket.global_transform = rxf
 	_player.global_transform = pxf
+	for n2 in hid:
+		n2.visible = true
 	for id: String in saved:
 		npc(id).global_transform = saved[id]
 
@@ -1172,6 +1559,8 @@ func _play_meeting() -> void:
 	_hold_crowd(_mark_look())
 	camera_to("W")
 	_beat("meeting begin")
+	# The goodbye party (docs/STORY_HOME_SPEC.md §8): Nova's party track, until his reminder about the meteor.
+	AudioManager.play_music(PARTY_TRACK, 1.5)
 	await _walk_to_mark()
 	await _await_camera(CAMERA_WAIT_MAX)
 	if not is_inside_tree():
@@ -1179,15 +1568,42 @@ func _play_meeting() -> void:
 	var runner := DialogueRunner.get_or_create(self)
 	var meeting: Array = _lines.get("MEETING") if _lines != null else []
 	var first := true
+	var after_action := false
 	for turn: Dictionary in meeting:
 		if not is_inside_tree():
 			return
 		if turn.has("action"):
-			_beat("action %s" % str(turn["action"]))
-			_hold_crowd(_rocket_mid())
-			_face_player_toward(_rocket_mid())
-			camera_to(TURN_RULE)
-			await _wait(TURN_BEAT_S)
+			var aid := str(turn.get("id", "turn"))
+			after_action = aid == "silence" or aid == "cheer"
+			_beat("action %s: %s" % [aid, str(turn["action"])])
+			match aid:
+				"scrapbook":
+					await _hold_up_scrapbook()
+				"silence":
+					# Nobody moves, the camera included; the party music stops under it.
+					_put_book_away()
+					AudioManager.play_music("", 0.6)
+					await _wait(SILENCE_S)
+				"cheer":
+					# Everyone agrees: the whole crowd on W, each cheering at its own offset (ruling 2.14 (b)).
+					_hold_crowd(_mark_look())
+					camera_to("W")
+					await _await_camera(CAMERA_WAIT_MAX)
+					cheer_crowd()
+					await _wait(CHEER_BEAT_S)
+				"pause":
+					camera_to("W")
+					await _await_camera(CAMERA_WAIT_MAX)
+					await _wait(PAUSE_S)
+				_:
+					# "All turn to the player": the crowd turns to the astronaut and the rocket behind them
+					# (from the crowd both lie along the axis), framed side-on (S), as the old "turn to the rocket".
+					# The Professor lowers your scrapbook first (it stood up through his path lines).
+					_put_book_away()
+					_hold_crowd(_rocket_mid())
+					_face_player_toward(_rocket_mid())
+					camera_to(TURN_RULE)
+					await _wait(TURN_BEAT_S)
 			continue
 		var speaker := str(turn.get("speaker", ""))
 		var n := npc(speaker)
@@ -1218,6 +1634,11 @@ func _play_meeting() -> void:
 			_hold_crowd(_mark_look())
 		camera_to(rule, [speaker])
 		await _w_box_wait(rule, speaker)
+		if rule == "U" or after_action:
+			# The look up at the meteor (Nova's reminder) and the first box after a beat of silence open on
+			# a settled camera, so the rock is in frame before the line and nothing is said mid-swing.
+			await _await_camera(CAMERA_WAIT_MAX)
+		after_action = false
 		if not is_inside_tree():
 			return
 		if not runner.is_active():
@@ -1228,6 +1649,22 @@ func _play_meeting() -> void:
 		_beat("say %s rule=%s%s" % [speaker, rule, " (W's framing: %s)" % _rule if _rule.begins_with("W<-") else ""])
 		_speaker_move(rule, speaker)
 		await runner.say(n, turn.get("lines", []))
+
+
+## Every crowd member celebrates once, each starting at its own offset over CHEER_SPREAD_S (FinaleLaunch's
+## shuffled spacing, so side-by-side neighbours never go one after the other); DJ Nova dances. Not awaited.
+func cheer_crowd() -> void:
+	var n_all := _ids.size()
+	var script: Script = load(LAUNCH_PATH) as Script if ResourceLoader.exists(LAUNCH_PATH) else null
+	for i in n_all:
+		var n := npc(_ids[i])
+		if n == null or not n.has_method("play_emote"):
+			continue
+		var off := float(script.call("cheer_offset", i, n_all, CHEER_SPREAD_S)) if script != null else 0.13 * float(i)
+		var move := "dance" if _ids[i] == "dj_nova" else "happy"
+		get_tree().create_timer(off).timeout.connect(func() -> void:
+			if is_instance_valid(n):
+				n.call("play_emote", move))
 
 
 func _enter_roam() -> void:
@@ -1285,7 +1722,10 @@ func play_send_beat() -> void:
 	if _player.global_position.distance_to(_mark) > ARRIVE_M:
 		camera_to("W")
 		await _walk_to_mark()
-	var send: Array = _lines.get("SEND") if _lines != null else []
+	var send: Array = []
+	for turn0: Dictionary in (_lines.get("SEND") if _lines != null else []):
+		if not turn0.has("action"):
+			send.append(turn0)
 	var rules := SEND_RULES
 	for i in send.size():
 		var turn: Dictionary = send[i]
@@ -1305,28 +1745,41 @@ func play_send_beat() -> void:
 			return
 	runner.finish()
 	_player.input_enabled = false
-	# The crowd steps back, the ladder stows, the astronaut waves.
+	await _board()
+	if not is_inside_tree():
+		return
+	_phase = Phase.SENT
+	_hand_modal_to_launch()
+
+
+## "Everyone, stand back!" Nobody boards (docs/STORY_HOME_SPEC.md §8.1: the ships fly on autopilot and
+## everyone watches from the Commons): the whole crowd steps back STEP_BACK_M, the astronaut waves and turns
+## on the mark to the rocket; after BOARD_WALK_S a dip to navy, behind which everyone is on their step-back
+## spot, the ladder stows and the camera is put on FinaleLaunch's opening frame, and the dip lifts on it.
+func _board() -> void:
 	for id in _ids:
 		var n := npc(id) as NPC
-		if n != null and _back_dirs.has(id):
-			n.release_facing()
+		if n == null:
+			continue
+		n.release_facing()
+		if _back_dirs.has(id):
 			n.stroll_to(_back_dirs[id] as Vector3)
-	if _rocket != null and is_instance_valid(_rocket) and _rocket.has_method("set_ladder_deployed"):
-		_rocket.call("set_ladder_deployed", false)
-	_face_player_toward(_rocket_mid())
-	await _wait(0.35)
+	camera_to("W")
 	_player.play_emote("wave")
+	await _wait(0.5)
+	_face_player_toward(_rocket_mid())
+	var walk: Object = null
 	var t := 0.0
-	while is_inside_tree() and t < 2.5:
-		var strolling := false
-		for id in _ids:
-			var n := npc(id) as NPC
-			strolling = strolling or (n != null and n.is_strolling())
-		if not strolling and t >= 1.4:
-			break
+	while is_inside_tree() and t < BOARD_WALK_S:
 		t += minf(get_process_delta_time(), MAX_STEP)
 		await get_tree().process_frame
-	_hold_crowd(_rocket_mid())
+	if not is_inside_tree():
+		return
+	await dip(1.0, DIP_OUT_S)
+	if not is_inside_tree():
+		return
+	_walking = false
+	_board_now()
 	var of: Array = _opening
 	if of.size() != 2 and ResourceLoader.exists(LAUNCH_PATH):
 		var script := load(LAUNCH_PATH) as Script
@@ -1334,11 +1787,35 @@ func play_send_beat() -> void:
 			of = script.call("opening_frame", self)
 	if of.size() == 2:
 		_rule = "launch-open"
-		_set_goal(of[0] as Transform3D, float(of[1]), 0.0)
-		await _await_camera(10.0)
-	_beat("send beat done opening_frame=%s cam_goal=%s" % [str(of.size() == 2), str(_has_goal)])
-	_phase = Phase.SENT
-	_hand_modal_to_launch()
+		_snap_camera(of[0] as Transform3D, float(of[1]))
+	await _wait(DIP_HOLD_S)
+	await dip(0.0, DIP_IN_S)
+	_beat("send beat done: stood back opening_frame=%s walk_started=%s" % [str(of.size() == 2), str(walk != null)])
+
+
+## Everyone stood back, at once (behind the dip, or for a probe): the whole crowd on its step-back spots
+## facing the rocket, the astronaut on the mark facing it too (visible: they watch), the ladder stowed.
+func _board_now() -> void:
+	for id in _ids:
+		var n := npc(id) as NPC
+		if n == null:
+			continue
+		n.visible = true
+		if _back_dirs.has(id):
+			var d: Vector3 = _back_dirs[id]
+			n.place_on_planet(d, _mark - planet.surface_point(d), 0.06)
+	_hold_crowd(_rocket_mid())
+	_player.set("_speed_factor", 0.0)
+	var up := planet.up_at(_mark)
+	_player.global_transform = Transform3D(Basis.looking_at(_tangent(_rocket_rest.origin - _mark, up, _axis), up), _mark + up * 0.02)
+	_player.velocity = Vector3.ZERO
+	_player.set_physics_process(true)
+	_player.visible = true
+	var model := _player.get_model()
+	if model != null:
+		model.set_state("idle")
+	if _rocket != null and is_instance_valid(_rocket) and _rocket.has_method("set_ladder_deployed"):
+		_rocket.call("set_ladder_deployed", false)
 
 
 ## After the story (finale.gd, once the gift has finished): the friends wander a little as ordinary
@@ -1353,6 +1830,7 @@ func release() -> void:
 		var n := npc(id) as NPC
 		if n == null:
 			continue
+		n.visible = true
 		n.release_facing()
 		if FRIENDS.has(id):
 			n.visit_wander_m = RELEASED_WANDER_M
@@ -1378,6 +1856,9 @@ func release() -> void:
 	if _asteroid != null and is_instance_valid(_asteroid):
 		_asteroid.queue_free()
 	_asteroid = null
+	_put_book_away(true)
+	if _player != null and is_instance_valid(_player):
+		_player.visible = true
 	_end_modal()
 	_restore_clock()
 	_beat("release")
@@ -1386,7 +1867,7 @@ func release() -> void:
 
 # ============================================================================= visit host (npc.gd, conversation.gd)
 func wander_ok(dir: Vector3) -> bool:
-	return _phase == Phase.RELEASED and _ground(dir) == ""
+	return _phase == Phase.RELEASED and _ground(dir) == "" and not (ships() != null and bool(_ships.call("blocks", dir, 0.6)))
 
 
 func wants_marker(npc_id: String) -> int:
@@ -1600,6 +2081,16 @@ func _hold_crowd(point: Vector3) -> void:
 			n.hold_facing(point)
 
 
+## The whole crowd turns to `point` (HOME: to the ships coming down, then back to the astronaut).
+func crowd_face(point: Vector3) -> void:
+	_hold_crowd(point)
+
+
+## The whole crowd faces the astronaut on the mark again (the meeting's own hold for its close-ups).
+func crowd_face_astronaut() -> void:
+	_hold_crowd(_mark_look())
+
+
 func _crowd_faces_rocket() -> bool:
 	return _crowd_look.distance_to(_rocket_mid()) < 0.01
 
@@ -1671,6 +2162,47 @@ func _walk_to_mark() -> void:
 	if is_inside_tree():
 		_player.velocity = Vector3.ZERO
 		_player.set_physics_process(true)
+
+
+## Walks the astronaut toward the surface direction `to` (body moved by hand like `_walk_to_mark`),
+## turning to face `face` at the end. Not awaited by the send beat (the dip may cut it short; `_walking`
+## false stops it). Returns a dummy non-null marker so the caller can log that it started.
+func _walk_player_to(to: Vector3, face: Vector3) -> Object:
+	_walk_player_to_async(to, face)
+	return self
+
+
+func _walk_player_to_async(to: Vector3, face: Vector3) -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	var start := _player.global_position
+	var from_dir := planet.dir_of(start)
+	var dist := planet.surface_distance(from_dir, to)
+	if dist < ARRIVE_M:
+		return
+	_walking = true
+	_player.set_physics_process(false)
+	_player.set("_speed_factor", WALK_SPEED_FACTOR)
+	var model := _player.get_model()
+	if model != null:
+		model.set_state("walk")
+	var travelled := 0.0
+	while is_inside_tree() and _walking and travelled < dist:
+		travelled = minf(dist, travelled + WALK_MPS * 0.8 * minf(get_process_delta_time(), MAX_STEP))
+		var d := from_dir.slerp(to, travelled / dist).normalized()
+		var p := planet.surface_point(d)
+		var up := planet.up_at(p)
+		var f := _tangent(face - p, up, _axis)
+		_player.global_transform = Transform3D(Basis.looking_at(f, up), p + up * 0.02)
+		await get_tree().process_frame
+	if not is_inside_tree() or not _walking:
+		return  # the dip's `_board_now` took over.
+	_walking = false
+	if model != null and is_instance_valid(model):
+		model.set_state("idle")
+	_player.set("_speed_factor", 0.0)
+	_player.velocity = Vector3.ZERO
+	_player.set_physics_process(true)
 
 
 func _wait(seconds: float) -> void:

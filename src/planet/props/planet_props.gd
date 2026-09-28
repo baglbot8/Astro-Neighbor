@@ -251,6 +251,237 @@ func _omni(parent: Node3D, pos: Vector3, color: Color, energy: float, range_m: f
 	l.light_specular = 0.3
 	parent.add_child(l)
 
+## ============================================================================================ story dressing
+## STORY_HOME_SPEC.md ruling 9: "Packing is words and props, not mechanics." A few moving boxes and
+## one silly sign sit on the Commons and near each neighbour's home before the finale, and go away
+## after it (section 3 beat 2: "The Commons. Boxes, a silly sign or two.").
+##
+## GATED ON GameState.story_done, READ ONCE PER BUILD. Every prop in this file is laid down when
+## Planet.populate() runs, once per visit (see `populate_calls` above) - never re-evaluated live -
+## so this reads the flag the same way every other placement here reads `data`: once, at the top of
+## the biome function. A story beat that finishes while the player is already standing on the planet
+## keeps its boxes until the NEXT visit rebuilds the scene, which is also how the player actually
+## sees it (leave the planet, come back) - not proven by a single continuous session, only by two
+## separate loads (the builder's gate: a frame from each).
+func _packing_active() -> bool:
+	return not GameState.story_done
+
+## The resident neighbour's home spot on one of the five neighbour worlds (`NpcData.home_dir`,
+## npc_data.gd's own coarse per-planet fallback - see that file's header). Falls back to spawn on a
+## world with no listed npc (a showcase scene running standalone).
+func _neighbour_home_dir() -> Vector3:
+	if data.npcs.is_empty():
+		return data.spawn_dir.normalized()
+	var info := NpcData.get_data(data.npcs[0])
+	var hd: Vector3 = info.get("home_dir", data.spawn_dir)
+	return hd.normalized() if hd.length_squared() > 0.0001 else data.spawn_dir.normalized()
+
+## A point `dist_m` out from `anchor`, on the side AWAY from `crowded_toward` (rotated
+## `angle_deg` off that straight-away bearing for a little spread between two calls at the same
+## anchor) - a deterministic recipe, not a blind `find_free_dir_near` rejection search.
+##
+## MEASURED (dress build, 2026-09-27), two rounds:
+## 1. `find_free_dir_near` samples the WHOLE sphere and rejects anything outside `max_m` of the
+##    centre OR inside a reserved zone's radius + clearance. The hub's `town_hall` reserves 7.0 m
+##    (`HUB_BUILDING_FLAT_RADIUS` 6.0 + 1.0); a search centred ON `town` with `max_m` at or under
+##    that (2.4 m, then 6.0 m) sits ENTIRELY inside the blocked disc - a 0% hit rate no matter the
+##    try count. Probe: 0 of 3 boxes placed either way ("PackingBox" absent from PlanetShowcase's
+##    own build tally).
+## 2. Stepping `dist_m` toward `spawn` instead (the first fix) traded one blocked disc for another:
+##    the hub's `town_hall` (7.0 m reserved) and `spawn` (`HUB_SPAWN_FLAT_RADIUS` 7.0 + 0.6 = 7.6 m)
+##    are only 12.85 m apart, so their reserved discs overlap along the WHOLE segment between them -
+##    every point on that line is inside one disc or the other. Probe: still 0 boxes.
+## Going AWAY from the crowded direction instead only has to clear the anchor's own disc once, and
+## every metre travelled moves further from the other disc rather than into it.
+func _packing_spot(anchor: Vector3, crowded_toward: Vector3, dist_m: float, angle_deg: float = 0.0) -> Vector3:
+	var to_crowded := crowded_toward - anchor * anchor.dot(crowded_toward)
+	if to_crowded.length_squared() < 0.0001:
+		to_crowded = _random_tangent(anchor)
+	var flee := -to_crowded.normalized()
+	flee = flee.rotated(anchor, deg_to_rad(angle_deg))
+	return (anchor + flee * (dist_m / planet.radius)).normalized()
+
+## Warm cardboard tint, distinct from Bolt's own steel supply_crate (`_chrome`'s crate_body/trim) so
+## packing boxes read as a different, temporary thing everywhere they turn up.
+## MEASURED (SMALLFIX round, 2026-09-27, tools/palette.py, tight per-face crops of a windowed Fen
+## capture, 2556x1178, gl_compatibility, hour 13), two rounds:
+## 1. First body (#c9a877, authored S 0.408) read S 0.72 on the crate's own front (lit) face - the
+##    ALBEDO-applied-twice engine bug this shader's own header documents (docs/OPEN_ISSUES.md #19,
+##    "not yet fixed here") roughly SQUARES the chroma rather than passing it through, so it is not
+##    the trim comment's simple multiplicative case above.
+## 2. A first cut to S 0.318 (same hue/value, chroma x0.78) only brought the SAME crop down to
+##    S 0.62 (still over the gate) - re-measured against round 1's crop rather than assumed, which is
+##    what showed the relationship is closer to rendered_S ~ authored_S^0.6 than to 1:1. Solving that
+##    fit for a rendered S around 0.50 (a real margin under the gate, not right on it - same margin
+##    the trim comment above settled for) gives this value.
+const _PACKING_BOX_BODY := Color("#c9b79d")
+## MEASURED (dress build, 2026-09-27, tools/palette.py on a tight crop of the rendered crate): the
+## first trim (#8f6f4a, authored S 0.48) read S 0.75 on its own shaded roof face - toon shading
+## darkens a colour and that RAISES its rendered HSV saturation (OPEN_ISSUES' standing note), so the
+## shaded side alone crossed STYLE_GUIDE R2.6's "no dominant swatch above S 0.60". Re-measured after
+## two cuts to the authored chroma, same hue: S 0.35 -> shaded S 0.60 (still on the line), S 0.31 ->
+## shaded S 0.53 (`box_trim2` crop, this dress build) - the value kept here.
+const _PACKING_BOX_TRIM := Color("#a2896f")
+## Common sign palette so a hand-painted board reads the same everywhere (STYLE_GUIDE R2.6: fewer
+## new hues is fewer chances to push a saturation gate).
+const _PACKING_BOARD := Color("#e8ddc4")
+const _PACKING_POST := Color("#8f7444")
+const _PACKING_INK := Color("#4a3626")
+## Same steep-ground cutoff `src/planet_safari/worlds/bolt.gd` already checks before placing a prop
+## (`p.ground_normal(d).angle_to(d) > deg_to_rad(...)`) - the angle between the ground normal at a
+## candidate point and the radial direction to it, i.e. how far the local ground tilts off level.
+const _PACKING_BOX_MAX_SLOPE_DEG := 15.0
+## Packing's own deterministic RNG salt (planet.make_rng), same idiom as _collectibles()'s crng
+## below - see _moving_boxes()'s own note on why packing must not draw from the shared `rng`.
+const PACKING_RNG_SALT := 19
+
+## A few moving boxes set down near `center`, not stacked neatly - people packing in a hurry, not a
+## tidy stockpile. Reuses PlanetPropMeshes.supply_crate (Bolt's yard machinery; OPEN_ISSUES #18:
+## adopt the shared mesh rather than writing a new box) so this costs no new geometry.
+func _moving_boxes(center: Vector3, n: int = 3) -> void:
+	var mat := PlanetPropMeshes.prop_material()
+	# LOCAL TANGENT-PLANE JITTER, not find_free_dir_near - the same recipe `_fill_flowers` already
+	# uses for a small cluster around a known-good point.
+	#
+	# MEASURED (dress build, 2026-09-27): find_free_dir_near samples a UNIFORM POINT ON THE WHOLE
+	# SPHERE and only keeps it if it lands within `max_m` of `center` - so its hit rate is a SOLID
+	# ANGLE fraction, (max_m / planet.radius)^2 / 4, not the (max_m / radius)^2 this file's other
+	# comments first assumed. On the hub (R 21) even a generous 6 m band is ~2% per try; a tight 2.6 m
+	# band the size an actual box cluster wants is ~0.38% - "PackingBox" stayed absent from
+	# PlanetShowcase's own build tally at max_m 2.4, 6.0 AND at 400 tries. `center` is already past
+	# its anchor's own reserved disc (`_packing_spot`) and was confirmed flat, dry ground by a debug
+	# probe (height +-0.09 m over a 2 m ring, water line 0.4+ m below) - exactly the case
+	# `_fill_flowers` already covers this way for the plaza's flower rings.
+	#
+	# FIXED (critic round 2, 2026-09-27), two things measured wrong in that "confirmed dry" claim above:
+	# 1. `center` being dry does not make every JITTERED point dry - this loop picked a point up to
+	#    1.7 m off `center` and never checked THAT point, only the anchor. On Fen, box 0's dedicated
+	#    ~120 deg wedge happened to point at a crater pool and the box landed half sunk (probe:
+	#    PackingBox0 is_underwater=true, ground radius 12.147 vs water_radius 12.659).
+	# 2. The fix's first cut fell back to unchecked `center` when every jittered try failed, on the
+	#    assumption "center was confirmed dry and flat" above - re-measured on Fen and that assumption
+	#    is FALSE THERE: `center` itself sits on an 18.6 deg bank (Fen's craters, unlike the single
+	#    open pond the comment above was written against, ring the whole area in banks), so box 0's
+	#    fallback was still a fail, just a smaller one.
+	# Each candidate is now checked the same way the safari worlds' own prop placement already does
+	# (e.g. src/planet_safari/worlds/bolt.gd's `ground_normal(d).angle_to(d) > deg_to_rad(...)`):
+	# reject a dir that is underwater, inside another prop's/neighbour's zone, or tilts more than
+	# _PACKING_BOX_MAX_SLOPE_DEG off level. The first 5 retries stay in the box's own wedge (the
+	# spread look); once that whole wedge has failed, the rest search ANY bearing around `center`,
+	# since box 1 and box 2 prove flat dry ground exists nearby even when box 0's own wedge does not.
+	#
+	# FIXED (critic round 3, 2026-09-27): the gap check above (`reserved_zone_at`/
+	# `nearest_prop_distance`) was added this round and `continue`s past the `best_d`/`best_slope`
+	# tracking below it - so a `center` whose entire searched neighbourhood was already claimed (an
+	# earlier box in this cluster, or a neighbour's home disc) left `best_d` sitting at its unchecked
+	# `center` seed the whole time, and `d = best_d` on fallback placed a box there anyway. MEASURED
+	# in the critic copy (temporary print, reverted) on all six neighbour worlds: on VELA, box1 and
+	# box2 both fell back to unchecked `center` (gaps -0.135 m and -0.446 m - stacked on each other);
+	# on FEN, box1 fell back to `center` at a 0.26 m gap and box2's only gap-clear candidate found was
+	# a 51.5 deg bank, more than 3x the slope limit. Hub, Zorp, Bolt and Grig all found a spot within
+	# the original 10 tries (gaps >= 1.197 m), which is why the bug did not show up there.
+	# Two changes: (1) the search widens instead of giving up - 10 more tries at a 1.7-2.6 m reach,
+	# past whatever ring of props/reserved discs the first 10 (<= 1.7 m) tries were boxed in by.
+	# (2) there is no more "best effort" fallback: `d` only ever becomes a candidate that passed
+	# every check (dry, gap-clear, AND <= _PACKING_BOX_MAX_SLOPE_DEG) in the same `if`, so a box
+	# whose full 20-try search never clears all three is skipped outright (`continue`, no
+	# _spawn_blocking call) rather than stacked or planted on a bank the search itself measured as
+	# too steep. Fewer crates is a smaller mistake than an overlapping or half-buried one.
+	# PACKING'S OWN RNG (dress build round 2, 2026-09-27, docs/OPEN_ISSUES.md), not the shared `rng`
+	# every other lawn prop in this file draws from. Packing runs only while not GameState.story_done,
+	# so its own draws used to shift every draw that came after it in the shared stream - measured on
+	# the Commons: turning story_done on or off moved trees and flower patches placed later in
+	# _plaza() that have nothing to do with the boxes, only because they inherit whatever the boxes
+	# did or did not consume first. planet.make_rng with a salt of its own (the same idiom
+	# _collectibles() already uses below, for the same reason) takes packing off that shared stream
+	# entirely - paired with moving the Commons block to the end of _plaza() (nothing there draws from
+	# `rng` after it either way) so the only thing that ever moves when story_done flips is a packing
+	# box or sign, never a tree, bench or flower.
+	var prng := planet.make_rng(PACKING_RNG_SALT)
+	var xf := planet.surface_transform(center)
+	for i in n:
+		var base_ang := TAU * float(i) / float(n)
+		# `d` only ever becomes a candidate that passed every check below (dry, gap-clear, AND
+		# within the slope limit) in one `if` - there is no separate "best effort" var to fall back
+		# to, so a fallback can never be an unchecked or a known-bad point (see the FIXED note above).
+		var d := center
+		var found := false
+		for attempt in 20:
+			# First 5 tries keep this box in its own ~120 deg wedge (the spread look, n boxes at n
+			# roughly even bearings); once that whole wedge has failed, widen to ANY bearing around
+			# `center` - Fen's box 0 sits toward a crater pool that fills its entire dedicated wedge,
+			# so the fix has to be able to look elsewhere rather than keep jittering a bad bearing.
+			var ang := base_ang + prng.randf_range(-0.35, 0.35) if attempt < 5 else prng.randf_range(0.0, TAU)
+			# Shrink the search radius for attempts 5-9 too: a dir can be bad because everything THAT
+			# FAR from `center` on THAT bearing is water or a bank, not just the one sample tried.
+			# Attempts 10-19 (WIDENED, critic round 3) instead reach OUT past the <= 1.7 m ring the
+			# first 10 tries were confined to, since a claimed ring (an earlier box in this cluster,
+			# or a neighbour's reserved disc) can leave nothing gap-clear that close to `center`.
+			var r: float
+			if attempt < 10:
+				r = prng.randf_range(0.9, 1.7) if attempt % 5 < 3 else prng.randf_range(0.4, 0.9)
+			else:
+				r = prng.randf_range(1.7, 2.6)
+			var off := xf.basis.x * cos(ang) + xf.basis.z * sin(ang)
+			var cand := (center + off * (r / planet.radius)).normalized()
+			if planet.is_underwater(cand):
+				continue
+			# Out of any neighbour's home (Planet._reserve_npc_homes, 3.2 m) and at least 1.0 m clear
+			# of every other registered prop - including a packing box already placed earlier in this
+			# very cluster, since _spawn_blocking registers each one before the next is searched for.
+			if planet.reserved_zone_at(cand) != "" or planet.nearest_prop_distance(cand) < 1.0:
+				continue
+			var slope := planet.ground_normal(cand).angle_to(cand)
+			if slope <= deg_to_rad(_PACKING_BOX_MAX_SLOPE_DEG):
+				d = cand
+				found = true
+				break
+		if not found:
+			# No candidate in 20 tries was ever dry, gap-clear AND within the slope limit at once -
+			# skip this box rather than stack it on `center` or plant it on a bank the search itself
+			# never measured as safe. Fewer crates in the cluster, never an overlapping one.
+			continue
+		var s := prng.randf_range(0.55, 0.74)
+		_spawn_blocking(PlanetPropMeshes.supply_crate(_PACKING_BOX_BODY, _PACKING_BOX_TRIM, i),
+			[mat], d, s, 0.65, 0.42, 0.78, 0.03, false, NAN, Vector3.ZERO, null, "PackingBox")
+
+## Post + board, PlanetMeshKit primitives (the shared library every mesh here is built from,
+## OPEN_ISSUES #18) baked to one ArrayMesh. Local -Z is the readable face (PlanetMeshKit's own
+## convention, "faces -Z" - see its header), matching `_surface_xf`'s forward_hint.
+static func _packing_sign_mesh() -> ArrayMesh:
+	var kit := PlanetMeshKit.new()
+	kit.rounded_box(Vector3(0.0, 0.40, 0.0), Vector3(0.07, 0.80, 0.07), 0.02, _PACKING_POST)
+	kit.rounded_box(Vector3(0.0, 0.83, 0.0), Vector3(0.86, 0.50, 0.05), 0.03, _PACKING_BOARD)
+	return kit.commit()
+
+## One small sign at `dir`, facing `forward_hint`, non-blocking (it is set dressing, never something
+## to path around). `text` is a couple of words in the neighbour's own voice, or the Commons' own
+## "Gone to a bigger star" - short so it reads on a 0.86 x 0.50 m board (STORY_HOME_SPEC 5.12's <= 60
+## chars is a generous ceiling here; every line used is well under it).
+func _packing_sign(dir: Vector3, forward_hint: Vector3, text: String) -> void:
+	var mat := PlanetPropMeshes.prop_material()
+	var n := _spawn_oriented(_packing_sign_mesh(), [mat], dir, 1.0, 0.34, 0.03, forward_hint, true, "PackingSign")
+	var l := Label3D.new()
+	l.name = "Ink"
+	l.text = text
+	l.font = UIStyle.font()
+	l.font_size = 44
+	l.pixel_size = 0.078 / 44.0
+	l.modulate = _PACKING_INK
+	l.outline_size = 0
+	l.shaded = false
+	l.double_sided = false
+	l.no_depth_test = false
+	l.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.width = 460
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	l.position = Vector3(0.0, 0.83, -0.034)
+	l.rotation.y = PI
+	l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(l)
+
 ## MOBILE / BROWSER PROP BUDGET. A phone draws every one of these instances and pays for the
 ## planet-build that creates them, and the player reported the game running hot. Small
 ## scatter (grass tufts, flower patches) is the one thing here that can be thinned without
@@ -1206,6 +1437,15 @@ func _violet() -> void:
 	_grass_tufts(data.ground_color_a.lightened(0.04), 1.4)
 	_spores()
 
+	# STORY_HOME_SPEC.md beat 3: "before I go" packing, near Zorp's own home spot. Gone after the
+	# finale (ruling 9).
+	if _packing_active():
+		var home := _neighbour_home_dir()
+		var to_spawn := data.spawn_dir.normalized()
+		_moving_boxes(_packing_spot(home, to_spawn, 5.0, -20.0), 3)
+		var sign_dir := _packing_spot(home, to_spawn, 5.0, 20.0)
+		_packing_sign(sign_dir, (to_spawn - sign_dir), "BOXES: GLOWING!")
+
 func _spores() -> void:
 	var p := GPUParticles3D.new()
 	p.name = "Spores"
@@ -1345,6 +1585,16 @@ func _chrome() -> void:
 		if i % 2 == 0:
 			_steam(vent, Vector3(0.0, (1.55 + 0.30 * float(i % 3)) * s, 0.0))
 
+	# STORY_HOME_SPEC.md beat 3: "before I go" packing, near Bolt's own home spot. Gone after the
+	# finale (ruling 9). Bolt's sign is precise, in character (small talk 5.5: "Boxes packed: 212.
+	# Boxes labelled: 212.").
+	if _packing_active():
+		var home := _neighbour_home_dir()
+		var to_spawn := data.spawn_dir.normalized()
+		_moving_boxes(_packing_spot(home, to_spawn, 5.0, -20.0), 3)
+		var sign_dir := _packing_spot(home, to_spawn, 5.0, 20.0)
+		_packing_sign(sign_dir, (to_spawn - sign_dir), "BOXES: 212")
+
 func _steam(parent: Node3D, pos: Vector3) -> void:
 	var p := GPUParticles3D.new()
 	p.name = "Steam"
@@ -1471,6 +1721,20 @@ func _plaza() -> void:
 	_pebbles(int(_n(data.rock_count, 3) / 2))
 	_flower_patches(_n(data.flower_patch_count, 3))
 	_grass_tufts(data.ground_color_a.darkened(0.14), 1.2)
+
+	# STORY_HOME_SPEC.md beat 2: "The Commons. Boxes, a silly sign or two." Near the town hall, clear
+	# of the fountain ring 4 m the other side of spawn. Gone once the finale finishes (ruling 9).
+	#
+	# LAST IN THE FUNCTION ON PURPOSE (dress build round 2, 2026-09-27): this used to run BEFORE the
+	# lawn life above, so turning packing on or off (GameState.story_done) changed how many prop
+	# footprints were already registered by the time the trees, bushes and flower patches went looking
+	# for a free spot - moving a lawn prop that has nothing to do with the boxes just because packing
+	# claimed the ground first. Nothing after this point in _plaza() places anything, so the boxes and
+	# sign can never again perturb where the lawn itself lands, in either direction of the flag.
+	if _packing_active():
+		_moving_boxes(_packing_spot(town, spawn, 9.5, -20.0), 3)
+		var sign_dir := _packing_spot(town, spawn, 9.5, 20.0)
+		_packing_sign(sign_dir, (spawn - sign_dir), "Gone to a bigger star")
 
 func _fill_flowers(center: Vector3, r: float, n: int, xfs: Array[Transform3D], tints: PackedColorArray) -> void:
 	var xf0 := planet.surface_transform(center)
@@ -1641,6 +1905,14 @@ func _fen() -> void:
 	pad_node.transform = planet.surface_transform(pad, spawn - pad)
 	root.add_child(pad_node)
 	_omni(pad_node, Vector3(0.0, 2.4, 0.0), Color("#ffb46e"), 1.0, 6.0)
+
+	# STORY_HOME_SPEC.md beat 3: "before I go" packing, near Fen's own home spot. Gone after the
+	# finale (ruling 9).
+	if _packing_active():
+		var home := _neighbour_home_dir()
+		_moving_boxes(_packing_spot(home, spawn, 5.0, -20.0), 3)
+		var sign_dir := _packing_spot(home, spawn, 5.0, 20.0)
+		_packing_sign(sign_dir, (spawn - sign_dir), "PACKED: 3 BOXES")
 
 ## A ring of spires around every crater pool, graded in height around the circle. Fen has 14 pools
 ## and nothing in the game is scattered in a PATTERN except the hub's fountain ring and the colonnade
@@ -1825,6 +2097,14 @@ func _grig() -> void:
 	_grass_tufts(Color("#9aa88a"), 3.0)
 	_chalk_dust()
 
+	# STORY_HOME_SPEC.md beat 3: "before I go" packing, near Grig's own home spot. Gone after the
+	# finale (ruling 9).
+	if _packing_active():
+		var home := _neighbour_home_dir()
+		_moving_boxes(_packing_spot(home, spawn, 5.0, -20.0), 3)
+		var sign_dir := _packing_spot(home, spawn, 5.0, 20.0)
+		_packing_sign(sign_dir, (spawn - sign_dir), "PACKED. RECORDED.")
+
 ## Chalk powder drifting along the terrace floors. A GROUND-HUGGING layer (radius + 0.4) against
 ## Zorp's spores at + 1.3 and Fen's ashfall at + 3.4 — on a staircase the dust sits in the treads.
 func _chalk_dust() -> void:
@@ -2000,6 +2280,14 @@ func _vela() -> void:
 	# they are one of very few sources of fine tonal speckle anywhere on the planet.
 	_grass_tufts(Color("#76849f"), 4.8)
 	_diamond_dust()
+
+	# STORY_HOME_SPEC.md beat 3: "before I go" packing, near Vela's own home spot. Gone after the
+	# finale (ruling 9).
+	if _packing_active():
+		var home := _neighbour_home_dir()
+		_moving_boxes(_packing_spot(home, spawn, 5.0, -20.0), 3)
+		var sign_dir := _packing_spot(home, spawn, 5.0, 20.0)
+		_packing_sign(sign_dir, (spawn - sign_dir), "TAKING: ONE DISH")
 
 ## Wind-carved drift ridges, all turned to one axis. A ridge is a soft form on purpose (see the
 ## R2.3 note on _vela): the built things on this world carry the flat planes, the weather does not.

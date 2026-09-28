@@ -12,7 +12,9 @@ extends Node
 ## sees no call, no toast, no per-frame work at all (see `_ready`).
 ##
 ## ============================================================================== MISSING FILES
-## `finale_meeting.gd` (K2), `finale_launch.gd` (L2) and `finale_gift.gd` (G) land after this builder
+## `finale_meeting.gd` (K2), `finale_launch.gd` (L2) and `finale_gift.gd` (G; since 2026-09-27 it plays
+## docs/STORY_HOME_SPEC.md §5.7 HOME - everyone back on the Commons, the last photo - not the skiff gift)
+## land after this builder
 ## (docs/BUILD_PLAN.md Phase 5 launch order) - every load of one is guarded by `ResourceLoader.exists`,
 ## and a missing one logs `FINALE missing <path>`, leaves the stage exactly where it was, and lets the
 ## rest of the game run untouched (docs/BUILD_PLAN.md Phase 5, K's brief). The three files are loaded
@@ -271,17 +273,17 @@ func _run_call() -> void:
 	_running_call = false
 
 
-## docs/PHASE5_SPEC.md §3 CALL / CALL_WHAT_IS_IT, played straight off FinaleLines (word for word, so a
+## docs/STORY_HOME_SPEC.md §5.7 CALL / CALL_ALREADY, played straight off FinaleLines (word for word, so a
 ## wording change goes back to the lead against the spec, never edited here). CALL's only "ask" is its
 ## last turn: "On my way" falls straight through (the Meeting beat picks up from there once you reach
-## the Commons - see `_run_arrival_logic`'s stage-1 branch); "What is it?" plays one more line first.
+## the Commons - see `_run_arrival_logic`'s stage-1 branch); "Already?" plays one more line first.
 func _play_call(runner: DialogueRunner, radio: Node3D) -> void:
 	for turn: Dictionary in FinaleLines.CALL:
 		if turn.has("ask"):
 			var ask: Dictionary = turn["ask"]
 			var choice: int = await runner.ask(radio, str(ask.get("prompt", "")), ask.get("options", []))
 			if choice == 1:
-				for turn2: Dictionary in FinaleLines.CALL_WHAT_IS_IT:
+				for turn2: Dictionary in FinaleLines.CALL_ALREADY:
 					await runner.say(radio, turn2.get("lines", []))
 			return
 		await runner.say(radio, turn.get("lines", []))
@@ -482,7 +484,7 @@ func _restore_time_scale() -> void:
 # ============================================================================= the Commons chain
 ## Attaches the meeting (if its file exists) and, once it has chosen, runs steps 2-6 of K's brief:
 ## write stage 3 + checkpoint, the send-off, the gift, then `finish_story` and clean-up. At stage 3
-## already (a reload after "Send her" checkpointed but before the ending finished) the meeting is
+## already (a reload after "Send my rocket" checkpointed but before the ending finished) the meeting is
 ## still attached - `FinaleLaunch`/`FinaleGift` need it for the crowd, axis and camera - but nothing
 ## is awaited from it: the choice is already made, so this jumps straight to the send-off.
 func _run_meeting_chain() -> void:

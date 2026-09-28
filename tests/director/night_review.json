@@ -1,0 +1,308 @@
+[
+ {
+  "t": 0.4,
+  "log": "sky-review: one night, forecast -> print -> Gloop -> morning payout"
+ },
+ {
+  "t": 1.6,
+  "capture": "01_commons_night"
+ },
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_show_forecast",
+   "args": []
+  }
+ },
+ {
+  "t": 2.8,
+  "capture": "02_forecast"
+ },
+ {
+  "t": 3.2,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_close",
+   "args": []
+  }
+ },
+ {
+  "t": 3.6,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_open",
+   "args": [
+    0
+   ]
+  }
+ },
+ {
+  "t": 4.2,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_hold",
+   "args": [
+    0.35
+   ]
+  }
+ },
+ {
+  "t": 4.25,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_offset",
+   "args": [
+    0.3,
+    -0.2,
+    0.12
+   ]
+  }
+ },
+ {
+  "t": 4.4,
+  "capture": "03_eyepiece_off_and_soft"
+ },
+ {
+  "t": 5.0,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_offset",
+   "args": [
+    0.02,
+    0.01,
+    0.01
+   ]
+  }
+ },
+ {
+  "t": 5.05,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_hold",
+   "args": [
+    0.92
+   ]
+  }
+ },
+ {
+  "t": 5.2,
+  "capture": "04_eyepiece_centred_sharp"
+ },
+ {
+  "t": 5.6,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_finish",
+   "args": []
+  }
+ },
+ {
+  "t": 6.6,
+  "capture": "05_print_card"
+ },
+ {
+  "t": 7.2,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_close",
+   "args": []
+  }
+ },
+ {
+  "t": 7.6,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_look_from",
+   "args": [
+    2.6,
+    -5.6,
+    0.6,
+    1.6,
+    5.0
+   ]
+  }
+ },
+ {
+  "t": 8.8,
+  "capture": "06_stall_at_night"
+ },
+ {
+  "t": 9.2,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_stand_at",
+   "args": [
+    2.6,
+    3.2
+   ]
+  }
+ },
+ {
+  "t": 10.6,
+  "capture": "07_prompt_hand_in"
+ },
+ {
+  "t": 11.0,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "run_flow",
+   "args": []
+  }
+ },
+ {
+  "t": 12.0,
+  "capture": "08_gloop_intro"
+ },
+ {
+  "t": 12.4,
+  "tap": "interact"
+ },
+ {
+  "t": 12.9,
+  "tap": "interact"
+ },
+ {
+  "t": 13.4,
+  "tap": "interact"
+ },
+ {
+  "t": 13.9,
+  "tap": "interact"
+ },
+ {
+  "t": 15.0,
+  "capture": "09_gloop_takes_it"
+ },
+ {
+  "t": 15.5,
+  "tap": "interact"
+ },
+ {
+  "t": 16.0,
+  "tap": "interact"
+ },
+ {
+  "t": 16.5,
+  "tap": "interact"
+ },
+ {
+  "t": 17.0,
+  "tap": "interact"
+ },
+ {
+  "t": 17.5,
+  "tap": "interact"
+ },
+ {
+  "t": 18.0,
+  "tap": "interact"
+ },
+ {
+  "t": 19.2,
+  "capture": "10_table_loaded_night"
+ },
+ {
+  "t": 19.7,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_next_day",
+   "args": []
+  }
+ },
+ {
+  "t": 21.7,
+  "capture": "11_next_morning_stars_up"
+ },
+ {
+  "t": 22.3,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_stand_at",
+   "args": [
+    2.6,
+    3.2
+   ]
+  }
+ },
+ {
+  "t": 23.900000000000002,
+  "capture": "12_morning_prompt_take_earnings"
+ },
+ {
+  "t": 24.500000000000004,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "run_flow",
+   "args": []
+  }
+ },
+ {
+  "t": 25.900000000000002,
+  "capture": "13_payout_open"
+ },
+ {
+  "t": 26.400000000000002,
+  "tap": "interact"
+ },
+ {
+  "t": 26.85,
+  "tap": "interact"
+ },
+ {
+  "t": 27.3,
+  "tap": "interact"
+ },
+ {
+  "t": 28.55,
+  "capture": "14_payout_total"
+ },
+ {
+  "t": 29.05,
+  "tap": "interact"
+ },
+ {
+  "t": 29.5,
+  "tap": "interact"
+ },
+ {
+  "t": 29.95,
+  "tap": "interact"
+ },
+ {
+  "t": 31.2,
+  "capture": "15_payout_best_seller"
+ },
+ {
+  "t": 31.7,
+  "tap": "interact"
+ },
+ {
+  "t": 32.15,
+  "tap": "interact"
+ },
+ {
+  "t": 32.6,
+  "tap": "interact"
+ },
+ {
+  "t": 33.050000000000004,
+  "tap": "interact"
+ },
+ {
+  "t": 33.50000000000001,
+  "tap": "interact"
+ },
+ {
+  "t": 33.95000000000001,
+  "tap": "interact"
+ },
+ {
+  "t": 35.40000000000001,
+  "capture": "16_after_payout"
+ },
+ {
+  "t": 36.000000000000014,
+  "quit": true
+ }
+]

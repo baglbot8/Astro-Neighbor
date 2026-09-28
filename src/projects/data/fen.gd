@@ -132,13 +132,10 @@ extends RefCounted
 ## measured scrap rate and the same zero-cost item design land on the same bar. CLAUDE.md's "no fitted
 ## constants" rule argues against moving it without a timed play-through showing it is wrong (Phase 6).
 ##
-## Voice (docs/CORE_LOOP.md "World problems": Fen is "the terse elder pan-watcher with a nine-year
-## logbook"; npc_data.gd "fen" entry - intro, greet, small_talk and favor lines all read the same way:
-## short declarative sentences, exact numbers, dry asides ("Salt grows back overnight. Quietly.
-## Rudely."), patience as a running trait ("The pools are patient. So am I." echoes his own favor
-## "progress" line "There is no hurry on a world like this."). No Animal Crossing words
-## (docs/ARCHITECTURE.md §1.1: no "favor", "bells", "Nook"). Every line <= 60 characters, 1-3 lines per
-## list (project_system.gd "Writing").
+## Voice (docs/CAST_VOICES_DRAFT.md, approved 2026-09-27, with docs/STORY_HOME_SPEC.md 8.1): 
+## Fen is a young, calm, sunny flower (he); talks about sun and water as food, his pools and
+## glow moths. No logbook, no numbering, no "crust".
+## Plain English a 10-year-old reads once. Every line <= 60 characters.
 
 const ITEM_ID := "fen_pool_beacon"
 const GUIDE_COUNT := 5
@@ -154,16 +151,18 @@ static func definition() -> Dictionary:
 		"part": "part_fen",
 		"part_fit_scrap": 8,
 		"intro": [
-			"The moths took the light. All five of them.",
-			"Guide them home. I only watch. That is the work.",
+			"The glow moths flew off with my pools' light!",
+			"I can't leave them lost. Not before I go.",
+			"Could you guide them home? They're shy of me.",
 		],
 		"part_lines": [
-			"The dusk is shorter now. I noticed. I notice everything.",
-			"Take the cell. I have carried it longer than the moths did.",
-			"Logged as: neighbour, in full. Rare entry, that.",
+			"The pools are glowing again. It feels so warm.",
+			"Take this cell. I kept it safe by my roots.",
+			"Find a good home out there. One with lots of sun.",
+			"You're a real friend. I mean it. Thank you.",
 		],
 		"part_again": [
-			"Lost the cell? I keep spares. I always keep spares.",
+			"Lost the cell? It's okay. I found another one.",
 		],
 		"items": [
 			{
@@ -171,7 +170,7 @@ static func definition() -> Dictionary:
 				"name": "Pool Beacon",
 				"kind": "decoration",
 				"category": "lights",
-				"desc": "A watch-light, staked at a pool's rim to hold the returned glow.",
+				"desc": "A little lamp for a pool's edge. It keeps the glow in.",
 				"icon_color": "#d9af4f",
 				# Reused decoration scene (schema: "any shipped decoration scene may be reused").
 				# footprint must match the scene's own DecoItem.footprint (beacon_tower.gd:17).
@@ -195,18 +194,18 @@ static func definition() -> Dictionary:
 				},
 				"lines": {
 					"ask": [
-						"Five moths, carrying my pools' own light. Loose.",
-						"Guide them home. From the far side. They will run.",
+						"Five moths have my pools' light. Now they're loose.",
+						"Guide them home. Come from the far side, gently.",
 					],
 					"progress": [
-						"Still loose? They run from you. Come at them sideways.",
+						"Still loose? They run from you. Try sideways.",
 					],
 					"done": [
-						"Five home. The first light in nine years, returned.",
-						"Good work. I logged it. Twice, to be certain.",
+						"All home! My pools have their light back.",
+						"Thank you. That was so kind of you.",
 					],
 					"tomorrow": [
-						"Enough guiding. Rest. We look again in a few hours.",
+						"That's enough for today. Rest in the sun a bit.",
 					],
 				},
 			},
@@ -217,17 +216,17 @@ static func definition() -> Dictionary:
 				"marker_label": "lit pool",
 				"lines": {
 					"ask": [
-						"Three pools took the light back. Find them for me.",
-						"Walk the flats. I will wait. I always wait.",
+						"Three pools got their light back. Can you find them?",
+						"Walk around the flats. I'll wait here in the sun.",
 					],
 					"progress": [
-						"Still searching? The pools are patient. So am I.",
+						"Still looking? The pools aren't going anywhere.",
 					],
 					"done": [
-						"Three found. My count agrees with yours, for once.",
+						"You found all three! They look so pretty.",
 					],
 					"tomorrow": [
-						"Enough walking today. The first pool gets light soon.",
+						"Enough walking for today. Come back later.",
 					],
 				},
 			},
@@ -241,14 +240,51 @@ static func definition() -> Dictionary:
 				"give": {ITEM_ID: 1},
 				"lines": {
 					"ask": [
-						"A lantern, for the first pool. I kept one spare.",
-						"Place it at the rim. Mind the crust, it bites.",
+						"Here's a little lamp for the first pool.",
+						"Put it by the water's edge. Mind the salt.",
 					],
 					"progress": [
-						"Not lit yet. The ring on the ground still waits.",
+						"Not lit yet. Look for the ring on the ground.",
 					],
 					"done": [
-						"Lit. One pool, of fourteen, not dark any more.",
+						"It's lit! That pool won't go dark now.",
+					],
+					"tomorrow": [
+						"Already lit today. Come back in a little while.",
+					],
+				},
+			},
+			{
+				# STORY_SPINE (PLANET_SAFARI_SPEC.md 15.2, migrated from the retired sky "photo" step,
+				# same appended 4th-step slot, same neighbour lines shape - see project_system.gd's
+				# "planet_photo" schema entry). Subject id "pool_ripple" is the exact roster id from
+				# Fen's own safari manifest (res://src/planet_safari/worlds/fen.gd MANIFEST "roster"),
+				# checked at load against that same manifest.
+				"type": "planet_photo",
+				"title": "Photo: the Pool Ripple",
+				"planet": "fen",
+				"kind": "subject",
+				"subject": "pool_ripple",
+				"grade": "Fair",
+				"lines": {
+					"ask": [
+						"One last thing. A photo of home, before I go.",
+						"Next safari here, wait by a pool. It glows, then jumps!",
+					],
+					"progress": [
+						"Not yet? The pools ripple by themselves. Wait.",
+					],
+					"already_have": [
+						"You already caught it? Oh, wow!",
+						"You're quicker than me. That's for sure.",
+					],
+					"smudge": [
+						"You caught it! But it's a bit blurry.",
+						"Hold the shutter down. Let the picture bloom.",
+					],
+					"done": [
+						"A sharp ripple! Look at that. Lovely.",
+						"I sprouted by that pool. I'll miss it.",
 					],
 				},
 			},

@@ -343,6 +343,15 @@ func _ready() -> void:
 			"Read", 2.5, _on_board)
 
 
+## The live Professor Comet NPC standing behind this door, or null (an isolated scene with no NPC
+## placed). Group "npc" is every NPC.gd instance in the tree (npc.gd `_ready`'s `add_to_group`).
+func _find_professor() -> NPC:
+	for n: Node in get_tree().get_nodes_in_group("npc"):
+		if n is NPC and (n as NPC).npc_id == ProfessorAsk.NPC_ID:
+			return n as NPC
+	return null
+
+
 ## The name on the dialogue pill. CORE_LOOP "Changed after the build plan": Orbit is shown as
 ## Professor Comet and the id mayor_orbit stays. Read from NpcData so the pill always matches his
 ## name tag - this door (reach 3.0 m) sits 0.9 m from him and usually wins over his own TalkArea
@@ -362,7 +371,21 @@ func _commons_name() -> String:
 ## his own sky talk, then Leave (BUILD_PLAN Phase 4 builder I; docs/CORE_LOOP.md "no mayor role").
 ## Once the story is over the door goes back to today's "Planet stats" panel. Renaming your planet
 ## no longer happens here at all - it moved to the home mailbox (player_home.gd).
+##
+## THE PROFESSOR FIX (docs/PLANET_SAFARI_SPEC.md 17.2 item 2, part c): while his neighbour-photo task
+## is open, the door hands the WHOLE talk to the Professor NPC itself - the same hand-in or reminder
+## talking to him directly gives (ProfessorAsk, via Conversation.run) - instead of this building's own
+## sky talk below. Falls through to that sky talk if he cannot be found (an isolated scene with no NPC
+## placed, or a Director probe): the door should still say something rather than nothing.
 func _on_door(player: Node3D) -> void:
+	if ProfessorAsk.is_open():
+		var prof := _find_professor()
+		if prof != null:
+			if not begin_flow(player):
+				return
+			end_flow()
+			await prof.start_conversation(player as Player)
+			return
 	if not begin_flow(player):
 		return
 	if CampaignData.gates_on():
@@ -394,8 +417,8 @@ func _on_door(player: Node3D) -> void:
 
 ## What his telescope shows tonight: how many rocket parts are fitted, which worlds just swam into
 ## range (only announced the visit their tier first opens - `_worlds_just_opened`), and one running
-## line about the something-big he quietly tracks. That line never names it and never spoils
-## CORE_LOOP.md "The call" - checked by the critic at 0, 2 and 4 parts fitted.
+## line about the meteor he is charting (docs/STORY_HOME_SPEC.md 5.3 - named everywhere now, not the
+## old unnamed "something big"; nothing here says how long is left, per that spec's word rule).
 func _sky_flow() -> void:
 	var have := GameState.rocket_part_count()
 	var total: int = CampaignData.PARTS.size()
@@ -432,14 +455,18 @@ func _list_names(planet_ids: Array[String]) -> String:
 	return "%s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
 
 
-## One line about the thing he is watching. Tone only shifts with `have`, never the fact - it stays
-## unnamed at every count so the finale (docs/CORE_LOOP.md "The call") is never spoiled.
+## One line about the meteor (docs/STORY_HOME_SPEC.md 5.3 - replaces the old unnamed "something big").
+## Tone only shifts with `have`; the meteor itself is named everywhere now (STORY_HOME_SPEC 2.12: "the
+## threat is 'the meteor' in every new line" - the finale it used to guard is no longer a secret to
+## keep, per the story's own beats).
 func _watch_line(have: int) -> String:
 	if have >= 4:
-		return "Something big is close now. I'm not looking away."
+		return "Nearly Departure Day. I'm staying, pushing or not."
+	if have >= 2:
+		return "Funny thing. That streak is in all your photos."
 	if have >= 1:
-		return "Still tracking something big, out past the ring."
-	return "There's something big out there. I keep an eye on it."
+		return "Still out past the ring. Enough ships could nudge it."
+	return "Everyone's packing. I'm charting. That meteor can move."
 
 
 func _stats_flow() -> void:

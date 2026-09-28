@@ -717,3 +717,42 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if _ui != null and not _starting:
 		UIFocus.consume_nav_event(_ui, event)
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and k.keycode == PauseMenu.DEV_KEY and PauseMenu.dev_key_allowed():
+			if _on_title_dev_key():
+				get_viewport().set_input_as_handled()
+
+## F1 ON THE TITLE, TOO (docs/PLANET_SAFARI_SPEC.md 17.1 rule 2 - the user: "i couldnt enter the dev
+## test mode back at the home page"). Desktop only (PauseMenu.dev_key_allowed): continues the save
+## exactly like the Continue button, then opens the dev menu once the world has loaded. Refused with
+## no save to continue into, or while a transition/the new-game confirm is already up.
+func _on_title_dev_key() -> bool:
+	if _ui == null or _starting or (_confirm != null and _confirm.is_open()) or not SaveManager.has_save():
+		return false
+	if not SaveManager.load_game():
+		GameState.reset_new_game()
+	_starting = true
+	UIStyle.play_confirm()
+	var t := create_tween()
+	t.tween_property(_ui, "modulate:a", 0.0, 0.35)
+	# `SceneRouter._transition_to` frees THIS scene with `change_scene_to_file` partway through the
+	# load, so the wait for the world is not `await SceneRouter.start_game()` on `self`, and not a
+	# RefCounted helper either: a `Callable(refcounted_instance, "method")` stores only an ObjectID, not
+	# a strong reference, so a `_DevMenuOpener extends RefCounted` kept alive by nothing but its own
+	# signal connection was measured to be freed before EventBus.planet_loaded ever fired - the
+	# connection went silently dead. A Node's lifetime is the tree's, not refcounting: this one is
+	# added under the tree ROOT (a sibling of `current_scene`, so `change_scene_to_file` never touches
+	# it), opens the dev menu once the world's HUD exists, and frees itself.
+	var opener := _DevMenuOpener.new()
+	get_tree().root.add_child(opener)
+	EventBus.planet_loaded.connect(opener._on_planet_loaded, CONNECT_ONE_SHOT)
+	SceneRouter.start_game()
+	return true
+
+class _DevMenuOpener extends Node:
+	func _on_planet_loaded(_planet_id: String) -> void:
+		var host: Node = get_tree().root.get_node_or_null("World/HUD")
+		if host != null:
+			DevMenu.open_over(host)
+		queue_free()

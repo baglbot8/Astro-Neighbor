@@ -1,0 +1,48 @@
+[
+ {
+  "t": 0.5,
+  "log": "walk test: can you reach the stall on foot and get the prompt?"
+ },
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/World/Buildings/print_table",
+   "method": "dev_seed",
+   "args": [
+    1
+   ]
+  }
+ },
+ {
+  "t": 2.4,
+  "capture": "w0_spawn"
+ },
+ {
+  "t": 2.6,
+  "press": "move_forward"
+ },
+ {
+  "t": 6.6,
+  "release": "move_forward"
+ },
+ {
+  "t": 7.0,
+  "capture": "w1_after_4s_forward"
+ },
+ {
+  "t": 7.4,
+  "press": "move_left"
+ },
+ {
+  "t": 10.4,
+  "release": "move_left"
+ },
+ {
+  "t": 11.0,
+  "capture": "w2_after_3s_left"
+ },
+ {
+  "t": 11.6,
+  "quit": true
+ }
+]

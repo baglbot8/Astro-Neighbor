@@ -350,6 +350,93 @@ day, selling friends' gifts fell from 56% of income to 14% (SELL_RATIO 0.4 -> 0.
 the home planet grows 12 -> 14 -> 16 -> 18 m for 450 / 950 / 1700 scrap (about 1.5 h to the first, 10 h to the last).
 First decoration about 3-5 minutes in. Still open: scrap has nothing to buy again after about 10 hours.
 
+## A new core loop: watching the sky (agreed 2026-09-20, being tested first)
+
+The user asked what the game could be about besides collecting and placing decorations, so it reads less like Animal
+Crossing: *"other cozy games like harvest moon, center around farming, or restaurant building games is about making
+your restaurant successful, decorating is just a part of that."* Of five options they picked sky watching, with a stall
+for the prints, and asked for a story rewrite around it.
+
+**The loop.** A forecast says what is visible and when. You travel, set up a telescope, aim and focus it (a small skill
+moment - the target and the focus drift), and a good look makes a PRINT. You drop prints at a table on the Commons run
+by a new neighbour, and the next morning they hand you the earnings and say which one sold best. No shop menu.
+
+**The new neighbour (the user):** *"Maybe a new neighbor can do the selling so you just have to drop the prints off to
+them... maybe like a slime monster / alien?"* Working name **Gloop**: a glossy, not see-through slime with something
+small suspended inside. To make room, *"we can move the mini-game board on the home planet instead"*.
+
+**Time of day (the user):** nights get longer, *"but have some occasional views be in the mornings since the night sky
+stars are always visible"* - which is true here: `environment.gd` keeps the stars in daylight (STAR_DAY_SCALE), part of
+the thin-atmosphere look.
+
+**The story rewrite (agreed).** The crash and the intro STAY - they explain why you are here. The ship stops being the
+goal and becomes the ladder: you spot something far and blurry, you need to get closer, that is a ship upgrade, which
+opens a world, which has its own sky. The five ship parts become five telescope parts, one per neighbour. The ending
+that already ships still fits: you predict the comet, everyone gathers on the Commons, the sky fills with the shower.
+Your own lamps will cause light pollution, so decorating becomes a trade-off instead of the point.
+
+**The flight becomes the game (the user, 2026-09-20/21).** Two spikes measured the same thing: standing still at a
+telescope is 99 seconds of doing inside an 11.6-minute night - "the sky itself is never empty, the player is". The user
+read it in the frames before the numbers arrived: *"this telescope game seems to feel more like a mini-game than a core
+game loop... I'd keep trying until i get a perfect shot and be done in 3-4 minutes"*, and asked for *"a safari or journey
+on rails where you have to move your scope around as you are traveling around in your space ship... and you have to move
+around to get the right shot before it passes you by"*. So:
+* Flying between worlds stops being a cutscene with a Skip button and becomes the loop. Things pass the ship, each with a
+  window of a few seconds; you swing the brass scope and shoot what you can, and you cannot catch everything. A haul card
+  at the end shows what you missed, which is why you fly again.
+* **Moments matter, like a wildlife safari:** the same subject is worth more caught doing something - a creature turning
+  to look at you, a comet's tail splitting. The journal wants the best moment, not just the subject.
+* **Routes and hours cast the show:** *"a few versions of the routes and probably need a lot of things to take pictures
+  of, with some events happening at certain times of the day and when moving from certain planets to other planets."*
+* **Neighbours hint at rare sights** in their own voice and vaguely: *"Bolt might say he thinks he saw a green moon in
+  the direction of your home planet, but he can't remember when."* A hint opens a seeded window on a route and adds a
+  "heard about, not seen" page to the journal.
+* Standing-still watching stays for the planned sights (the dawn comet from home) - the calm evening thing.
+* **The clock (the user, 2026-09-21):** a full day is 20 real minutes with exactly 10 of them dark.
+* **The eyepiece look:** the brass spyglass (look A), with the picture blooming into colour as the hold settles - the one
+  trick worth stealing from the sketchbook look (B). The old green ring, crosshair and percent bars are gone; they read
+  "sniper scope" to the user and actually failed the project's own palette gate at the moment of the shot.
+* **The story will be rewritten around it,** to teach the safari and make it mean something; the crash and the intro stay.
+
+**Content built and merged (2026-09-21).** Eight named lanes cover all 21 planet pairs in both directions, with direction
+(out, in, cross) reversing the sweeps and gating sights; 51 things to photograph, each with two or three moments; ten
+hinted rares locked behind a neighbour's half-memory; and one deliberate clash per run that a player genuinely cannot
+win both halves of. Payouts, after the lead's ruling below: skill and the moment swing 40.5 stardust, rarity 18 - the
+reverse of the first build, where luck paid four times what skill did.
+**Lead ruling on prices (2026-09-21):** the brief asked for a steady trip at 60-100 stardust, a great one at 150-200,
+AND the cheapest decoration (120) to cost about two ordinary trips. Measured over nine player models, those cannot all
+hold: two trips needs the middle steady trip at 60, which drops a great trip to 109. Ruling: keep the trip bands
+(steady 74-97, great 151-162 measured) and accept that the cheapest decoration is about one and a half trips. If that
+reads too generous once the safari is wired and playable, the fix is to raise the cheapest decorations, not to flatten
+the reward for a good flight. The whole economy needs one more pass once the safari is a real income stream alongside
+sweeps (409 a day) and favours.
+
+**Superseded (2026-09-23).** The paragraphs below are the spike as it stood before the first real play. Two real plays then caught 0 of 12 and 1 of 17, and the flight and the story were rebuilt: the current contracts are `docs/SAFARI_FLIGHT_SPEC.md` (the flight) and `docs/STORY_SPINE_SPEC.md` (photograph your way home). Numbers that changed: runs are 156-234 s with 17-18 sights, a flight costs 6.0 game hours whatever its real length, a day holds 2-3 photo flights (user ruling), and after the collar was lifted clear of the iPhone home indicator the porthole is about 28.7% of a 2556x1179 phone frame, not 30.7%. The story is no longer the blocker: it is built.
+
+**Where the spike stands (2026-09-21, after five rounds).** The flight safari is built and playable in a scratch copy:
+eight lanes over all 21 planet pairs, 51 sights that mostly read as their own thing (45 of 51), moments, hinted rares
+that are now takeable (about 18% of runs, never trapped in the unwinnable clash), one journal that the flight can
+actually write and that survives a reload, prices that pay for skill over luck, film per trip, and a cockpit whose round
+porthole is 30.7% of a phone frame with nothing crossing it. A day can hold four flights.
+**The honest verdict, and the reason the story rewrite is now the blocker:** *"Last round the sky was 4% of a day. Now
+it can be half a day, and it still feeds nothing. I came back with 156 stardust and four pages, and not one beat of the
+story touches either. The whole consequence of the entire system is one neighbour line, said once."* Nothing else in the
+spike matters until a story beat, a favour or a neighbour needs a named page.
+**The day, ruled by the user (2026-09-21):** the day stays 20 real minutes with 10 of dark, and the intended rhythm is
+**two to three photo flights a day** (a flight costs about 6.0 game hours (raised from 4.9 on 2026-09-22 when runs went to 156-234 s; docs/SAFARI_FLIGHT_SPEC.md 6.3)). Measured: at two flights, 12 real minutes of
+ground time remain and errands, favours, neighbours and decorating all fit; at four, only 3.9 remain and they do not.
+The earlier "four to six runs and everything else still fits" target was impossible and is withdrawn.
+**Still open before a real player sees it:** the story spine (above); the headline rare is rarest for new players (7% at
+zero ship parts, 20% late) and should be reachable early, which means loosening a catalog gate rather than pushing the
+draw; five warm-rim sights still read as one picture (still_pools, vela_lamps, fen_fog, vela_crown, heat_shimmer); the
+film plates are 49 device pixels beside a 668 pixel porthole; a photo flight costs one tap more than an errand; a 50-67
+ms hitch repeats twice a run and predates the safari.
+
+**Nothing is committed yet.** A rough spike (one night, three sights, the aiming moment, a print, Gloop, longer nights)
+is being built in a scratch copy so the user can judge whether looking through the telescope is fun before any of the
+shipped game is rewritten. Known risks: a story rewrite replaces the campaign in an existing save, and the loop must
+survive a real phone session, not a scripted one.
+
 ## Open questions
 
 - **What is in the post-story game** besides decorating and friendship? Not decided.

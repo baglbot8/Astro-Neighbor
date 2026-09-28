@@ -1,0 +1,28 @@
+[
+ {
+  "t": 1.2,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "start_watch_index",
+   "args": [
+    1
+   ]
+  }
+ },
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/SkySpike/SkyWatch",
+   "method": "debug_lock",
+   "args": []
+  }
+ },
+ {
+  "t": 2.2,
+  "capture": "eye"
+ },
+ {
+  "t": 2.8,
+  "quit": true
+ }
+]

@@ -1,0 +1,6 @@
+[
+  {"t": 3.4, "capture": "hints_01_neighbour"},
+  {"t": 4.7, "capture": "hints_02_heard"},
+  {"t": 6.3, "capture": "hints_03_caught"},
+  {"t": 7.0, "quit": true}
+]

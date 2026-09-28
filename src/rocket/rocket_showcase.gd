@@ -22,6 +22,10 @@ extends Node3D
 ##                   be reviewed on any planet under real gameplay lighting
 ##                   (showcase/rocket_destination_card.tscn). The card is the one piece of the rocket
 ##                   a player reads rather than watches, so it gets its own scene.
+##   --photo=<id>    MODE round: stage the player at the pad, skip straight to `<id>` already chosen
+##                   (same shortcut --launch takes past the destination card) and drive the NEW mode
+##                   card to "Photo time!", so the whole safari-flight leg can be reviewed without
+##                   hand-clicking two cards first.
 
 const PLANET_SCENE := "res://src/planet/planet.tscn"
 const ENV_SCENE := "res://src/world/environment.tscn"
@@ -42,6 +46,17 @@ const PAD_SCENE := "res://src/rocket/rocket_pad.tscn"
 @export var launch_delay: float = 0.8
 ## Stage the player on the pad and open the destination card (see --card above).
 @export var open_card: bool = false
+## Non-empty: skip to this destination already chosen and drive the mode card to "Photo time!"
+## (see --photo above).
+@export var photo_dest: String = ""
+## Which tile `_auto_photo` drives to and confirms: 1 = "Photo time!" (default), 0 = "Just
+## travelling" - so the SAME rig can prove the mode card's OTHER tile still reaches the ordinary
+## `_launch()` untouched, not only that this file can call it directly (as --launch already did).
+@export var photo_pick_index: int = 1
+## MODE round: if set, `_auto_photo` (only) saves one PNG of the mode card here, just before it
+## drives the selection - so the same run both proves the card LOOKS right and exercises the flow
+## behind it, instead of needing two runs.
+@export var shot_path: String = ""
 
 var planet: Planet
 var player: Player
@@ -96,6 +111,8 @@ func _ready() -> void:
 		_auto_launch(pad)
 	elif open_card:
 		_auto_card(pad)
+	elif photo_dest != "":
+		_auto_photo(pad)
 
 
 ## Climb-tuning shortcut: drop the astronaut on the pad and start the journey, so a capture is all
@@ -107,6 +124,17 @@ func _auto_launch(pad: Node) -> void:
 	if not is_inside_tree():
 		return
 	pad.call("launch_to", launch_dest, player)
+	if shot_path != "":
+		# MODE round: "Just travelling" is meant to be pixel-identical to today's launch — a frame
+		# from mid-climb, taken through the SAME `launch_to` this flag always used, is the proof
+		# nothing here touched it.
+		await get_tree().create_timer(3.0).timeout
+		if not is_inside_tree():
+			return
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		img.save_png(shot_path)
+		print("MODE_SHOWCASE shot -> %s (%dx%d)" % [shot_path, img.get_width(), img.get_height()])
 
 
 ## Opens the "Where to?" card from the pad, exactly as pressing E on it does.
@@ -116,6 +144,40 @@ func _auto_card(pad: Node) -> void:
 	if not is_inside_tree():
 		return
 	pad.call("_on_interacted", player)
+
+
+## Same shortcut --launch takes past the walk, then drives the NEW mode card straight to
+## "Photo time!" - `_on_destination_chosen` is the exact function the real destination card calls,
+## so this exercises the mode card, `_launch_photo`, and `safari_flight.tscn` for real; only the
+## destination CARD's own UI is skipped, same as --launch skips it for the climb.
+func _auto_photo(pad: Node) -> void:
+	player.place_on_planet(planet.data.pad_dir.normalized())
+	await get_tree().create_timer(launch_delay).timeout
+	if not is_inside_tree():
+		return
+	pad.call("_on_destination_chosen", photo_dest, player)
+	await get_tree().create_timer(0.1).timeout
+	if not is_inside_tree():
+		return
+	var picker: Node = pad.get("_mode_picker")
+	if picker == null:
+		print("MODE_SHOWCASE: no mode picker opened (bad dest/route?) - staying on 'Just travelling'.")
+		return
+	# Past the pop-in tween (UIStyle.pop_in, 0.32 s) so the card is settled in the captured frame.
+	await get_tree().create_timer(0.4).timeout
+	if not is_inside_tree() or not is_instance_valid(picker):
+		return
+	if shot_path != "":
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		img.save_png(shot_path)
+		print("MODE_SHOWCASE shot -> %s (%dx%d)" % [shot_path, img.get_width(), img.get_height()])
+	# Past the picker's ARM_SECONDS (from when it opened) so `_confirm` is not ignored as an early E.
+	await get_tree().create_timer(0.2).timeout
+	if not is_inside_tree() or not is_instance_valid(picker):
+		return
+	picker.call("_select", photo_pick_index, false)
+	picker.call("_confirm")
 
 
 var _want_tris := false
@@ -133,6 +195,12 @@ func _parse_args() -> void:
 			launch_dest = a.substr(9)
 		elif a == "--card":
 			open_card = true
+		elif a.begins_with("--photo="):
+			photo_dest = a.substr(8)
+		elif a.begins_with("--shot="):
+			shot_path = a.substr(7)
+		elif a.begins_with("--mode-index="):
+			photo_pick_index = int(a.substr(13))
 
 
 ## Prints the shipped triangle count of the rocket and the whole pad against the §10 budget.

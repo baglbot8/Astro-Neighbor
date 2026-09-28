@@ -48,8 +48,10 @@ static func set_stage(n: int) -> void:
 	GameState.flags["finale_stage"] = n
 
 
-## True once the ending has finished: `finish_story()` sets both this and the stage together, but a
-## caller that only cares "is she a skiff yet" should ask this, not infer it from the stage number.
+## True only for a save that finished the OLD ending (docs/PHASE5_SPEC.md §6, before 2026-09-27), where
+## the friends gave you a skiff: that save keeps it on every pad (rocket_model.gd and replay_board.gd read
+## this). The fleet ending (docs/STORY_HOME_SPEC.md §2 ruling 8) never sets the flag - your rocket stays
+## your rocket after the story - so a new game reads false here forever. Ask this, never the stage number.
 static func has_ship() -> bool:
 	return bool(GameState.flags.get("finale_ship", false))
 
@@ -86,14 +88,14 @@ static func checkpoint() -> bool:
 
 
 # ============================================================================= after the story
-## docs/PHASE5_SPEC.md §6: DONE sets the stage, the ship flag and story_done, emits campaign_changed
-## ONCE, restores the clock and checkpoints. Idempotent (see the class doc) - safe for both finale.gd's
-## own chain and finale_gift.gd to call.
+## docs/PHASE5_SPEC.md §6 as amended by docs/STORY_HOME_SPEC.md §2 ruling 8: DONE sets the stage and
+## story_done, emits campaign_changed ONCE, restores the clock and checkpoints. It does NOT set
+## "finale_ship" any more (no skiff for a new game); a save that already carries it keeps it untouched.
+## Idempotent (see the class doc) - safe for both finale.gd's own chain and finale_gift.gd to call.
 static func finish_story() -> void:
-	if stage() >= 4 and has_ship() and GameState.story_done:
+	if stage() >= 4 and GameState.story_done:
 		return
 	set_stage(4)
-	GameState.flags["finale_ship"] = true
 	GameState.story_done = true
 	EventBus.campaign_changed.emit()
 	_restore_clock()
@@ -191,8 +193,8 @@ static func debug_start_sendoff() -> String:
 	return "Stage set to SENT. Landing on the Commons for the send-off."
 
 
-## Distinct from `debug_start_sendoff`: this jumps PAST the send-off shot itself, straight to the gift
-## (docs/PHASE5_SPEC.md §10: "stage 3, send-off ended"). finale.gd reads `consume_skip_sendoff()` once,
+## Distinct from `debug_start_sendoff`: this jumps PAST the send-off shot itself, straight to HOME (the
+## beat that replaced the gift; docs/PHASE5_SPEC.md §10: "stage 3, send-off ended"). finale.gd reads `consume_skip_sendoff()` once,
 ## the first time it builds the chain after this runs, and calls `FinaleLaunch.apply_end_state()`
 ## instead of `play()` - kept in Engine metadata, like `finale_dev_run`, NEVER in GameState.flags, so a
 ## debug shortcut can never leak into a real save some other system happens to write later.
@@ -203,7 +205,7 @@ static func debug_start_gift() -> String:
 	set_stage(3)
 	Engine.set_meta("finale_skip_sendoff", true)
 	SceneRouter.go_to_planet("hub")
-	return "Send-off already played. Landing straight on the gift."
+	return "Send-off already played. Landing straight on the homecoming."
 
 
 static func debug_after_story() -> String:
@@ -212,7 +214,7 @@ static func debug_after_story() -> String:
 	_ensure_all_parts_fitted()
 	finish_story()
 	SceneRouter.go_to_planet(HOME_ID)
-	return "Story marked done - every world open, the skiff on the pad. Landing home."
+	return "Story marked done - every world open, your rocket on the pad. Landing home."
 
 
 ## One line for a timeline to assert on: `FINALE <tag> stage= planet= parts= story_done= ship= gates=

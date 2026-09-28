@@ -63,6 +63,20 @@ SceneRouter="*res://src/autoload/scene_router.gd"
 Platform="*res://src/autoload/platform.gd"
 Director="*res://src/autoload/director.gd"
 DrawGate="*res://src/autoload/draw_gate.gd"
+; BOOK round (2026-09-21, scratch): THE BOOK OUTLIVES THE SCENE. A page is written from the
+; safari flight, from the tripod, and opened by a neighbour's hint in a conversation - three
+; different scenes - and the flight's landing files its haul and then immediately changes scene.
+; See src/sky/sky_journal.gd's header for why this is an autoload and not a node in
+; safari_flight.tscn. LAST in the list: it reads GameState.flags at _ready.
+;
+; WHY THE KEY IS "SkyBook" AND NOT "SkyJournal": an autoload key may not equal a global class_name,
+; and sky_journal.gd has carried `class_name SkyJournal` since the first spike (two showcase
+; scripts type their variables with it). Godot refuses the project outright - "Class SkyJournal
+; hides an autoload singleton" - so the KEY differs and the NODE renames itself to "SkyJournal" in
+; _ready. That is the name every finder in the project already looks for: /root/SkyJournal in
+; safari_haul.gd and sky_hints.gd, find_child("SkyJournal") in safari_heard.gd. Nothing calls the
+; `SkyBook` identifier; the key only has to be unique.
+SkyBook="*res://src/sky/sky_journal.gd"
 
 [debug]
 

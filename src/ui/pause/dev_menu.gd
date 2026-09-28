@@ -119,10 +119,10 @@ const FINALE_ROWS: Array[Dictionary] = [
 	{"label": "The Professor's call", "method": "debug_start_call", "confirm": ""},
 	{"label": "Go to the meeting", "method": "debug_start_meeting", "confirm": ""},
 	{"label": "Show the choice", "method": "debug_start_choice", "confirm": ""},
-	{"label": "Fly into the asteroid", "method": "debug_start_sendoff", "confirm": ""},
-	{"label": "Get the new ship", "method": "debug_start_gift", "confirm": ""},
+	{"label": "Fly with the fleet", "method": "debug_start_sendoff", "confirm": ""},
+	{"label": "The last photo", "method": "debug_start_gift", "confirm": ""},
 	{"label": "Jump to after the story", "method": "debug_after_story",
-		"confirm": "Jump straight to after the story? All parts, every project done, story finished, and the new ship."},
+		"confirm": "Jump straight to after the story? All parts, every project done, story finished."},
 ]
 
 const TAB_NAMES := ["Status", "Story", "Friends", "Games", "World", "Perf"]
@@ -138,6 +138,8 @@ var _cooldown := 0.0
 ## The pause menu to reopen when this closes (JournalPanel's own pattern). Duck-typed, not typed
 ## PauseMenu, for the same class-cycle reason journal_panel.gd gives.
 var _reopen_pause: Node
+## True when `_reopen_pause` was on its Settings page when this opened (see `open_over`).
+var _reopen_settings := true
 var _paused_tree := false
 var _confirm: ConfirmPopup
 
@@ -160,6 +162,8 @@ var _stardust_label: Label
 var _campaign_toggle: ToggleSwitch
 var _story_toggle: ToggleSwitch
 var _board_all_toggle: ToggleSwitch
+## The retired space safari's one switch (docs/PLANET_SAFARI_SPEC.md 15.1), World tab. Never saved.
+var _space_safari_toggle: ToggleSwitch
 var _status_label: Label
 var _status_t := 0.0
 ## npc_id -> the status Label in that neighbour's Friends block.
@@ -206,6 +210,9 @@ static func open_over(source: Node) -> DevMenu:
 		return menu
 	if _is_open_pause_menu(source):
 		menu._reopen_pause = source
+		# The gesture only exists on the Settings page; F1 (pause_menu.gd `_on_dev_key`, spec 15.6) can
+		# come from the main Paused list too - go back to whichever page it came from.
+		menu._reopen_settings = "_in_settings" in source and bool(source.get("_in_settings"))
 		source.call("close")
 	menu.open(true)
 	return menu
@@ -492,7 +499,7 @@ func close() -> void:
 		# instead of PauseMenu.open()'s own default (the main Paused list) — measured without this:
 		# the reopened menu showed the Settings TITLE (never reset by `open()`) over the MAIN list's
 		# buttons, a confusing hybrid.
-		if pause.has_method("_open_settings"):
+		if _reopen_settings and pause.has_method("_open_settings"):
 			pause.call("_open_settings")
 
 
@@ -979,7 +986,16 @@ func _add_project_block(parent: VBoxContainer, npc_id: String) -> void:
 
 	var step_row := _row(parent, "Set up step")
 	var step_seg := SegmentedControl.new()
-	step_seg.setup(PackedStringArray(["1", "2", "3"]), 0)
+	# One button per step the project really has (STORY_SPINE_SPEC: every project gained a 4th,
+	# photo step; this was hard-coded "1","2","3" and could not reach it). "1","2","3" only when the
+	# build has no definition to count.
+	var step_labels := PackedStringArray()
+	var step_count := (_project_definition(npc_id).get("steps", []) as Array).size()
+	for n in maxi(step_count, 0):
+		step_labels.append(str(n + 1))
+	if step_labels.is_empty():
+		step_labels = PackedStringArray(["1", "2", "3"])
+	step_seg.setup(step_labels, 0)
 	step_seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	step_row.add_child(step_seg)
 	var step_btn := _touch_button("Go")
@@ -1181,6 +1197,7 @@ func _advance_project(npc_id: String) -> void:
 			_give_part(npc_id, d)
 		else:
 			_finish_action("%s: step %d of %d done." % [_npc_name(npc_id), i + 1, steps.size()])
+	_sync_photo_asks(npc_id)
 	EventBus.campaign_changed.emit()
 	_refresh_values()
 
@@ -1198,8 +1215,22 @@ func _finish_project(npc_id: String) -> void:
 		st = {"step": 0, "asked": false, "found": [], "markers": {}, "days": [],
 			"done": false, "started_day": GameState.day_count}
 	_give_part(npc_id, d, st)
+	_sync_photo_asks(npc_id)
 	EventBus.campaign_changed.emit()
 	_refresh_values()
+
+
+## These three buttons rewrite `GameState.projects` directly, not through ProjectSystem, so an open
+## photo ask (GameState.flags["photo_asks"], owned by PhotoAsks) would outlive the step it belongs
+## to - and keep that sight guaranteed on its lane for ever. ProjectSystem.sync_photo_asks makes the
+## asks agree with the project state again; it never touches an ask by anyone else.
+func _sync_photo_asks(npc_id: String) -> void:
+	if not ResourceLoader.exists(PROJECT_SYSTEM_PATH):
+		return
+	var scr: Variant = load(PROJECT_SYSTEM_PATH)
+	if scr is Script and (scr as Script).get_script_method_list().any(
+			func(m: Dictionary) -> bool: return str(m.get("name", "")) == "sync_photo_asks"):
+		(scr as Script).call("sync_photo_asks", npc_id)
 
 
 ## Shared tail of `_advance_project` (reaching the last step) and `_finish_project` (skip straight
@@ -1228,6 +1259,7 @@ func _give_part(npc_id: String, d: Dictionary, st_in: Dictionary = {}) -> void:
 func _reset_project(npc_id: String) -> void:
 	GameState.projects.erase(npc_id)
 	GameState.project_step_day.erase(npc_id)
+	_sync_photo_asks(npc_id)
 	EventBus.campaign_changed.emit()
 	_finish_action("%s's project reset." % _npc_name(npc_id), "warn")
 
@@ -1450,6 +1482,23 @@ func _build_world_tab(list: VBoxContainer) -> void:
 		GameState.set_flag("mail_day1_read", false)
 		_finish_action("The mailbox letter will show again."), "Reset")
 
+	# THE RETIRED SPACE SAFARI (docs/PLANET_SAFARI_SPEC.md 15.1): "a dev-menu row can turn the switch
+	# on for a test (not saved)". It flips `SafariTransit.SPACE_SAFARI`, a static var no save ever
+	# writes, so the next launch of the game starts with it off again.
+	var flights := _section("World", "space_safari", "Space photo flights (retired)")
+	var ss_row := _row(flights, "Photo flights on")
+	_space_safari_toggle = ToggleSwitch.new()
+	_space_safari_toggle.toggled.connect(func(on: bool) -> void:
+		SafariTransit.SPACE_SAFARI = on
+		print("[DevMenu] space safari switch -> %s" % str(on))
+		_finish_action("Space photo flights: %s (this run only)" % ("on" if on else "off")))
+	ss_row.add_child(_space_safari_toggle)
+	_add_note(flights, "Off in the game. On: the pad offers \"Photo time!\" again. Never saved.")
+	# THE FIRST PLANET SAFARI'S THREE PAUSES (spec 15.4) run once per save; this re-arms them.
+	_add_action_row(flights, "Re-arm first-safari tips", func() -> void:
+		PlanetSafari.debug_reset_tips()
+		_finish_action("The next planet safari teaches itself again."), "Reset")
+
 	var save_sec := _section("World", "save", "Save")
 	_add_action_row(save_sec, "Save game now (writes the save)", func() -> void:
 		if not await _confirm_ask("Write the real save file right now?"):
@@ -1619,6 +1668,10 @@ func _refresh_values() -> void:
 		_story_toggle.set_block_signals(true)
 		_story_toggle.on = GameState.story_done
 		_story_toggle.set_block_signals(false)
+	if _space_safari_toggle != null:
+		_space_safari_toggle.set_block_signals(true)
+		_space_safari_toggle.on = SafariTransit.SPACE_SAFARI
+		_space_safari_toggle.set_block_signals(false)
 	if _board_all_toggle != null and ResourceLoader.exists(REPLAY_BOARD_PATH):
 		_board_all_toggle.set_block_signals(true)
 		_board_all_toggle.on = bool(load(REPLAY_BOARD_PATH).call("dev_show_all"))

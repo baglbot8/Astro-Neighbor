@@ -49,11 +49,29 @@ Workflow scripts for substantive work — on the cheapest model that fits (next 
   lower; "max" only for a hard judgement); a round-2 critic re-checks the failed items plus a short
   regression, not the whole list; a critic re-runs a sample of the builder's evidence plus the risky
   items, not everything.
+- **Don't overengineer rounds** (the user, 2026-09-27: "id rather get the actual final results quicker"). Gates
+  are the smallest set of runs that shows the change works; a second round only for a real blocker; the lead
+  merges with small known issues listed, and the user's play decides the next polish.
 - **Unknown cause? Diagnose before building.** Read-only investigators first, then an adversarial
   cross-check that tries to refute them, then the fix.
 - **Finish with an integration check**: `tools/check.sh`, all seven worlds boot, a real play-through.
 - Builders do not edit `docs/` — it is the contract they are graded against. The lead amends a doc,
   with the measurement that justifies it. Builder detail: `docs/AGENT_WORKFLOW.md`.
+
+## Keep the user's Mac cool (the user, 2026-09-25: "my computer is getting very hot")
+
+Measured that morning: 22 Godot processes at once, about 890% CPU, load average 20, from five planet builders
+and their critics each launching batches of up to 10 test games in parallel.
+
+- **At most four Godot processes on the machine at any time** (raised from two on 2026-09-26: the user,
+  "you can start testing slightly more but not as much as before when the fan was really loud"). A
+  workflow runs at most four agents that launch Godot at once; each agent runs **one Godot at a time** -
+  never `&`, `xargs -P` or a batch launch.
+- **Batch simulations** (wanderer, calibration players, any repeated headless run) start with
+  `taskpolicy -b nice -n 10 /opt/homebrew/bin/godot ...` so they run on the efficiency cores at low priority.
+  **Timing runs** (frame time, stalls) run without it, one at a time, and say so.
+- Windowed runs pass `--max-fps 30` unless they measure frame time.
+- Re-run only what a change touched; do not repeat a full 30-run batch after a small fix.
 
 ## Use the cheapest model that can do the job
 
@@ -144,6 +162,12 @@ returns the conclusion, not the dump.
   and the hub is not the real hub (2026-09-13, `docs/OPEN_ISSUES.md` 55).
 - Never run `tools/gen/audio/build_all.py` while other builders are working — it regenerates every
   asset.
+- `showcase/plan_hop.tscn` **never quits** (its `find_child("Environment")` never matches) and
+  `showcase/rocket_pad.tscn -- --auto` idles after landing. Always pass `--quit-after <frames>`; four
+  forgotten runs burned CPU for 2 h 38 min under other agents' timings (2026-09-23).
+- The first-safari tip cards arm on the **wall clock** (`TIP_ARM_SEC`, `Time.get_ticks_msec`). A `--fixed-fps`
+  headless run never arms a card and freezes the safari on it. Run in real time or pass `--safari-tips=off`
+  (2026-09-27).
 - `showcase/characters_lineup.tscn -- --stats` prints the triangle counts and then **keeps running**.
   Pass `--quit-after 3` before the `--`. Two forgotten headless runs ran for 2 and 20 hours and added
   noise to other agents' frame timings (2026-09-15 and 2026-09-19).
