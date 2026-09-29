@@ -3,8 +3,9 @@ extends RefCounted
 ## order, 2026-09-27; voices per docs/CAST_VOICES_DRAFT.md with §8.1's changes). It replaced §5.7's convoy
 ## meeting on 2026-09-27: a goodbye party; the neighbours say they are staying and everyone agrees; DJ Nova
 ## reminds them the meteor is still coming; Vela's idea (knock it off course with his ship); everyone offers
-## their ship; Stella: a moving meteor is hard to hit on autopilot; the Professor tracks its path with your
-## photos; the ships fly on autopilot while everyone watches from the Commons; they come back bruised but
+## their ship; Stella: a moving meteor is hard to hit on autopilot; the Professor: "We need a target" - you
+## land on it and mark its weak spots (the meteor survey, §9.1/§9.2, `MeteorSurvey.run`); back on the Commons
+## the ships fly on autopilot to your beacons while everyone watches; they come back bruised but
 ## working; Pip and Pop will fix them; a party; the self-timer group photo. Data-only: no logic, so a builder
 ## that needs the words never has to parse dialogue calls to find them, and this file can be diffed
 ## straight against the spec text. Every quoted string is a "box" - one call to DialogueRunner.say
@@ -24,7 +25,7 @@ extends RefCounted
 ## `camera` is one of the meeting's rule letters (docs/PHASE5_SPEC.md §2: W shoulder, P speaker, U crowd-up,
 ## S side-on, R pad three-quarter), only where §5.7 tags one ([U], [S]).
 ## An action's `id` is what finale_meeting.gd / finale_gift.gd key on (the `action` text is the stage
-## direction, kept for the trace): "scrapbook" the Professor holds up your scrapbook, "silence" nobody
+## direction, kept for the trace): "scrapbook" the Professor holds up your scrapbook (unused since §9.1), "silence" nobody
 ## moves, "pause" a short pause on the whole crowd, "cheer" everyone agrees (each cheers at its own offset),
 ## "turn" all turn to the player, "launch" the six ships fly off on autopilot (finale_launch.gd plays it),
 ## "return" the ships and your rocket land back on the Commons, bruised (finale_gift.gd), "party" the
@@ -116,31 +117,25 @@ const MEETING: Array[Dictionary] = [
 	{"speaker": "fen", "lines": ["Take mine as well. Slow, but steady."]},
 	{"speaker": "grig", "lines": ["Hmph. Mine too. Bring it back in one piece."]},
 	{"speaker": "mayor_orbit", "lines": ["Every ship! Nobody aboard, mind. Autopilot."]},
-	# Stella's worry; the Professor's answer: your photos.
+	# Stella's worry; the Professor's answer: a target (docs/STORY_HOME_SPEC.md §9.1 - this replaced "I can
+	# track its path with your photos" on 2026-09-28).
 	{"speaker": "stella", "lines": [
 		"Autopilot, darling? At a meteor that moves?",
 		"That will be very hard to hit.",
 	]},
 	{"speaker": "mayor_orbit", "lines": [
-		"Not if we know its path. And we can.",
-		"May I borrow your scrapbook, friend?",
+		"Quite right, Stella. We need a target.",
+		"Someone has to land on it and mark its weak spots.",
 	]},
-	{"action": "the Professor holds up the scrapbook", "id": "scrapbook"},
-	{"speaker": "mayor_orbit", "lines": [
-		"That streak is in your photos from every world.",
-		"Put them together, and I can track its path.",
-		"It's the best shot we've got.",
-		"The best shot to save our whole solar system.",
-	]},
-	# Your rocket.
+	# You.
 	{"action": "all turn to the player", "id": "turn"},
 	{"speaker": "mayor_orbit", "camera": "S", "lines": [
 		"Your rocket is the fastest ship we have.",
-		"It's yours to send, or to keep. Nobody minds.",
+		"And nobody takes a better photo than you.",
 	]},
 	{"speaker": "mayor_orbit", "ask": {
-		"prompt": "Will you send your rocket with theirs?",
-		"options": ["Give me a moment", "Send my rocket"],
+		"prompt": "Will you land on the meteor and mark it?",
+		"options": ["Give me a moment", "I'll go!"],
 	}},
 ]
 
@@ -149,19 +144,23 @@ const MEETING: Array[Dictionary] = [
 const MOMENT: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": ["Take all the time you need. We'll be right here."]},
 	{"speaker": "zorp", "lines": ["Whatever you choose, you're still my best friend."]},
-	{"speaker": "bolt", "lines": ["Friendship does not need a rocket. I checked."]},
+	{"speaker": "bolt", "lines": ["I ran the odds on a meteor landing. They are good."]},
 	{"speaker": "fen", "lines": ["Sit in the warm with me a while. Then decide."]},
-	{"speaker": "grig", "lines": ["Hmph. Your rocket, your choice. Fair's fair."]},
+	{"speaker": "grig", "lines": ["Hmph. Nobody's pushing. Your call. Fair's fair."]},
 	{"speaker": "vela", "lines": ["Take your time. Good answers are rarely quick."]},
 ]
 
-## ------------------------------------------------------------------------------------- SEND ("Send my rocket")
-## Two boxes; everyone steps back and the six ships fly off on autopilot, your rocket in front, while
-## everyone watches from the Commons (finale_launch.gd); they hit the meteor and it breaks into a shower.
+## ------------------------------------------------------------------------------------- SEND (after the survey)
+## "I'll go!" runs the meteor survey (finale.gd, `MeteorSurvey.run`); back on the Commons, two turns; everyone
+## steps back and the six ships fly off on autopilot to your beacons, your rocket in front, while everyone
+## watches from the Commons (finale_launch.gd); they hit the meteor and it breaks into a shower.
 const SEND: Array[Dictionary] = [
-	{"speaker": "bolt", "lines": ["Autopilot on. 6 ships, flying for all of us."]},
-	{"speaker": "mayor_orbit", "lines": ["Everyone, stand back! Here they go!"]},
-	{"action": "six ships fly off on autopilot, yours in front; everyone watches from the Commons; the meteor breaks into a shower", "id": "launch"},
+	{"speaker": "bolt", "lines": ["Five beacons, locked! I counted twice."]},
+	{"speaker": "mayor_orbit", "lines": [
+		"Wonderful work, friend! Autopilot on.",
+		"Every ship, to your beacons. Stand back!",
+	]},
+	{"action": "six ships fly off on autopilot to your five beacons, yours in front; everyone watches from the Commons; the meteor breaks into a shower", "id": "launch"},
 ]
 
 ## ------------------------------------------------------------------------------------- HOME (the ships come back; the party)

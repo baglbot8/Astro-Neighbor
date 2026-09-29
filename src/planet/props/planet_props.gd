@@ -71,6 +71,8 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 		_:
 			_meadow()
 	_collectibles()
+	if data.id == "home":
+		_cave_entrance()
 	_build_contact_shadows()
 
 # ============================================================================================ helpers
@@ -2679,6 +2681,35 @@ static func _drift_fin(powder: Color, shade: Color, variant: int) -> ArrayMesh:
 			shade.lerp(powder, 0.62), Vector3(0.27, 0.34, long * 0.46), 12)
 		return kit.commit()
 	return _cached_mesh(key, build)
+# ============================================================================================ cave entrance
+## THE CAVE ENTRANCE (docs/STORY_HOME_SPEC.md 9.3): home only, shown only after the story. PLACED LAST,
+## after every prop, the grass and the collectibles, so nothing else on home can move when story_done
+## flips: nothing is placed after it, and its spot is picked (in BOTH states, see
+## CaveEntrance.pick_dir) from its own salted rng around everything already there. The grass was
+## scattered before the opening existed, so the tufts inside it are hidden in place (scaled to zero);
+## no rng is drawn and no other tuft changes. The first version picked before the grass and registered
+## the footprint only after the story, so three home collectibles jumped when the story ended
+## (CAVEPOL, 2026-09-28: home_6, home_7 and home_star1).
+func _cave_entrance() -> void:
+	var cave_dir := CaveEntrance.pick_dir(planet, coll_root, func(d: Vector3) -> bool:
+		return not _on_paved(d, CaveEntrance.FOOTPRINT_M))
+	if not GameState.story_done or cave_dir == Vector3.ZERO:
+		return
+	planet.register_prop(cave_dir, CaveEntrance.FOOTPRINT_M)
+	CaveEntrance.place(planet, root, cave_dir)
+	var tuft0 := PlanetPropMeshes.grass_tuft(0)
+	var tuft1 := PlanetPropMeshes.grass_tuft(1)
+	var clear_m := CaveEntrance.FOOTPRINT_M + 0.1
+	for c in root.get_children():
+		var mmi := c as MultiMeshInstance3D
+		if mmi == null or mmi.multimesh == null or not (mmi.multimesh.mesh == tuft0 or mmi.multimesh.mesh == tuft1):
+			continue
+		var mm := mmi.multimesh
+		for i in mm.instance_count:
+			var xf := mm.get_instance_transform(i)
+			if planet.surface_distance(xf.origin.normalized(), cave_dir) < clear_m:
+				mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ZERO), xf.origin))
+
 # ============================================================================================ collectibles
 func _collectibles() -> void:
 	var kinds := data.collectible_kind.split(",", false)

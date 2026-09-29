@@ -209,10 +209,11 @@ const QUESTIONS: Array[Dictionary] = [
 	# ---- the fleet, after the story only (docs/STORY_HOME_SPEC.md §5.6, replacing skiff_gift and skiff_replaces)
 	{"id": "fleet", "q": "Fellow human, what broke the meteor into a shower?",
 		"answers": ["Every ship, together", "Your rocket, alone", "A very big net"], "needs": {"story": true}},
-	{"id": "streak", "q": "Fellow human, how did the Professor track the meteor?",
-		"answers": ["In your photos", "A letter from Bolt", "He tripped on it"], "needs": {"story": true}},
-	# src/campaign/finale_lines.gd MEETING (the Professor: "That streak is in your photos from every world." /
-	# "Put them together, and I can track its path.") and SEND ("6 ships, flying for all of us");
+	{"id": "beacons", "q": "Fellow human, what did the ships aim for?",
+		"answers": ["Your five beacons", "The meteor's nose", "A big painted X"], "needs": {"story": true}},
+	# src/campaign/finale_lines.gd SEND (Bolt: "Five beacons, locked!"; the Professor: "Every ship, to your
+	# beacons."), docs/STORY_HOME_SPEC.md §9.1 - it replaced "streak" (the Professor tracking the meteor in
+	# your photos), no longer true since 2026-09-28;
 	# src/campaign/finale_launch.gd flies all six ships into the meteor before it breaks into the shower.
 ]
 

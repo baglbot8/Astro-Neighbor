@@ -5,8 +5,10 @@ extends Node
 ## unchanged; the script is finale_lines.gd MEETING - the party (Nova's party track, `PARTY_TRACK`), the
 ## neighbours say one by one they are staying, everyone agrees (`cheer_crowd`, each at its own offset), Nova
 ## reminds them the meteor is still coming (U, the crowd looking up at it; the music stops), Vela's idea,
-## everyone offers their ship, Stella's worry, the Professor holds up your scrapbook (`_hold_up_scrapbook`)
-## to track its path, and asks whether your rocket goes too: "Give me a moment" / "Send my rocket". The
+## everyone offers their ship, Stella's worry, the Professor: "We need a target" (§9.1; the scrapbook beat,
+## `_hold_up_scrapbook`, is no longer in the script), and asks you to land on the meteor and mark it: "Give
+## me a moment" / "I'll go!". "I'll go!" runs the meteor survey (finale.gd; `before_survey`/`after_survey`
+## here hand the screen over and take it back behind a navy dip). The
 ## send beat ends with everyone stepping back to watch (`_board`: nobody boards, the ships fly on
 ## autopilot) before FinaleLaunch flies the six of them. After the send-off, finale_gift.gd (HOME) calls
 ## `stage_home()` behind `dip()` to put everyone back on the Commons. finale.gd creates this node, by path, as
@@ -16,10 +18,11 @@ extends Node
 ##   1 CALLED  the crowd is already standing when you land; once the world is calm (no fade, no landing,
 ##             control in your hands) the astronaut walks to a mark 3.6 m out facing them, the §3 MEETING
 ##             lines play on this node's own camera, stage 2 is written and checkpointed, and the
-##             Professor asks. "Send my rocket" emits `chose_send`; "Give me a moment" (or cancel) plays his
+##             Professor asks. "I'll go!" emits `chose_send`; "Give me a moment" (or cancel) plays his
 ##             moment line and hands control back: free roam, flying allowed, a line from each friend when
 ##             you talk to them, and the Professor's "!" asks again.
-##   2 MET     the crowd on its saved spots, free roam straight away, the Professor's "!" asks again.
+##   2 MET     the crowd on its saved spots, free roam straight away, the Professor's "!" asks again - or,
+##             if "I'll go!" was already said (FinaleState.survey_agreed), nothing: finale.gd restarts the survey.
 ##   3 SENT    the crowd staged, nothing said; finale.gd calls `play_send_beat()` then the send-off.
 ##
 ## THE NIGHT SWITCH (§0). `_ready` runs inside World._ready, before the Commons draws its first frame:
@@ -356,7 +359,9 @@ const SHOT_SEQUENCE: Array = [["W", ""], ["P", "zorp"], ["P", "grig"], ["P", "ma
 ## solved for `camera_to("R")`.
 const TURN_RULE := "S"
 const SEND_RULES: Array = ["P", "W"]
-const CHOICE_ARM_OPTIONS: PackedStringArray = ["Give me a moment", "Send my rocket"]
+const CHOICE_ARM_OPTIONS: PackedStringArray = ["Give me a moment", "I'll go!"]
+## The dip to navy either side of the meteor survey (docs/STORY_HOME_SPEC.md §9.1).
+const SURVEY_DIP_S := 0.6
 const ARM_DELAY := 0.6
 const QUIET_MS := 400
 ## The longest the pills wait for the camera to settle (the S -> PA blend measured 6.3 s in round 2).
@@ -1508,6 +1513,12 @@ func _run() -> void:
 		return
 	if _stage0 >= 3:
 		return  # finale.gd calls play_send_beat() itself.
+	var agreed: Variant = _fs_call("survey_agreed", [])
+	if _stage0 == 2 and agreed is bool and agreed:
+		# docs/STORY_HOME_SPEC.md §9.1: "I'll go!" was already said and saved - finale.gd starts the survey
+		# again through `before_survey()`; no re-ask.
+		_beat("survey restart (stage 2 load, survey agreed)")
+		return
 	if _stage0 == 2:
 		# §1 stage 2: the crowd on its saved spots and the Professor's "!" straight away; the shots finish
 		# their search in the background for the send beat.
@@ -1699,6 +1710,51 @@ func _send_chosen(from: String) -> void:
 	# Deferred: from free roam this runs inside Conversation.run, which still has to finish its runner;
 	# finale.gd resumes on this signal and calls play_send_beat() straight away.
 	chose_send.emit.call_deferred()
+
+
+## docs/STORY_HOME_SPEC.md §9.1, awaited by finale.gd before `MeteorSurvey.run`: the dialogue closes, the
+## screen dips to navy with the astronaut frozen, and then the modal and the dip are let go so the survey
+## owns the screen and the controls from its first frame. From free roam, or a reload that lands at the
+## survey step, it first waits for the world to be calm (landing done, box closed), like the send beat.
+func before_survey() -> void:
+	if not is_inside_tree():
+		return
+	_phase = Phase.SENDING
+	_roam_marker = false
+	var runner := DialogueRunner.get_or_create(self)
+	if not _modal:
+		while is_inside_tree() and runner != null and runner.is_active():
+			await get_tree().process_frame
+		await _wait_calm(0.2)
+		if not is_inside_tree():
+			return
+		_begin_modal()
+	elif runner != null and runner.is_active():
+		runner.finish()
+	_beat("survey: dip out")
+	await dip(1.0, SURVEY_DIP_S)
+	if not is_inside_tree():
+		return
+	_end_modal()
+	await dip(0.0, 0.0)
+
+
+## Back from the survey: the Commons comes back behind the navy dip - the crowd facing the astronaut, the
+## camera on the P framing of Bolt (who speaks first in SEND) - so play_send_beat opens on a settled frame.
+func after_survey() -> void:
+	if not is_inside_tree():
+		return
+	await dip(1.0, 0.0)
+	_begin_modal()
+	_ensure_camera(true)
+	_hold_crowd(_mark_look())
+	if not snap_to(SEND_RULES[0], ["bolt"]):
+		camera_to("W")
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	_beat("survey: dip in")
+	await dip(0.0, SURVEY_DIP_S)
 
 
 ## §2 Send, awaited by finale.gd before FinaleLaunch.play(self).

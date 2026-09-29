@@ -2,8 +2,9 @@ extends RefCounted
 ## Clothing catalog for Suit-Up. `Catalog` (src/autoload/catalog.gd) instantiates this at boot and
 ## registers every dictionary returned by `get_items()`. Format documented at the top of catalog.gd.
 ##
-## 22 items: 17 suits, 3 hats, 2 backpack cowls. The starter `suit_white` is priced 0 ("not sold" —
-## the player already owns it), so the store stocks 21. Nothing here changes what the astronaut can
+## 23 items: 18 suits, 3 hats, 2 backpack cowls. The starter `suit_white` and the cave's `suit_prism`
+## (found once in the cave's treasure chest, src/cave/) are priced 0 ("not sold"), so the store stocks
+## 21. Nothing here changes what the astronaut can
 ## DO: the backpacks are cosmetic shells over the thruster pack every astronaut already wears
 ## (docs/STYLE_GUIDE.md R2.8), and their copy says so.
 ##
@@ -50,6 +51,8 @@ const SUITS: Array = [
 		"#ffd6f2", "Midnight velvet with champagne cuffs. Strictly for big nights."],
 	["suit_void_runner", "Void Runner Suit", "suit", "legendary", 1500, "#232a3f", "#4fe0bd", "#7cffd0",
 		"Black as between-the-stars, lit by a single mint seam. Very cool. Slightly smug."],
+	["suit_prism", "Prism Suit", "suit", "legendary", 0, "#e9e6f2", "#7d5fcf", "#b8f2ff",
+		"Found in a chest deep in the cave. Pearl white, violet boots, and it catches rainbows."],
 ]
 
 ## Columns: id, name, category, rarity, price, style key, style value, icon colour, description.

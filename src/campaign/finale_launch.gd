@@ -1,8 +1,9 @@
 class_name FinaleLaunch
 extends Node3D
 ## THE SEND-OFF - the Phase 5 showpiece (docs/PHASE5_SPEC.md §2 "Send-off", §4 "Shower", §5, §7), since
-## 2026-09-27 THE FLEET ON AUTOPILOT (docs/STORY_HOME_SPEC.md §8 and §8.1). finale.gd instances this under
-## /root/World (by path) once "Send my rocket" is chosen, calls `play(meeting)`, and waits for `finished`.
+## 2026-09-27 THE FLEET ON AUTOPILOT (docs/STORY_HOME_SPEC.md §8 and §8.1), since 2026-09-28 flying TO YOUR
+## BEACONS (§9.1: five pulsing beacons on the rock, `_build_beacons`). finale.gd instances this under
+## /root/World (by path) after the meteor survey, calls `play(meeting)`, and waits for `finished`.
 ## Nothing in it is spoken: it is one shot, seen from the ground with the whole crowd and the astronaut
 ## (nobody boards: everyone watches from the Commons), of SIX empty ships launching together - your gold
 ## rocket in front, the five neighbours' packed ships (neighbour_ships.gd, parked round the Commons by the
@@ -92,6 +93,19 @@ const FLEET_SLOT := {"bolt": Vector3(3.6, 2.7, 0.5), "zorp": Vector3(3.6, -2.7, 
 ## Shot seconds over which ship i blends from its own climb into its slot (plus 0.25 s per ship).
 const FLEET_JOIN := Vector2(3.2, 6.6)
 const FLEET_CLOSE := 0.55
+
+# ------------------------------------------------------------------------------------ your beacons
+## docs/STORY_HOME_SPEC.md §9.1: the ships fly "to your beacons" - the five weak spots the player marked in the
+## meteor survey, shown as five pulsing glow sprites in a ring round the point the fleet hits, from the first frame of the shot until the flash at HIT_T. The Moonstone accent amber
+## (docs/STYLE_GUIDE.md, UIStyle's one accent). Star shader: already drawn by the flash, nothing to warm.
+const BEACON_COUNT := 5
+const BEACON_COLOR := Color("#f0a64a")
+const BEACON_SIZE_M := 4.4
+## The ring of beacons, degrees off the rock's centre-to-hit line.
+const BEACON_RING_DEG := 34.0
+## Cone half-angle for reading the rock's surface radius along a beacon's direction, and the lift off it.
+const BEACON_CONE_DEG := 9.0
+const BEACON_LIFT_M := 0.9
 
 # ------------------------------------------------------------------------------------ timeline (s)
 const IGNITE_T := 1.0
@@ -321,6 +335,7 @@ var _cam: Camera3D
 var _flash: MeshInstance3D
 var _dust: GPUParticles3D
 var _shower: MultiMeshInstance3D
+var _beacons: Array[MeshInstance3D] = []
 var _hint_layer: CanvasLayer
 var _hint_root: Control
 var _hint_pill: PanelContainer
@@ -463,6 +478,9 @@ func apply_end_state() -> void:
 		_asteroid.scale = Vector3.ONE
 	if _flash != null:
 		_flash.visible = false
+	for b in _beacons:
+		if is_instance_valid(b):
+			b.visible = false
 	if _dust != null:
 		_dust.emitting = false
 	if _shower == null and _planet != null:
@@ -1131,8 +1149,62 @@ func _build_nodes() -> void:
 	add_child(_dust)
 	_dust.global_transform = Transform3D(_rest.basis.orthonormalized(), _rest.origin)
 	_build_shower()
+	_build_beacons()
 	_build_skip_hint()
 	_find_fleet()
+
+
+## Five beacons on the rock (see BEACON_COUNT): a pentagon BEACON_RING_DEG round the line from the rock's
+## centre to the hit point, each lifted BEACON_LIFT_M off the rock's own surface along its
+## direction (the furthest rest vertex within BEACON_CONE_DEG of it, GiantAsteroid `_rest_pos` in the rock's
+## frame), so none floats off the lumpy rock or sinks into it. No rock: none.
+func _build_beacons() -> void:
+	if _asteroid == null or not is_instance_valid(_asteroid):
+		return
+	var rock := _asteroid.find_child("Rock", true, false) as Node3D
+	var frame := rock.global_transform if rock != null else _asteroid.global_transform
+	var rest: Variant = _asteroid.get("_rest_pos")
+	var pts: PackedVector3Array = rest if rest is PackedVector3Array else PackedVector3Array()
+	# Centred on the hit: the fleet's V arrives in the middle of the five.
+	var toward := (_hit - _rock_c).normalized() if _hit.distance_to(_rock_c) > 0.01 else (_c - _rock_c).normalized()
+	var a := toward.cross(_up_c)
+	if a.length_squared() < 0.0001:
+		a = toward.cross(Vector3.RIGHT)
+	a = a.normalized()
+	var q := QuadMesh.new()
+	q.size = Vector2(BEACON_SIZE_M, BEACON_SIZE_M)
+	# The survey's own beacon glow (MeteorProps.BEACON = BEACON_COLOR): it mixes over the rock instead of adding
+	# to it, so it reads amber; the additive star sprite read near-white pink on the lit rock (METEORPOL, 2026-09-28).
+	q.material = MeteorProps.beacon_glow()
+	var cos_cone := cos(deg_to_rad(BEACON_CONE_DEG))
+	var inv := frame.affine_inverse()
+	for i in BEACON_COUNT:
+		var d := toward.rotated(a, deg_to_rad(BEACON_RING_DEG)).rotated(toward, TAU * float(i) / float(BEACON_COUNT) + 0.3).normalized()
+		var r := _rock_r * 0.8
+		if not pts.is_empty():
+			var dl := (inv.basis * d).normalized()
+			var best := 0.0
+			for v in pts:
+				var vl := v.length()
+				if vl > 0.001 and v.dot(dl) / vl >= cos_cone:
+					best = maxf(best, (frame.basis * v).length())
+			if best > 0.0:
+				r = best
+		var mi := MeshInstance3D.new()
+		mi.name = "Beacon%d" % i
+		mi.mesh = q
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		mi.global_position = _rock_c + d * (r + BEACON_LIFT_M)
+		_beacons.append(mi)
+	_beat("beacons %d on the rock (ring %.0f deg)" % [_beacons.size(), BEACON_RING_DEG])
+
+
+## On from the shot's first frame until the flash covers the hit.
+func _update_beacons(t: float) -> void:
+	for b in _beacons:
+		if is_instance_valid(b):
+			b.visible = t < HIT_T + FLASH_GROW
 
 
 func _build_shower() -> void:
@@ -1231,6 +1303,7 @@ func _update_all(t: float) -> void:
 	_update_rocket(t)
 	_update_fleet(t)
 	_update_fx(t)
+	_update_beacons(t)
 	_update_rock(t)
 	if _shower != null:
 		_shower.call("advance_to", t)

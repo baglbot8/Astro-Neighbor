@@ -1284,10 +1284,12 @@ const SAFARI_TRANSIT_SCRIPT := "res://src/sky/safari_transit.gd"
 ## "home" (builder HOMEALBUM, docs/STORY_HOME_SPEC.md 8.1) is not a subject category like the other
 ## five - it is HomeAlbumStore's own freeform, up-to-25 album, never auto-replaced. `_refresh_scrap_tabs`
 ## and `_refresh_planet_panel` special-case it rather than routing it through `scrapbook_entries`.
-const SCRAPBOOK_SECTIONS: Array[String] = ["sight", "event", "neighbour", "creature", "bonus", "home"]
+## "cave" (builder CAVE, docs/STORY_HOME_SPEC.md 9.3) is special-cased the same way: CaveStore's own
+## pages (src/cave/cave_store.gd), shown only once the story is over (CaveStore.unlocked).
+const SCRAPBOOK_SECTIONS: Array[String] = ["sight", "event", "neighbour", "creature", "bonus", "home", "cave"]
 const SCRAPBOOK_TITLES := {
 	"sight": "Sights", "event": "Events", "neighbour": "Neighbours", "creature": "Creatures", "bonus": "Bonus",
-	"home": "Home",
+	"home": "Home", "cave": "Cave",
 }
 ## The planets the scrapbook lists, in the story's order (planet_score.gd TRUST_NPCS; written out so this
 ## autoload names no other class). Only those with a safari manifest are shown.
@@ -2012,6 +2014,21 @@ func _neighbour_ids(pid: String) -> Array:
 	return out
 
 
+## HUDJ (2026-09-28): the "neighbour" tab's "X/Y" used to count only `rows` (the roster's own
+## neighbour entries), while `_refresh_planet_panel` ALSO appends an "Other friends" group for any
+## favourited npc the roster does not list (an old save, or a neighbour from a world without a
+## manifest - see that function). The tab's total silently fell out of sync with the page whenever
+## that group was non-empty. Shared here so both call sites read the exact same set and can never
+## drift apart again: every friend id in `rows` (keyed by npc_id, the same key `_scrap_record`
+## resolves a neighbour row through) is "shown"; everything `friend_ids()` holds beyond that is extra.
+func _neighbour_extra_ids(rows: Array) -> Array:
+	var shown: Dictionary = {}
+	for r: Dictionary in rows:
+		var rec := _scrap_record(str(r["key"]))
+		shown[str(rec.get("npc_id", str(r["key"]).get_slice(":", 1)))] = true
+	return friend_ids().filter(func(n: Variant) -> bool: return not shown.has(str(n)))
+
+
 func _refresh_scrap_tabs() -> void:
 	for sec: String in SCRAPBOOK_SECTIONS:
 		var b: Button = _scrap_tabs.get(sec)
@@ -2023,16 +2040,43 @@ func _refresh_scrap_tabs() -> void:
 			# HomeAlbumStore's own count, not a subject roster (see the SCRAPBOOK_SECTIONS comment).
 			filled = HomeAlbumStore.count()
 			total = HomeAlbumStore.MAX_PHOTOS
+		elif sec == "cave":
+			# CaveStore's own pages (builder CAVE); the tab only exists after the story.
+			b.visible = CaveStore.unlocked()
+			b.size_flags_stretch_ratio = 0.7   # "Cave 3/9" is short: leave the longer tabs the room
+			filled = CaveStore.filled_count()
+			total = CaveStore.ROSTER.size()
 		else:
 			var rows := scrapbook_entries(sec)
 			filled = rows.filter(func(r: Dictionary) -> bool: return bool(r["filled"])).size()
 			total = rows.size()
+			if sec == "neighbour":
+				# See _neighbour_extra_ids: the page's "Other friends" group, counted in so the tab
+				# can never show a smaller total than the page actually lists. Every extra is a kept
+				# favourite by definition (that is the only way an npc_id lands in friend_ids()), so
+				# it adds to `filled` too.
+				var extra := _neighbour_extra_ids(rows).size()
+				filled += extra
+				total += extra
 		b.text = "%s %d/%d" % [str(SCRAPBOOK_TITLES[sec]), filled, total]
 		var on := sec == _scrap_section
-		b.add_theme_stylebox_override("normal", UIStyle.make_pill_style(C_NAVY if on else C_CREAM))
+		var style := UIStyle.make_pill_style(C_NAVY if on else C_CREAM)
+		b.add_theme_stylebox_override("normal", style)
 		b.add_theme_stylebox_override("hover", UIStyle.make_pill_style(C_NAVY if on else Color("#f6f7fb")))
 		b.add_theme_color_override("font_color", C_CREAM if on else C_TEXT)
 		b.add_theme_color_override("font_hover_color", C_CREAM if on else C_TEXT)
+		# HUDJ (2026-09-28): `clip_text = true` (see _build_planet_panel) silently cut the last digit
+		# off "Neighbours"/"Creatures"/"Cave" once their total reached two digits - the fixed
+		# `custom_minimum_size(0, 50)` from build time left no floor for the text, and the pill
+		# stylebox's own 24px-a-side content margin (UIStyle.make_pill_style) ate the rest of the
+		# slack a long name or a two-digit total needed. Measured in probe captures (button rect vs.
+		# the font's own get_string_size), not guessed: the tab's minimum width is set to EXACTLY what
+		# its current text needs at the real margins, so an HBoxContainer with SIZE_EXPAND_FILL can
+		# never compress it smaller (that only ever shrinks a child below its own minimum on genuine
+		# overflow, which the whole row has room to avoid - see the comment on this loop's call site).
+		var text_w := b.get_theme_font("font").get_string_size(
+			b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, b.get_theme_font_size("font_size")).x
+		b.custom_minimum_size.x = text_w + style.content_margin_left + style.content_margin_right
 
 
 ## Rebuilds the open section: one group per planet (its host's name and how many of its pages are
@@ -2048,8 +2092,10 @@ func _refresh_planet_panel() -> void:
 	if _scrap_section == "home":
 		_refresh_home_section()
 		return
+	if _scrap_section == "cave":
+		_refresh_cave_section()
+		return
 	var rows := scrapbook_entries(_scrap_section)
-	var shown_friends: Dictionary = {}
 	var pid_now := ""
 	var grid: GridContainer = null
 	for r: Dictionary in rows:
@@ -2063,12 +2109,11 @@ func _refresh_planet_panel() -> void:
 				_npc_display_name(host) if host != "" else pid.capitalize(), got, mine.size()]))
 			grid = _planet_grid()
 		grid.add_child(_planet_subject_row(str(r["key"])))
-		if _scrap_section == "neighbour":
-			var rec := _scrap_record(str(r["key"]))
-			shown_friends[str(rec.get("npc_id", str(r["key"]).get_slice(":", 1)))] = true
 	# A Friends favourite no roster lists (an old save, a neighbour from a world without a manifest).
+	# Uses _neighbour_extra_ids (shared with _refresh_scrap_tabs) so the tab's total can never
+	# disagree with how many rows actually show up here (HUDJ, 2026-09-28).
 	if _scrap_section == "neighbour":
-		var extra: Array = friend_ids().filter(func(n: Variant) -> bool: return not shown_friends.has(str(n)))
+		var extra := _neighbour_extra_ids(rows)
 		if not extra.is_empty():
 			_planet_body.add_child(_planet_section_header("Other friends"))
 			var fgrid := _planet_grid()
@@ -2076,6 +2121,35 @@ func _refresh_planet_panel() -> void:
 				fgrid.add_child(_friend_row(str(npc_id)))
 	if _planet_body.get_child_count() == 0:
 		_planet_body.add_child(_body_label("No %s pages yet." % str(SCRAPBOOK_TITLES[_scrap_section]).to_lower()))
+
+
+# ---------------------------------------------------------------------------------- the cave (CAVE)
+## Builder CAVE (docs/STORY_HOME_SPEC.md 9.3). Reads CaveStore (src/cave/) directly - the pages are
+## CaveStore's, this is only their view: one header, then every page in roster order, "???" until a
+## photo of it is kept (the same row as a planet's page, `_planet_thumb_rect`, tap to enlarge).
+func _refresh_cave_section() -> void:
+	_planet_body.add_child(_planet_section_header("The cave under your home - %d of %d" % [
+		CaveStore.filled_count(), CaveStore.ROSTER.size()]))
+	var grid := _planet_grid()
+	for e: Dictionary in CaveStore.ROSTER:
+		var rec := CaveStore.record_for(str(e["id"]))
+		var row := HBoxContainer.new()
+		row.name = "Page"
+		row.add_theme_constant_override("separation", 12)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(_planet_thumb_rect(str(rec.get("thumb_b64", "")), str(rec.get("name", ""))))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_child(info)
+		if rec.is_empty():
+			info.add_child(_body_label("???"))
+			info.add_child(_small_wrap("Not photographed yet."))
+		else:
+			info.add_child(_body_label(str(rec.get("name", "???"))))
+			info.add_child(_small_wrap("%s - day %d, %s" % [str(rec.get("grade", "")), int(rec.get("day", 0)),
+				SkyEvents.clock_text(float(rec.get("hour", 0.0)))]))
+		grid.add_child(row)
 
 
 # ---------------------------------------------------------------------------------- home album (HOMEALBUM)

@@ -6,7 +6,7 @@ extends Node3D
 ## BRUISED BUT WORKING (`set_bruised`, `bruised_xf`: soot, scratches and a lean). Procedural, small (1.8-2.2 m against the
 ## rocket's 3.2 m) and each in its owner's own palette AS SEEN AT NIGHT (see "palettes" below: the finale
 ## is always at night, so the albedos are the night inversion of the owners' daylight swatches), with a
-## crate or two strapped on: they are packed.
+## crate or two stacked beside it on the ground: they are packed.
 ##
 ## OWNED BY THE MEETING. finale_meeting.gd creates this node (by path, no class_name) as a child of
 ## /root/World/Rocket once the crowd has its spots, and calls `place()`. Parented under the pad node ON
@@ -32,12 +32,24 @@ extends Node3D
 ## `park_all()` puts them back upright. They stay parked after the story until the Commons reloads (the
 ## meeting, which makes this node, only exists at finale stages 1-3).
 ##
-## BRUISES (`set_bruised`). One extra vertex-coloured mesh per ship on the same body material (soot blotches
-## and pale scratches on the hatch side, the side the crowd sees): +1 draw a bruised ship, no new material.
+## BRUISES (`set_bruised`). WEATHERED LIKE YOUR OWN ROCKET AT THE START (docs/STORY_HOME_SPEC.md 9.6 item 3,
+## the user: the old soot "dents" "looks like black balls stuck on the ship"). Every hull draws the rocket's
+## own finish pass (MaterialLib.rocket_finish_shader, the rust / dust / soot / scorch layers RocketModel paints
+## on the crashed rocket) on a vertex-coloured copy (`_worn_shader`), clean (rf_wear 0, which skips the pass
+## and runs the plain body maths) until bruised; bruised sets RocketModel's stage-1 wear and rust threshold
+## (the rocket after its first part) with the rocket's own rust, dust and soot swatches taken through the
+## night inverse below (`_night`), so they render at night as they render on the rocket by day. Plus one
+## small vertex-coloured mesh of thin pale scratches, laid ON the hull (ray-cast onto the body's triangles)
+## in short parallel scrapes on the hatch side the crowd sees: +1 draw a bruised ship, no new shader.
 ##
-## HEAT. Per ship: one vertex-coloured body mesh on Building.body_material() (the Commons' own buildings
-## draw it, so it is compiled before the meeting), one small glow mesh, and one plume shown only in
-## flight: 10 draws parked, 15 flying. No shadows are added beyond what a MeshInstance3D casts by default.
+## CRATES STAY ON THE GROUND (9.6 item 2: the boxes flew and landed with the ships). The crates are no
+## longer part of the hull mesh: one node per ship ("Crates_<id>", a child of this node, not of the ship),
+## put on the ship's parked spot by `place` and never moved - the ship lifts off and lands beside them.
+##
+## HEAT. Per ship: one vertex-coloured body mesh on the worn body shader (one extra shader, compiled when the
+## ships are first drawn at the meeting; bruising changes uniforms only), one crates mesh on
+## Building.body_material() (the Commons' own buildings draw it), one small glow mesh, and one plume shown only
+## in flight: 15 draws parked. No shadows are added beyond what a MeshInstance3D casts by default.
 
 const NODE_NAME := "NeighbourShips"
 ## The crowd's front row, the astronaut's left to right (finale_meeting.gd FRONT without the Professor).
@@ -130,10 +142,16 @@ var _heights: Dictionary = {}
 ## True after `send_home` (no longer called since §8.1: the ships come back).
 var gone := false
 var _bruised: Dictionary = {}
-## Bruised: the lean a landed ship keeps (deg), and the marks' colours.
+## id -> the crates node left on the ground at that ship's parked spot.
+var _crate_nodes: Dictionary = {}
+## Bruised: the lean a landed ship keeps (deg), and the scratches' colour (pale bare metal).
 const LEAN_DEG := 4.0
-const SOOT := Color("#2b2522")
 const SCRATCH := Color("#efe3cc")
+## Bruised wear = RocketModel's finish stage 1 (the crashed rocket after its first part): its wear and rust
+## threshold, and the painted hull's own rust bias and bleach (RocketModel's cream: 0.0, 0.15).
+const BRUISE_STAGE := 1
+const BRUISE_RUST_BIAS := 0.0
+const BRUISE_FADE := 0.15
 
 
 # ============================================================================= parking
@@ -182,6 +200,14 @@ func place(p: Planet, centre: Vector3, pad_ground: Vector3, right: Vector3, avoi
 		_parked[id] = xf
 		ship.global_transform = xf
 		ship.visible = true
+		var crates := _crate_nodes.get(id) as Node3D
+		if crates == null or not is_instance_valid(crates):
+			crates = make_crates(id, float(ship.get_meta("crate_r", 0.7)), int(ship.get_meta("crates", 1)))
+			crates.name = "Crates_" + id
+			add_child(crates)
+			_crate_nodes[id] = crates
+		crates.global_transform = xf
+		crates.visible = true
 		notes.append("%s:%s@%.1fm/%d%s" % [id, "ok" if found else "FORCED(" + why + ")", planet.surface_point(chosen).distance_to(centre), tried,
 			"" if found else " " + str(whys)])
 	note = " ".join(notes)
@@ -301,6 +327,11 @@ func send_home() -> void:
 			s.queue_free()
 	_ships.clear()
 	_flames.clear()
+	for id: String in _crate_nodes:
+		var c := _crate_nodes[id] as Node3D
+		if c != null and is_instance_valid(c):
+			c.queue_free()
+	_crate_nodes.clear()
 
 
 ## Every ship back on its spot, visible, plume off: upright, or leaning on `bruised_xf` once bruised.
@@ -317,15 +348,20 @@ func park_all() -> void:
 		set_flame(id, 0.0)
 
 
-## Bruised but working (docs/STORY_HOME_SPEC.md §8.1: "the ships come back bruised but working"): soot and
-## scratches on the hull, on or off. Idempotent.
+## Bruised but working (docs/STORY_HOME_SPEC.md §8.1: "the ships come back bruised but working"): the
+## rocket's rust, dust and soot on the hull (the body's own worn material, see BRUISES in the header) and
+## thin pale scratches on the hatch side, on or off. Idempotent.
 func set_bruised(id: String, on: bool) -> void:
 	var s := ship(id)
 	if s == null:
 		return
+	var body := s.get_node_or_null("Body") as MeshInstance3D
+	if body != null and body.material_override is ShaderMaterial:
+		_set_wear(body.material_override as ShaderMaterial, on)
 	var b := s.get_node_or_null("Bruise") as Node3D
 	if on and b == null:
-		b = _make_bruise(id, float(s.get_meta("hull_r", 0.7)), float(s.get_meta("height", 2.0)))
+		b = _make_bruise(id, body.mesh if body != null else null, float(s.get_meta("hull_r", 0.7)),
+			float(s.get_meta("height", 2.0)))
 		s.add_child(b)
 	if b != null:
 		b.visible = on
@@ -345,34 +381,125 @@ func bruised_xf(id: String) -> Transform3D:
 	return Transform3D(Basis(ax, deg_to_rad(LEAN_DEG)) * xf.basis, xf.origin)
 
 
-## The bruise node: "Marks" (soot and scratches, one draw). No smoke: a puff sphere rendered as a solid blue
-## ball at night (MEASURED on the first run's HOME frames), not a wisp.
-static func _make_bruise(id: String, hull_r: float, h: float) -> Node3D:
+## The bruise node: "Marks", thin pale scratches (one draw, Building.body_material()), in three short scrapes
+## of two to four parallel lines on the hatch half (-Z, the crowd's side). Each line is ray-cast onto the
+## body's own triangles, so it lies on whatever the hull is at that height and never floats or sinks (the old
+## marks were boxes at a fixed radius). No smoke: a puff sphere rendered as a solid blue ball at night
+## (MEASURED on the first run's HOME frames), not a wisp.
+static func _make_bruise(id: String, mesh: Mesh, hull_r: float, h: float) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Bruise"
 	var kit := PlanetMeshKit.new()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = id.hash()
-	# The hatch faces -Z (the crowd); marks spread over the front half, a little proud of the hull.
-	for i in 5:
-		var a := deg_to_rad(-90.0 + rng.randf_range(-70.0, 70.0))
-		var y := rng.randf_range(0.55, maxf(0.7, h * 0.62))
-		var n := Vector3(cos(a), 0.0, sin(a))
-		var basis := Basis.looking_at(n, Vector3.UP)
-		kit.sphere(n * (hull_r * 0.97) + Vector3(0.0, y, 0.0), rng.randf_range(0.13, 0.22), SOOT, Vector3(1.0, 0.75, 0.22), 10, basis)
-	for i in 3:
-		var a2 := deg_to_rad(-90.0 + rng.randf_range(-55.0, 55.0))
-		var y2 := rng.randf_range(0.6, maxf(0.75, h * 0.55))
-		var n2 := Vector3(cos(a2), 0.0, sin(a2))
-		var b2 := Basis.looking_at(n2, Vector3.UP) * Basis(Vector3.FORWARD, rng.randf_range(-0.6, 0.6))
-		kit.rounded_box(n2 * (hull_r * 1.0) + Vector3(0.0, y2, 0.0), Vector3(0.34, 0.035, 0.03), 0.01, SCRATCH, b2)
+	var tri: TriangleMesh = mesh.generate_triangle_mesh() if mesh != null else null
+	var lines := 0
+	for c in 3:
+		var a := deg_to_rad(-90.0 + rng.randf_range(-60.0, 60.0))
+		var y := rng.randf_range(0.5, maxf(0.65, h * 0.6))
+		var tilt := rng.randf_range(-0.55, 0.55)
+		var n_lines := rng.randi_range(2, 4)
+		var length := rng.randf_range(0.20, 0.34)
+		for k in n_lines:
+			var y_k := y + (float(k) - float(n_lines - 1) * 0.5) * 0.045
+			var a_k := a + rng.randf_range(-0.03, 0.03)
+			var out := Vector3(cos(a_k), 0.0, sin(a_k))
+			var pos := out * hull_r + Vector3(0.0, y_k, 0.0)
+			var nrm := out
+			if tri != null:
+				var hit: Dictionary = tri.intersect_ray(out * (hull_r + 1.5) + Vector3(0.0, y_k, 0.0), -out)
+				if hit.is_empty():
+					continue
+				pos = hit["position"]
+				nrm = (hit["normal"] as Vector3).normalized()
+				if nrm.dot(out) < 0.0:
+					nrm = -nrm
+			# Along the hull's girth, tilted a little, in the plane the surface normal leaves.
+			var along := Vector3.UP.cross(nrm).normalized().rotated(nrm, tilt + rng.randf_range(-0.06, 0.06))
+			var side := nrm.cross(along).normalized()
+			var basis := Basis(along, side, nrm)
+			var len_k := length * rng.randf_range(0.6, 1.0)
+			kit.rounded_box(pos + nrm * 0.004 + along * rng.randf_range(-0.03, 0.03), Vector3(len_k, 0.014, 0.012),
+				0.005, SCRATCH, basis)
+			lines += 1
 	var marks := MeshInstance3D.new()
 	marks.name = "Marks"
-	marks.mesh = kit.commit()
+	if lines > 0:
+		marks.mesh = kit.commit()
 	marks.material_override = Building.body_material()
 	marks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(marks)
 	return root
+
+
+# ============================================================================= wear
+static var _worn: Shader
+
+## The rocket's finish shader (MaterialLib.rocket_finish_shader) on vertex colours: the same literal rewrite
+## MaterialLib.toon_vertex_color makes of the plain toon shader. Falls back to the plain body shader (no wear)
+## if the line it rewrites is ever gone.
+static func _worn_shader() -> Shader:
+	if _worn != null:
+		return _worn
+	var base := MaterialLib.rocket_finish_shader()
+	var line := "vec3 base = albedo.rgb;"
+	if base.code.find(line) < 0:
+		push_warning("NeighbourShips: rocket finish shader lost its albedo line; the ships stay clean")
+		_worn = (Building.body_material() as ShaderMaterial).shader
+		return _worn
+	var sh := Shader.new()
+	sh.code = base.code.replace(line, "vec3 base = albedo.rgb * COLOR.rgb;")
+	_worn = sh
+	return _worn
+
+
+## A ship's own body material: Building.body_material()'s look on the worn shader, clean (rf_wear 0).
+static func _worn_material() -> ShaderMaterial:
+	var m := Building.body_material().duplicate() as ShaderMaterial
+	m.shader = _worn_shader()
+	m.set_shader_parameter("rf_rust_color", _night(RocketModel.RUST))
+	m.set_shader_parameter("rf_rust_deep", _night(RocketModel.RUST_DEEP))
+	m.set_shader_parameter("rf_dust_color", _night(RocketModel.DUST))
+	m.set_shader_parameter("rf_soot_color", _night(RocketModel.SOOT))
+	m.set_shader_parameter("rf_grime_depth", RocketModel.GRIME_DEPTH)
+	m.set_shader_parameter("rf_scorch_dir", RocketModel.SCORCH_DIR)
+	m.set_shader_parameter("rf_rust_bias", BRUISE_RUST_BIAS)
+	m.set_shader_parameter("rf_fade", BRUISE_FADE)
+	_set_wear(m, false)
+	return m
+
+
+static func _set_wear(m: ShaderMaterial, on: bool) -> void:
+	m.set_shader_parameter("rf_wear", RocketModel.FINISH_WEAR[BRUISE_STAGE] if on else 0.0)
+	m.set_shader_parameter("rf_rust_thr", RocketModel.FINISH_RUST_THR[BRUISE_STAGE] if on else 2.0)
+
+
+## A DAYTIME colour -> the albedo that renders as it at the finale's night: the same measured per-channel night
+## inverse PAL was read off (see "palettes" above), interpolated through the DAY_PAL -> PAL pairs of the four
+## ships that share the median curve (Grig's is his lamp-lit spot's own). No new constants: the curve IS
+## those pairs, so it moves with them if they are ever re-derived.
+static func _night(day: Color) -> Color:
+	var out := [0.0, 0.0, 0.0]
+	for ch in 3:
+		var pts: Array[Vector2] = []
+		for o: String in ["zorp", "bolt", "fen", "vela"]:
+			var dp: Dictionary = DAY_PAL[o]
+			var pp: Dictionary = PAL[o]
+			for k: String in dp:
+				if pp.has(k):
+					pts.append(Vector2((dp[k] as Color)[ch], (pp[k] as Color)[ch]))
+			for k: String in DAY_PAL["all"]:
+				pts.append(Vector2((DAY_PAL["all"][k] as Color)[ch], (pp[k] as Color)[ch]))
+		pts.sort_custom(func(p: Vector2, q: Vector2) -> bool: return p.x < q.x)
+		var v: float = day[ch]
+		var r := pts[0].y * v / maxf(pts[0].x, 0.001) if v <= pts[0].x else pts[pts.size() - 1].y
+		for i in range(1, pts.size()):
+			if v <= pts[i].x and v > pts[i - 1].x:
+				var span := maxf(pts[i].x - pts[i - 1].x, 0.0001)
+				r = lerpf(pts[i - 1].y, pts[i].y, (v - pts[i - 1].x) / span)
+				break
+		out[ch] = clampf(r, 0.0, 1.0)
+	return Color(out[0], out[1], out[2])
 
 
 func set_all_visible(v: bool) -> void:
@@ -398,7 +525,7 @@ func set_flame(id: String, k: float, t: float = 0.0) -> void:
 
 # ============================================================================= the models
 ## One ship, built procedurally: origin at ground contact, +Y up, hatch facing -Z. Children: "Body" (the
-## vertex-coloured hull, legs, hatch and crates - one draw), "Glow" (lamps, one draw), "Flame" (hidden
+## vertex-coloured hull, legs and hatch - one draw; the crates are `make_crates`, left on the ground), "Glow" (lamps, one draw), "Flame" (hidden
 ## until flight), "Blocker" (a StaticBody3D on the decoration layer, so the astronaut bumps into it).
 static func make_ship(id: String) -> Node3D:
 	var root := Node3D.new()
@@ -417,11 +544,10 @@ static func make_ship(id: String) -> Node3D:
 			info = _vela(kit, glow, pal)
 		_:
 			info = _bolt(kit, glow, pal)
-	_crates(kit, float(info.get("crate_r", 0.7)), int(info.get("crates", 1)), pal)
 	var body := MeshInstance3D.new()
 	body.name = "Body"
 	body.mesh = kit.commit()
-	body.material_override = Building.body_material()
+	body.material_override = _worn_material()
 	root.add_child(body)
 	var gm := MeshInstance3D.new()
 	gm.name = "Glow"
@@ -463,8 +589,22 @@ static func make_ship(id: String) -> Node3D:
 	root.add_child(blocker)
 	root.set_meta("height", float(info.get("height", 2.0)))
 	root.set_meta("hull_r", float(info.get("hull_r", 0.7)))
+	root.set_meta("crate_r", float(info.get("crate_r", 0.7)))
+	root.set_meta("crates", int(info.get("crates", 1)))
 	root.set_meta("owner", id)
 	return root
+
+
+## `id`'s packing crates as their own node, in the ship's frame (origin at the ship's ground contact, hatch
+## -Z): placed on the parked spot by `place` and left there when the ship flies.
+static func make_crates(id: String, crate_r: float, n: int) -> MeshInstance3D:
+	var pal: Dictionary = PAL.get(id, PAL["bolt"])
+	var kit := PlanetMeshKit.new()
+	_crates(kit, crate_r, n, pal)
+	var mi := MeshInstance3D.new()
+	mi.mesh = kit.commit()
+	mi.material_override = Building.body_material()
+	return mi
 
 
 ## Three or four splayed legs from `r0` at height `y0` out to feet on the ground at `r1`, with round pads.
@@ -493,7 +633,8 @@ static func _nozzle(kit: PlanetMeshKit, y: float, r: float, col: Color) -> void:
 	kit.cylinder(Vector3(0.0, y - 0.14, 0.0), r * 1.15, r * 0.8, 0.16, col, Basis.IDENTITY, 10)
 
 
-## One or two crates strapped against the hull on the +X side, on the ground: the ship is packed.
+## One or two crates stacked beside the hull on the +X side, on the ground: the ship is packed. Built into
+## their own mesh (`make_crates`), never the hull's.
 static func _crates(kit: PlanetMeshKit, hull_r: float, n: int, pal: Dictionary) -> void:
 	var x := hull_r + 0.26
 	for i in n:

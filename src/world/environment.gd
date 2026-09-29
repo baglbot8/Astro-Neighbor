@@ -255,10 +255,6 @@ var _vignette_layer: CanvasLayer
 var _night_life: NightLife
 var _ring: PlanetRing
 var _sky_bodies: SkyBodies
-## STORY_HOME_SPEC.md rulings 2.6/2.7: a faint meteor streak in the sky, the same direction
-## everywhere, growing with rocket parts (not time). See src/sky/meteor_streak.gd for the geometry
-## and look; this node is fed every frame from `_apply()` below, same as `_sky_bodies`.
-var _meteor_streak: MeteorStreak
 
 func _ready() -> void:
 	_low_power = Platform.is_compatibility_renderer() or Platform.is_mobile()
@@ -271,7 +267,6 @@ func _ready() -> void:
 	_build_vignette()
 	_build_ring()
 	_build_sky_bodies()
-	_build_meteor_streak()
 	_build_night_life()
 	_hour = fposmod(GameState.time_of_day, 24.0)
 	_last_emit_hour = _hour
@@ -376,15 +371,6 @@ func get_sky_body_ids() -> PackedStringArray:
 ## the player can actually see, instead of looking up the "SkyBodies/Sky_<id>" node by name.
 func get_sky_body_direction(id: String) -> Vector3:
 	return _sky_bodies.direction_of(id) if _sky_bodies != null else Vector3.ZERO
-
-## World-space unit direction from the eye toward the meteor streak (STORY_HOME_SPEC.md rulings
-## 2.6/2.7 - "the meteor, far off"), or Vector3.ZERO before it has built. Same shape as
-## `get_sky_body_direction`, for the finale (ruling 6: "lines up the photos... finds where it is").
-func get_meteor_streak_direction() -> Vector3:
-	if _meteor_streak == null:
-		return Vector3.ZERO
-	var d: Vector3 = _meteor_streak.global_position - _eye
-	return d.normalized() if d.length_squared() > 0.000001 else Vector3.ZERO
 
 
 ## Restarts the opening-bearing lock (see `_body_az_lock` / BODY_AZ_LOCK_SEC above) so the
@@ -811,12 +797,6 @@ func _build_sky_bodies() -> void:
 	add_child(_sky_bodies)
 	_sky_bodies.setup(planet_data.id)
 
-## STORY_HOME_SPEC.md rulings 2.6/2.7: the meteor, far off. See src/sky/meteor_streak.gd.
-func _build_meteor_streak() -> void:
-	_meteor_streak = MeteorStreak.new()
-	_meteor_streak.name = "MeteorStreak"
-	add_child(_meteor_streak)
-
 func _build_ring() -> void:
 	if not planet_data.has_ring:
 		return
@@ -1016,12 +996,9 @@ func _apply(hour: float) -> void:
 		_sky_bodies.update_state(_eye, _up, _east, _body_az_origin, _sun_dir, _night, clock,
 			sun_col.lerp(Color.WHITE, 0.5))
 
-	# --- the meteor streak (STORY_HOME_SPEC 2.6/2.7). Per-frame, like everything else in this
-	# function: a one-shot value here would be overwritten the next time _apply() runs (_process()
-	# calls it every frame - see the file header and CLAUDE.md's environment.gd note).
-	if _meteor_streak != null:
-		_meteor_streak.update_state(_eye, _up, _east, _body_az_origin, _limb_dir, _limb_angle,
-			_band_top, GameState.rocket_part_count())
+	# (The old meteor streak - rulings 2.6/2.7 - was removed 2026-09-28, STORY_HOME_SPEC 9.6 item 1: the
+	# user saw it as "a random white line in the sky even during cutscenes", and its clue role ended when the
+	# meteor survey replaced the photo-tracking line.)
 
 	# --- ring / night life / vignette
 	if _ring != null:

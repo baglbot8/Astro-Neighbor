@@ -56,6 +56,22 @@ static func has_ship() -> bool:
 	return bool(GameState.flags.get("finale_ship", false))
 
 
+# ============================================================================= the meteor survey
+## docs/STORY_HOME_SPEC.md §9.1: true once the player has said "I'll go!" and the survey has not finished yet
+## (stage stays 2 MET until it has; finale.gd then writes 3 SENT). finale.gd checkpoints right after setting
+## it, so a reload between the ask and the end of the survey lands on the Commons and starts the survey
+## again straight away, with no re-ask (the survey itself is never saved, §9.2).
+static func survey_agreed() -> bool:
+	return bool(GameState.flags.get("finale_survey", false))
+
+
+static func set_survey_agreed(on: bool) -> void:
+	if on:
+		GameState.flags["finale_survey"] = true
+	else:
+		GameState.flags.erase("finale_survey")
+
+
 # ============================================================================= spots
 ## The meeting's crowd layout: the axis and each NPC's planet-local spot (docs/PHASE5_SPEC.md §1:
 ## "re-checked on load" - `finale_meeting.gd` re-validates these every time, this is just storage).
@@ -151,6 +167,7 @@ static func debug_reset_before_finale() -> String:
 	set_stage(0)
 	GameState.flags.erase("finale_ship")
 	GameState.flags.erase("finale_spots")
+	GameState.flags.erase("finale_survey")
 	EventBus.rocket_parts_changed.emit(GameState.rocket_part_count())
 	EventBus.campaign_changed.emit()
 	SceneRouter.go_to_planet(HOME_ID)
@@ -182,6 +199,17 @@ static func debug_start_choice() -> String:
 	set_stage(2)
 	SceneRouter.go_to_planet("hub")
 	return "Stage set to MET. Landing on the Commons - the Professor should re-ask."
+
+
+## A reload at the survey step (docs/STORY_HOME_SPEC.md §9.1): stage 2 with "I'll go!" already said.
+static func debug_start_survey() -> String:
+	Engine.set_meta("finale_dev_run", true)
+	_ensure_campaign_running()
+	_ensure_all_parts_fitted()
+	set_stage(2)
+	set_survey_agreed(true)
+	SceneRouter.go_to_planet("hub")
+	return "Stage MET, survey agreed. Landing on the Commons - the survey should start again."
 
 
 static func debug_start_sendoff() -> String:
@@ -246,6 +274,7 @@ static func _ensure_campaign_running() -> void:
 	# every debug_start_* below calls, rather than repeated in each - `debug_start_gift` re-sets the
 	# skip meta itself immediately after, which is fine, that one call site means it on purpose.
 	GameState.flags.erase("finale_ship")
+	GameState.flags.erase("finale_survey")
 	Engine.remove_meta("finale_skip_sendoff")
 
 

@@ -105,9 +105,10 @@ func _ready() -> void:
 	var send_text := JSON.stringify(finale_consts.get("SEND", [])).to_lower()
 	var meeting_text := JSON.stringify(finale_consts.get("MEETING", [])).to_lower()
 	_check_true("fleet", by_id,
-		_right_answer(by_id, "fleet").to_lower().contains("every ship") and send_text.contains("all of us"))
-	_check_true("streak", by_id,
-		_right_answer(by_id, "streak").to_lower().contains("photos") and meeting_text.contains("streak is in your photos"))
+		_right_answer(by_id, "fleet").to_lower().contains("every ship") and send_text.contains("every ship"))
+	_check_true("beacons", by_id,
+		_right_answer(by_id, "beacons").to_lower().contains("five beacons") and send_text.contains("five beacons")
+		and send_text.contains("to your beacons") and not meeting_text.contains("track its path"))
 
 	# ---- structural checks over the WHOLE bank, not just the ones above ----------------------------
 	_check_bank_shape()

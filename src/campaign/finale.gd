@@ -36,6 +36,8 @@ const SCRIPT_PATH := "res://src/campaign/finale.gd"
 const FINALE_MEETING_PATH := "res://src/campaign/finale_meeting.gd"
 const FINALE_LAUNCH_PATH := "res://src/campaign/finale_launch.gd"
 const FINALE_GIFT_PATH := "res://src/campaign/finale_gift.gd"
+## docs/STORY_HOME_SPEC.md §9.2, the lead's stub API (`static func run(tree) -> void`, awaitable).
+const METEOR_SURVEY_PATH := "res://src/meteor_survey/meteor_survey.gd"
 ## visitor_system.gd (Phase 4, K's brief note on `_visits_on`) has no class_name, so it is loaded by
 ## path here too, the same way FinaleState's own `_visits_on` helper does it.
 const VISITOR_SYSTEM_PATH := "res://src/campaign/visitor_system.gd"
@@ -174,6 +176,7 @@ func _run_cli(key: String) -> void:
 		"call": FinaleState.debug_start_call()
 		"meeting": FinaleState.debug_start_meeting()
 		"choice": FinaleState.debug_start_choice()
+		"survey": FinaleState.debug_start_survey()
 		"sendoff": FinaleState.debug_start_sendoff()
 		"gift": FinaleState.debug_start_gift()
 		"after": FinaleState.debug_after_story()
@@ -497,12 +500,45 @@ func _run_meeting_chain() -> void:
 		return  # missing file already logged by `_attach_meeting`; stage left exactly where it was.
 	var stage_at_entry := FinaleState.stage()
 	if stage_at_entry < 3:
-		if meeting.has_signal("chose_send"):
-			await Signal(meeting, "chose_send")
+		# docs/STORY_HOME_SPEC.md §9.1: "I'll go!" (the meeting's `chose_send`) is checkpointed as
+		# `survey_agreed` at stage 2, so a reload before the survey has finished skips the ask and starts
+		# the survey again; stage 3 is written only once it has returned.
+		if not FinaleState.survey_agreed():
+			if meeting.has_signal("chose_send"):
+				await Signal(meeting, "chose_send")
+			if not is_inside_tree():
+				return
+			FinaleState.set_survey_agreed(true)
+			FinaleState.checkpoint()
+		await _run_survey(meeting)
+		if not is_inside_tree():
+			return
 		FinaleState.set_stage(3)
+		FinaleState.set_survey_agreed(false)
 		FinaleState.checkpoint()
 	await _run_send_and_gift(meeting)
 	_chain_running = false
+
+
+## The meteor survey (docs/STORY_HOME_SPEC.md §9.2): the meeting hands the screen over behind a dip to navy,
+## `MeteorSurvey.run` plays the level (lead's API; returns once all five weak spots are marked), and the
+## meeting takes the Commons back behind the same dip. Loaded by path, like the other beats: a missing
+## survey file logs and is skipped, so the finale still reaches its end.
+func _run_survey(meeting: Node) -> void:
+	if meeting.has_method("before_survey"):
+		await meeting.call("before_survey")
+	if not is_inside_tree():
+		return
+	print("FINALE survey begin")
+	FinaleState.trace("K", "survey begin")
+	if ResourceLoader.exists(METEOR_SURVEY_PATH):
+		await (load(METEOR_SURVEY_PATH) as GDScript).call("run", get_tree())
+	else:
+		_log_missing(METEOR_SURVEY_PATH)
+	print("FINALE survey end")
+	FinaleState.trace("K", "survey end")
+	if is_inside_tree() and is_instance_valid(meeting) and meeting.has_method("after_survey"):
+		await meeting.call("after_survey")
 
 
 func _attach_meeting() -> Node:

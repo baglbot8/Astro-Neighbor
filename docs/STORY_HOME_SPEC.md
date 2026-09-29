@@ -483,3 +483,90 @@ a separate 25-photo album that is never auto-replaced.
 * **Home album:** photos on the home planet any time, into a separate 25-photo album. When full, the player
   **picks an old photo to throw away** before the new one saves. The scrapbook also gets a way to **clear out
   photos** in bulk, not only one by one.
+
+## 9. The grand finale: the meteor survey, and the cave (user rulings 2026-09-28)
+
+User: "we need one 'finale' level. The final 'level' just happens to be one of the neighbor's planets. It
+doesnt feel like a grand finale." Picked: **3 (survey the meteor) + A (a cave on your home planet, post-game)**,
+with the lead's picks on all three questions.
+
+### 9.1 The finale, new middle
+Party -> staying reveal -> Nova's reminder -> Vela's idea -> everyone offers their ship -> Stella: hard to
+hit a moving meteor on autopilot -> **the Professor: "We need a target. Someone has to land on it and mark
+its weak spots."** (this REPLACES "he can track its path with all your photos") -> **the meteor survey
+level** -> back on the Commons -> the ships fly on autopilot **to your beacons** -> meteor shower -> ships back
+bruised -> Pip and Pop fix them -> party -> group photo.
+
+### 9.2 The meteor survey level
+* A small, strange rock: first-person, the planet-safari camera, scoring and walk. Looks unlike any world
+  (dark crust, glowing seams, the system's planets huge in its sky).
+* **5 glowing cracks** (weak points), spread so all 5 need the whole time. **2 minutes.**
+* A crack is marked by a photo of it at **Fair or better**: a target beacon appears on it; a Smudge says
+  why and lets you try again. Film enough for 5 plus misses (e.g. 12).
+* **If time runs out, retry right away, as often as you like.** No game over; the Professor encourages.
+* **Never saved in the scrapbook**, never replayable after the finale. Pays nothing.
+* API (lead stub, `src/meteor_survey/meteor_survey.gd`): `MeteorSurvey.run(tree) -> await` returns when all
+  5 are marked (the finale then continues).
+
+### 9.3 The cave (post-game)
+* The morning after the finale, on your home planet: a meteor piece has cracked open **a cave entrance**.
+* The cave: winding paths down, lit by **glowing meteor crystals**; you carry **a small lantern** - dark
+  enough to feel different, never scary. Aesthetically unlike every planet.
+* Gentle things to photograph (crystal clusters, cave critters, a few rarer sights); photos go to their
+  own **"Cave" section of the scrapbook**, with "???" pages like the others. For fun: no pay, no quests.
+* Enter and leave any time after the story.
+
+### 9.4 The cave, after the user's play (2026-09-28)
+
+User: "the cave is so white / bright that having the lantern doesnt seem necessary. The lantern also jitters
+when walking. I dont mind the whiteness of the cave but then we dont need the lantern. ... more rainbowy
+creatures in the cave to contrast the whiteness ... a couple path option points ... Is there a time limit in the
+cave? we may need one which then makes choosing a route seem more important ... one cave area can lead to a big
+open space or a dead end with like a treasure in it with an outfit, etc." Rulings (lead defaults):
+* **No lantern.** Keep the bright white cave.
+* **Rainbow creatures** that pop against the white (prismatic, iridescent), replacing or joining the current
+  critters; a few rarer ones.
+* **Branches:** at least two fork points. One route opens into **a big open chamber** (the best views and the
+  rarer sights); one ends at **a dead end with a treasure chest holding an outfit piece** (found once, then the
+  chest is open and empty); a third short branch may hold a small rare subject.
+* **A time limit: 3 minutes per visit**, shown like the safari clock, so the route matters; when it ends, a
+  gentle "time to head back up" and you are back at the entrance. **One visit per day**, like the safaris.
+  About 12 film.
+* **More route choice (the user, 2026-09-28):** "more than just one option to take a turn of direction and maybe
+  some different heights / directions ... the road slopes downward in one and upwards in another ... or curves left
+  and curves right. We should make sure people can get to the end of the cave in the time limit but not
+  necessarily have time to go back and try all the different routes assuming they take some photos along the
+  way." So: several forks (not one), branches that clearly differ - one slopes down, one climbs, one curves left,
+  one right; any single route from the entrance to its end fits in 3:00 with photos on the way (measure: a
+  walker taking ~6 photos reaches every route's end with time left), but the whole cave does not fit in one
+  visit.
+
+### 9.5 The user's play of merge18/19 (2026-09-28)
+
+1. HUD: "when you get enough stardust into the thousands, the star window starts overlapping with the scraps menu."
+2. Meteor survey: "a large place and navigating it is a bit confusing. We may need to add on an extra 15 seconds.
+   I played pretty efficiently ... and just barely made it in time. ... the meteor needs some occasional
+   recognizable landmarks (e.g. large crystal spikes or lava fountain)". -> clock 2:15; distinct landmarks.
+3. "There was a random Play board on the meteor - that needs to be removed." (An easter egg on a planet is a
+   nice idea for a future post-game thing - logged, not built.)
+4. The meteor's textures are plain next to the planets: beef them up.
+5. Cave: "almost too white ... shades of brown but lots of crystals (like a teal color and occasional rainbow
+   ones) light up the cave a lot so it's not scary ... good textures here like our other planets."
+6. Cave: "doesnt have a lot of things popping up ... mostly walking down the long halls with nothing major to look
+   at or take photos of" -> many more subjects along the halls (something new every ~10-15 s of walking).
+7. "The journal only shows the denominator of pictures as 1, but there are more when i go to the Cave page."
+
+### 9.6 The user's play of merge20 (2026-09-28), verbatim points
+1. "theres always a random white line in the sky even during cutscenes. That should be removed." -> remove the
+   meteor streak (its clue role ended when the survey replaced the photo-tracking line).
+2. The neighbours' ships carry their packing boxes into flight: boxes stay on the ground or vanish for landing.
+3. Ship "dents" look like black balls: use scratches and rusted parts like the player's ship at the start.
+4. The survey still feels like luck finding the last crack: at least 2 climbable high points (rocky ramps) placed
+   with a crack spot visible in the distance, so you can see the red lights further; after a first fail the
+   Professor hints to climb them. (Multiple tries are fine.)
+5. The volcano's lava lines look like straight red sticks: make them flow naturally. Some rocks have see-through
+   parts: fix.
+6. The meteor needs steam haze and rising white dots that appear and fade: more intense.
+7. Cave: darker, so the crystal glow pops much more.
+8. Some crystals sit on smooth flat pedestals and grow straight up, so they look like trophies or photo subjects:
+   background crystals grow from the ground at angles, no pedestals.

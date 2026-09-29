@@ -45,13 +45,15 @@ const TOAST_FLUSH_STAGGER := 0.14
 ## Fast exit for a live toast when a panel modal takes over the frame (beats the panel's pop-in).
 const TOAST_HIDE_FAST := 0.1
 const EDGE := 24.0
-## Scrap pill (BUILD_PLAN Phase 1 "D: scrap and economy"): a FIXED offset to the right of the
-## stardust pill rather than a width measured off it at runtime - a label's text (and so its pill's
-## size) can still be mid-resize when the next line of code reads it, and a structural HUD position
-## must never race that. Sized for stardust up to 4 digits at the "Header" font (icon 30 + text +
-## HudPill padding) with headroom; checked against captures at desktop 1280x720 and
-## `--ui=mobile` 1560x720 (both pills share the same MOBILE_PILL_SCALE, so one constant covers both).
-const SCRAP_PILL_OFFSET_X := 132.0
+## Scrap pill (BUILD_PLAN Phase 1 "D: scrap and economy"): sits `SCRAP_PILL_GAP` to the right of the
+## stardust pill's REAL right edge, read off `_stardust_pill.size` - not a fixed offset. A fixed
+## 4-digit offset (132.0, the old value) started overlapping the scrap pill once stardust reached
+## 5-6 digits (HUDJ, 2026-09-28: 12,345 / 123,456 overlapped at that offset). The old comment's
+## worry - "a label's text (and so its pill's size) can still be mid-resize when the next line of
+## code reads it" - is why this is driven by the pill's own `resized` signal (`_position_scrap_pill`,
+## connected in `_ready`) instead of reading `.size` once at layout time: `resized` fires exactly
+## when the PanelContainer's shrink-to-fit size actually lands, so it can never read a stale width.
+const SCRAP_PILL_GAP := 18.0
 ## The interact prompt floats this far above the bottom edge (clear of the control hints).
 const PROMPT_BOTTOM := 92.0
 ## Fade used when the HUD chrome tucks away under a modal.
@@ -183,6 +185,10 @@ func _ready() -> void:
 	_chrome.add_child(_world_chrome)
 	_build_stardust()
 	_build_scrap()
+	# The scrap pill tracks the stardust pill's REAL right edge (see SCRAP_PILL_GAP) - `resized`
+	# fires exactly when the stardust PanelContainer's shrink-to-fit width actually lands (digit
+	# count changes, font/theme changes, mobile scale changes), so this can never read a stale width.
+	_stardust_pill.resized.connect(_position_scrap_pill)
 	_build_clock()
 	_build_banner()
 	_build_prompt()
@@ -253,8 +259,8 @@ func _build_stardust() -> void:
 	row.add_child(_stardust_label)
 
 ## Scrap counter (BUILD_PLAN Phase 1 "D"). Same HudPill panel and "Header" label as the stardust
-## pill beside it; positioned in `_apply_platform_layout` (SCRAP_PILL_OFFSET_X), not here, since it
-## has to track the stardust pill's own position/scale as those change with the platform.
+## pill beside it; positioned by `_position_scrap_pill` (SCRAP_PILL_GAP), not here, since it has to
+## track the stardust pill's own position/size/scale as those change with the digit count and platform.
 func _build_scrap() -> void:
 	_scrap_pill = PanelContainer.new()
 	_scrap_pill.name = "Scrap"
@@ -270,6 +276,18 @@ func _build_scrap() -> void:
 	row.add_child(_scrap_icon)
 	_scrap_label = UIStyle.make_label("0", "Header")
 	row.add_child(_scrap_label)
+
+## Puts the scrap pill SCRAP_PILL_GAP to the right of the stardust pill's actual visible right edge,
+## at the same height. Driven by `_stardust_pill.resized` (connected in `_ready`) plus a direct call
+## from `_apply_platform_layout`, so it is correct both when the digit count changes and when the
+## platform scale changes (a scale change alone does not fire `resized`, since the pill's unscaled
+## `size` did not change).
+func _position_scrap_pill() -> void:
+	if _scrap_pill == null or _stardust_pill == null:
+		return
+	_scrap_pill.position = Vector2(
+		_stardust_pill.position.x + _stardust_pill.size.x * _stardust_pill.scale.x + SCRAP_PILL_GAP,
+		_stardust_pill.position.y)
 
 func _build_clock() -> void:
 	_clock_pill = PanelContainer.new()
@@ -603,11 +621,12 @@ func _apply_platform_layout() -> void:
 	_stardust_pill.pivot_offset = Vector2.ZERO
 	_stardust_pill.position = Vector2(sa.x + edge, sa.y + (edge if mobile else EDGE - 4.0))
 
-	# Same row as the stardust pill, SCRAP_PILL_OFFSET_X to its right - see that constant for why
-	# this is a fixed offset and not a width read off `_stardust_pill` at runtime.
+	# Same row as the stardust pill, SCRAP_PILL_GAP to the right of its REAL edge (see that constant
+	# and _position_scrap_pill) - scale must land first since the gap and the stardust pill's width
+	# both scale with it.
 	_scrap_pill.scale = Vector2(scale, scale)
 	_scrap_pill.pivot_offset = Vector2.ZERO
-	_scrap_pill.position = Vector2(sa.x + edge + SCRAP_PILL_OFFSET_X, sa.y + (edge if mobile else EDGE - 4.0))
+	_position_scrap_pill()
 
 	_clock_pill.scale = Vector2(scale, scale)
 	_clock_pill.pivot_offset = Vector2(_clock_pill.size.x, 0.0)
