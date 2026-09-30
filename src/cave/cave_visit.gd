@@ -4,16 +4,18 @@ extends PlanetSafari
 ##
 ## The planet safari (planet_safari.gd, read-only for this builder) as a short outing: THREE MINUTES
 ## (PlanetSafari.DURATION, the safari's own sun-dial shows it), FILM photos, ONE VISIT A DAY (CaveStore),
-## no pay, no review, no tips. What it keeps, unchanged and inherited: first-person walking, the Camera /
+## no pay, no tips - and, since 2026-09-30, THE SAFARIS' PHOTO REVIEW at the end (CaveReview). What it keeps, unchanged and inherited: first-person walking, the Camera /
 ## Walk / shutter / zoom controls (SafariLayer, here CaveLayer), the focus ring and hold-to-focus, the
 ## scoring and grades (SafariPhotoScorer, SafariScoring.planet_grade) and the warm-up behind the fade.
 ##
 ## FLOW: the entrance (cave_entrance.gd) calls `request_enter`; a second try the same day is refused
 ## with a kind line. Fade to black, the day is spent (a reload cannot buy a second visit), the cave is
-## built (CaveWorld) far below the planet and the player is put at its landing, fade in. Each photo is
-## filed at once to the scrapbook's Cave pages (CaveStore: best photo per subject). When the clock runs
-## out: "Time to head back up!" and a fade back to the entrance. "Leave" (the corner button) asks once
-## and does the same, early. No lantern (9.4): the cave is lit by its own
+## built (CaveWorld) far below the planet and the player is put at its landing, fade in. When the clock
+## runs out: "Time to head back up!" and a fade back to the entrance. "Leave" (the corner button) asks
+## once and does the same, early; so does "Head up" when the film runs out. EVERY ending then runs the
+## review (CaveReview, the safari review's own screen): each photo in turn, filed to its Cave page, keep
+## new or old when the page already has one. Photos are filed THERE, not when taken (PERFCAVE
+## 2026-09-30, the user: "in the cave there was no review of photos"), as on a safari. No lantern (9.4): the cave is lit by its own
 ## glowing crystals (warm brown stone, teal crystals since CAVE3, 9.5).
 ##
 ## Subject keys are "cave:<id>". `planet_id` is "cave" while inside, so PhotoMode.planet_id is "cave":
@@ -28,6 +30,8 @@ const TIME_UP_SEC := 2.6
 const REFUSE_LINE := "You've explored the cave today. It'll be waiting for you tomorrow!"
 
 var _new_pages := 0
+## Page ids snapped this visit (so only the first photo of a subject says "A new Cave page").
+var _snapped: Dictionary = {}
 var _timed_out := false
 ## THE CAVE'S OWN LOOK (C4 2026-09-28, the user: the cave "reads hazy and milky"). The cave is unshaded
 ## vertex colour, its light already baked in (cave_world.gd header), so the only right post-process is
@@ -298,8 +302,9 @@ func _offer_film_out() -> void:
 		_go_to_sleep()
 
 
-## Leaving: straight to black and back to the entrance. No puffs, no review, nothing to pay. When the
-## clock ran out (`_timed_out`), a gentle line first, the view held still a moment.
+## Leaving, by any of the three ends: black, back to the entrance, then the photo review (CaveReview).
+## No puffs, nothing to pay. When the clock ran out (`_timed_out`), a gentle line first, the view held
+## still a moment.
 func _go_to_sleep() -> void:
 	holding = false
 	if camera_up:
@@ -312,30 +317,36 @@ func _go_to_sleep() -> void:
 		if not is_instance_valid(player):
 			return
 	await layer.fade_to(1.0, FADE_SEC)
+	var session := _build_session()
 	_restore(true)
 	layer.show_awake_ui(false)
 	await get_tree().process_frame
 	await layer.fade_to(0.0, FADE_SEC)
+	last_session = session
+	session_finished.emit(session)
+	phase = Phase.REVIEW
+	_log("cave: out, review of %d photos, max_frame_ms=%.1f" % [_photos.size(), _max_frame_ms])
+	await CaveReview.present(world, session)
 	phase = Phase.DONE
-	_log("cave: out, max_frame_ms=%.1f" % _max_frame_ms)
+	_log("cave: done")
 	queue_free()
 
 
-## Every photo goes straight to its Cave page (the best one is kept) with a short note.
+## A short note per photo. Nothing is filed yet - the review at the end files it (CaveReview). "New
+## page" means no page of it yet and not already snapped this visit.
 func _on_photo(photo: Dictionary) -> void:
-	var res := CaveStore.offer_photo(photo)
+	var id := CaveStore.page_id(photo)
 	var nm := str(photo.get("subject_name", ""))
 	var grade := str(photo.get("grade", ""))
-	match res:
-		"new":
-			_new_pages += 1
-			announce("New Cave page: %s! (%s)" % [nm, grade], 2.6)
-		"better":
-			announce("Better photo: %s! (%s)" % [nm, grade], 2.6)
-		"kept":
-			announce("Nice! Your Cave page keeps its better one.", 2.2)
-	_log("cave photo: %s grade=%s -> %s (filled %d/%d)" % [str(photo.get("subject_key", "")), grade, res,
-		CaveStore.filled_count(), CaveStore.ROSTER.size()])
+	var fresh := id != "" and CaveStore.record_for(id).is_empty() and not _snapped.has(id)
+	if id != "":
+		_snapped[id] = true
+	if fresh:
+		_new_pages += 1
+		announce("%s! (%s) A new Cave page." % [nm, grade], 2.6)
+	else:
+		announce("%s! (%s)" % [nm, grade], 2.2)
+	_log("cave photo: %s grade=%s page=%s fresh=%s" % [str(photo.get("subject_key", "")), grade, id, fresh])
 
 
 func _log(msg: String) -> void:

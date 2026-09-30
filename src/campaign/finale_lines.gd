@@ -21,7 +21,8 @@ extends RefCounted
 ##   {"speaker": <npc id>, "ask": {"prompt": <box>, "options": [<label>, ...]}} - a DialogueRunner.ask
 ##   {"toast": <text>}                                                - EventBus.toast_requested, not a box
 ## `speaker` is the npc id DialogueRunner resolves display name / voice / accent from (npc_data.gd):
-## zorp, bolt, fen, grig, vela, pip, pop, mayor_orbit (Professor Comet), dj_nova.
+## zorp, bolt, fen, grig, vela, pip, pop, mayor_orbit (Professor Comet), dj_nova; "moss" (MOSS_* only) is
+## Moss himself (MossNPC, no npc_data entry), spawned for his beat by finale_meeting.gd.
 ## `camera` is one of the meeting's rule letters (docs/PHASE5_SPEC.md §2: W shoulder, P speaker, U crowd-up,
 ## S side-on, R pad three-quarter), only where §5.7 tags one ([U], [S]).
 ## An action's `id` is what finale_meeting.gd / finale_gift.gd key on (the `action` text is the stage
@@ -56,6 +57,44 @@ const CALL_ALREADY: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": ["A goodbye party, friend. Everyone will be there."]},
 ]
 
+## ------------------------------------------------------------------------------------- SIGNAL (home, part 4)
+## Vela on the radio after the FOURTH part's celebration (docs/JUNGLE_PLANET_SPEC.md 6: "The Tangle opens
+## mid-game, after the 4th part: Vela hears a strange signal; it appears on the rocket map"). finale.gd
+## `_run_signal_call` sets GameState flag "jungle_open" as it starts, then plays these; SIGNAL_TOAST after.
+## Voice: CAST_VOICES_DRAFT Vela - gentle, dreamy, listens to far-off sounds, his bulb lights up.
+const SIGNAL: Array[Dictionary] = [
+	{"speaker": "vela", "lines": [
+		"Hello? It's Vela. My dishes heard something new.",
+		"A strange signal, from a planet I never knew.",
+		"I put it on your rocket map. My bulb is curious!",
+	]},
+]
+const SIGNAL_TOAST := "The Tangle is on your rocket map."
+
+## ------------------------------------------------------------------------------------- MOSS (the party)
+## MEETING's "moss" action (docs/JUNGLE_PLANET_SPEC.md 6: "At the farewell party Moss arrives (introduced by
+## the Professor if you never met him) with a crate of glow pods from the jungle as party lights"). Moss is a
+## retired field photographer (§6 rulings); voice: MossLines (slow, warm, "the swamp says" at most once).
+## NEW when GameState flag "moss_met" is false, MET when true; then ARRIVE, the pods fly out, then LEAVE.
+const MOSS_NEW: Array[Dictionary] = [
+	{"speaker": "mayor_orbit", "lines": [
+		"Oh my! Everyone, this is Moss, from The Tangle.",
+		"He takes photos. He hardly ever leaves his swamp!",
+	]},
+]
+const MOSS_MET: Array[Dictionary] = [
+	{"speaker": "mayor_orbit", "lines": ["Moss! All the way from The Tangle!"]},
+]
+const MOSS_ARRIVE: Array[Dictionary] = [
+	{"speaker": "moss", "lines": [
+		"The swamp told me there was a party.",
+		"So I brought glow pods. They shine all night.",
+	]},
+]
+const MOSS_LEAVE: Array[Dictionary] = [
+	{"speaker": "moss", "lines": ["Too many feet for me. Goodnight, all."]},
+]
+
 ## ------------------------------------------------------------------------------------- MEETING (the party)
 ## The goodbye party on the Commons at night; the five packed ships stand round the square
 ## (neighbour_ships.gd). Sequential; the last entry is the choice (MOMENT and SEND below are the branches).
@@ -68,6 +107,9 @@ const MEETING: Array[Dictionary] = [
 	{"speaker": "dj_nova", "lines": ["YO! Last party on the Commons. Make it LOUD!"]},
 	{"speaker": "zorp", "lines": ["Oh ho! A party! My moustache is wiggling!"]},
 	{"speaker": "grig", "lines": ["Hmph. I closed my stairs for the day. For this."]},
+	# Moss arrives with a crate of glow pods for the party lights (docs/JUNGLE_PLANET_SPEC.md 6); the words are
+	# MOSS_PARTY below (finale_meeting.gd `_moss_beat` picks MET or NEW from GameState flag "moss_met").
+	{"action": "Moss walks in with a crate of glow pods; they fly out round the square as party lights; he goes home", "id": "moss"},
 	{"speaker": "mayor_orbit", "lines": [
 		"Before you all fly off, a little toast.",
 		"To the kindest neighbours in the whole sky.",
@@ -126,6 +168,7 @@ const MEETING: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": [
 		"Quite right, Stella. We need a target.",
 		"Someone has to land on it and mark its weak spots.",
+		"Plant Moss's glow pods there. Autopilots see the glow!",
 	]},
 	# You.
 	{"action": "all turn to the player", "id": "turn"},

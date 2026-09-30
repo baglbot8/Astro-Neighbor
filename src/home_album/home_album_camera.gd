@@ -22,6 +22,15 @@ extends CanvasLayer
 ## reinvented. What is NOT reused: PlanetSafari's subjects, events, scoring, focus-hold or film
 ## count - none of that exists on the home planet (spec 8.1: "no life/event system").
 ##
+## SELF-TIMER (docs/JUNGLE_PLANET_SPEC.md 6.1 "Tripod", builder HOMECAM 2026-09-30). Only with
+## `flags.tripod_owned`: a third button, "Timer", beside Shutter. It freezes the lens exactly where the
+## first-person view was, drops a small procedural tripod there, and hands the player back the ordinary
+## third-person camera so they can walk into the shot. "Walk into the shot!" then 3-2-1
+## (TIMER_WALK_SEC + 3 s); at zero a temporary Camera3D at the frozen lens becomes current for one
+## frame, the same `_capture_frame` pulls it (astronaut drawn - the third-person cull mask), and the
+## view returns to first person with Shutter/Timer/Done as before. Cancel, Done, or any modal ends it
+## and removes the tripod. The countdown runs on `_process` (PROCESS_MODE_PAUSABLE), so pause holds it.
+##
 ## SYNTHETIC NOTE, spelled out because it matters for anyone testing this headlessly: on
 ## `DisplayServer.get_name() == "headless"` (see `_capture_frame`) there is no real GPU frame to
 ## read, exactly the case planet_safari.gd's own `_take_photo` already carries a branch for. This
@@ -48,6 +57,21 @@ var _idle_btn: Button
 var _aim_box: VBoxContainer
 var _count_lbl: Label
 var _picker_backdrop: Control
+var _timer_btn: Button
+
+# Self-timer state (see the SELF-TIMER header block).
+const TIMER_WALK_SEC := 2.0
+const TIMER_COUNT := 3
+const F_TRIPOD := "tripod_owned"
+var _timer_on := false
+var _timer_left := 0.0
+var _timer_xform := Transform3D.IDENTITY
+var _timer_fov := 45.0
+var _tripod: Node3D
+var _timer_cam: Camera3D
+var _timer_box: VBoxContainer
+var _timer_num: Label
+var _timer_hint: Label
 ## True while the album-full picker holds its own EventBus modal (PICKER_MODAL). Kept as a flag so
 ## every open is closed exactly once, whichever path closes the picker.
 var _picker_modal_held := false
@@ -76,8 +100,10 @@ func _ready() -> void:
 	set_process(true)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_apply_visibility()
+	if _timer_on:
+		_tick_timer(delta)
 
 
 func _exit_tree() -> void:
@@ -146,7 +172,41 @@ func _build_ui() -> void:
 	row.add_theme_constant_override("separation", 10)
 	_aim_box.add_child(row)
 	row.add_child(_pill_button("Shutter", _on_shutter_pressed))
+	_timer_btn = _pill_button("Timer", _begin_self_timer)
+	_timer_btn.name = "TimerButton"
+	_timer_btn.visible = false
+	row.add_child(_timer_btn)
 	row.add_child(_pill_button("Done", _end_aim))
+
+	# The countdown, top centre: clear of the movement stick (bottom-left), the look-drag zone and
+	# the primary cluster (bottom-right), and of the HUD icon row (top-left).
+	_timer_box = VBoxContainer.new()
+	_timer_box.name = "TimerBox"
+	_timer_box.visible = false
+	_timer_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_timer_box.add_theme_constant_override("separation", 6)
+	_timer_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_timer_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_timer_box.position.y += 28.0
+	_timer_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_timer_box)
+	_timer_hint = _label("Walk into the shot!")
+	_timer_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_timer_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer_hint.add_theme_font_size_override("font_size", 24)
+	_timer_hint.add_theme_color_override("font_outline_color", Color("#1b1e2e"))
+	_timer_hint.add_theme_constant_override("outline_size", 8)
+	_timer_box.add_child(_timer_hint)
+	_timer_num = _label("")
+	_timer_num.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_timer_num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer_num.add_theme_font_size_override("font_size", 72)
+	_timer_num.add_theme_color_override("font_outline_color", Color("#1b1e2e"))
+	_timer_num.add_theme_constant_override("outline_size", 12)
+	_timer_box.add_child(_timer_num)
+	var cancel := _pill_button("Cancel timer", _cancel_self_timer)
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_timer_box.add_child(cancel)
 
 
 ## Round 2 fix (critic FAIL): bottom-right put this button ON TOP of TouchControls' whole primary
@@ -224,6 +284,7 @@ func _begin_aim() -> void:
 	rig.set_fov_deg(45.0)
 	_idle_btn.visible = false
 	_aim_box.visible = true
+	_timer_btn.visible = GameState.flag(F_TRIPOD)
 	_update_count_label()
 
 
@@ -231,6 +292,7 @@ func _end_aim() -> void:
 	if not _in_aim:
 		return
 	_in_aim = false
+	_cancel_self_timer_state()
 	_close_picker()
 	_pending_image = null
 	if is_instance_valid(rig):
@@ -248,6 +310,10 @@ func _on_shutter_pressed() -> void:
 	_capturing = false
 	if not _in_aim:
 		return   # Done was pressed while the frame was mid-capture.
+	_handle_captured(img)
+
+
+func _handle_captured(img: Image) -> void:
 	if img == null:
 		EventBus.toast_requested.emit("Couldn't take that photo.", "warn")
 		return
@@ -261,8 +327,10 @@ func _on_shutter_pressed() -> void:
 ## Pulls one frame from the live viewport with no 2D on it - PlanetSafari._take_photo's own
 ## technique (planet_safari.gd), reused verbatim rather than re-derived. See the header for what a
 ## headless run does instead and why that is not proof of a real photograph.
-func _capture_frame() -> Image:
-	var cam := rig.get_view_camera() if is_instance_valid(rig) else null
+func _capture_frame(cam_override: Camera3D = null) -> Image:
+	var cam := cam_override
+	if cam == null:
+		cam = rig.get_view_camera() if is_instance_valid(rig) else null
 	if cam == null:
 		return null
 	var vp := get_viewport()
@@ -295,6 +363,200 @@ func _save_and_announce(img: Image) -> void:
 	EventBus.toast_requested.emit(
 		"Saved to your Home Album (%d/%d)." % [HomeAlbumStore.count(), HomeAlbumStore.MAX_PHOTOS], "check")
 	_update_count_label()
+
+
+# ======================================================================================== SELF-TIMER
+func _begin_self_timer() -> void:
+	if not _in_aim or _timer_on or _capturing or not GameState.flag(F_TRIPOD):
+		return
+	if player == null or not is_instance_valid(rig):
+		return
+	var cam := rig.get_view_camera()
+	if cam == null:
+		return
+	_timer_xform = cam.global_transform
+	_timer_fov = cam.fov
+	_spawn_tripod()
+	rig.set_first_person(false)
+	_aim_box.visible = false
+	_timer_box.visible = true
+	_timer_on = true
+	_timer_left = TIMER_WALK_SEC + float(TIMER_COUNT)
+	_update_timer_label()
+	AudioManager.play_sfx("place", -6.0)
+
+
+func _tick_timer(delta: float) -> void:
+	var before := ceili(_timer_left)
+	_timer_left -= delta
+	_update_timer_label()
+	if ceili(_timer_left) != before and _timer_left > 0.0 and _timer_left <= float(TIMER_COUNT):
+		AudioManager.play_sfx("place", -12.0)   # one soft tick per number
+	if _timer_left <= 0.0:
+		_timer_on = false
+		_fire_self_timer()
+
+
+func _update_timer_label() -> void:
+	if _timer_left > float(TIMER_COUNT):
+		_timer_num.text = ""
+		_timer_hint.text = "Walk into the shot!"
+	else:
+		_timer_num.text = str(maxi(1, ceili(_timer_left)))
+		_timer_hint.text = "Smile!"
+
+
+func _fire_self_timer() -> void:
+	if not _in_aim or _capturing:
+		_cancel_self_timer_state()
+		return
+	_capturing = true
+	var img: Image = null
+	var world3d := world as Node
+	if world3d != null:
+		_timer_cam = Camera3D.new()
+		_timer_cam.name = "HomeAlbumTimerCam"
+		world3d.add_child(_timer_cam)
+		var src := rig.get_camera() if is_instance_valid(rig) else null
+		_timer_cam.global_transform = _timer_xform
+		_timer_cam.fov = _timer_fov
+		if src != null:
+			_timer_cam.cull_mask = src.cull_mask   # third person again: the astronaut is drawn
+			_timer_cam.near = src.near
+			_timer_cam.far = src.far
+			_timer_cam.environment = src.environment
+			_timer_cam.attributes = src.attributes
+		_timer_cam.current = true
+		if is_instance_valid(_tripod):
+			_tripod.visible = false   # the lens sits inside its head
+		if DisplayServer.get_name() != "headless":
+			await get_tree().process_frame   # let the switch settle before the frame we read
+		img = await _capture_frame(_timer_cam)
+	_capturing = false
+	_cancel_self_timer_state()
+	if not _in_aim:
+		return
+	# Back to the viewfinder, exactly as before the timer.
+	rig.set_first_person(true)
+	rig.set_fov_deg(45.0)
+	_aim_box.visible = true
+	_handle_captured(img)
+
+
+func _cancel_self_timer() -> void:
+	if not _timer_on:
+		return
+	_cancel_self_timer_state()
+	if _in_aim and is_instance_valid(rig):
+		rig.set_first_person(true)
+		rig.set_fov_deg(45.0)
+		_aim_box.visible = true
+
+
+## Tears down everything the timer made (tripod, temporary lens, countdown) and gives the view back to
+## the rig's own camera. Safe to call in any state.
+func _cancel_self_timer_state() -> void:
+	_timer_on = false
+	if is_instance_valid(_timer_cam):
+		_timer_cam.current = false
+		_timer_cam.queue_free()
+	_timer_cam = null
+	if is_instance_valid(rig) and rig.get_camera() != null:
+		rig.get_camera().current = true
+	if is_instance_valid(_tripod):
+		_tripod.queue_free()
+	_tripod = null
+	if _timer_box != null:
+		_timer_box.visible = false
+
+
+## A small procedural tripod standing on the ground under the frozen lens: three legs splayed from the
+## head down to the ground around the player's feet, and a camera body with its lens looking the way
+## the shot looks. No collision - it is a marker of where the camera is, not an obstacle.
+func _spawn_tripod() -> void:
+	if is_instance_valid(_tripod):
+		_tripod.queue_free()
+	var feet := player.global_position
+	var head := _timer_xform.origin
+	var up := (head - feet).normalized()
+	if up.length_squared() < 0.5:
+		up = Vector3.UP
+	var look := -_timer_xform.basis.z
+	var fwd := (look - up * look.dot(up))
+	fwd = fwd.normalized() if fwd.length_squared() > 1e-6 else up.cross(Vector3.RIGHT).normalized()
+	var right := fwd.cross(up).normalized()
+	var height := maxf(0.4, (head - feet).length() - 0.06)
+	var top := feet + up * height
+
+	var t := Node3D.new()
+	t.name = "HomeAlbumTripod"
+	world.add_child(t)
+	_tripod = t
+
+	var leg_mat := StandardMaterial3D.new()
+	leg_mat.albedo_color = Color("#3a3f55")
+	leg_mat.roughness = 0.75
+	var body_mat := StandardMaterial3D.new()
+	body_mat.albedo_color = Color("#2c2f42")
+	body_mat.roughness = 0.6
+	var trim_mat := StandardMaterial3D.new()
+	trim_mat.albedo_color = Color("#e9eaf1")
+	trim_mat.roughness = 0.5
+
+	const SPREAD := 0.32
+	for i in 3:
+		var a := TAU * float(i) / 3.0 + PI   # one leg straight behind the lens
+		var foot := feet + (fwd * cos(a) + right * sin(a)) * SPREAD
+		var hip := top - up * 0.05
+		var leg_dir := hip - foot
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.018
+		cyl.bottom_radius = 0.024
+		cyl.height = leg_dir.length()
+		cyl.radial_segments = 8
+		cyl.rings = 1
+		var mi := MeshInstance3D.new()
+		mi.mesh = cyl
+		mi.material_override = leg_mat
+		t.add_child(mi)
+		var y := leg_dir.normalized()
+		var x := y.cross(up)
+		x = x.normalized() if x.length_squared() > 1e-6 else right
+		var z := x.cross(y).normalized()
+		mi.global_transform = Transform3D(Basis(x, y, z), (foot + hip) * 0.5)
+
+	# Head: a small plate, then the camera body facing the shot, its lens toward `fwd`.
+	var basis := Basis(right, up, -fwd)
+	var plate := MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 0.06
+	pm.bottom_radius = 0.07
+	pm.height = 0.05
+	pm.radial_segments = 12
+	plate.mesh = pm
+	plate.material_override = leg_mat
+	t.add_child(plate)
+	plate.global_transform = Transform3D(basis, top - up * 0.03)
+
+	var body := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.24, 0.15, 0.12)
+	body.mesh = bm
+	body.material_override = body_mat
+	t.add_child(body)
+	body.global_transform = Transform3D(basis, top + up * 0.075)
+
+	var lens := MeshInstance3D.new()
+	var lm := CylinderMesh.new()
+	lm.top_radius = 0.045
+	lm.bottom_radius = 0.05
+	lm.height = 0.08
+	lm.radial_segments = 14
+	lens.mesh = lm
+	lens.material_override = trim_mat
+	t.add_child(lens)
+	# Cylinder axis is local Y: turn it to point along `fwd`.
+	lens.global_transform = Transform3D(Basis(right, fwd, up), top + up * 0.075 + fwd * 0.09)
 
 
 # ======================================================================================== ALBUM FULL
@@ -420,6 +682,78 @@ func debug_end() -> void:
 	_end_aim()
 
 
+## TEST ONLY: grants the Tripod and every filter (JUNGLE_PLANET_SPEC 6.1 flag names) - a probe sets
+## the flags itself rather than buying them from Moss.
+func debug_grant_goods() -> void:
+	GameState.flags[F_TRIPOD] = true
+	GameState.flags[HomeAlbumFilters.F_OWNED] = HomeAlbumFilters.IDS.duplicate()
+	if _in_aim:
+		_timer_btn.visible = true
+
+
+func debug_self_timer() -> void:
+	_begin_self_timer()
+
+
+func debug_timer_state() -> void:
+	print("HOMECAM_TIMER on=%s left=%.2f tripod=%s cam_current=%s num='%s' hint='%s'" % [
+		str(_timer_on), _timer_left, str(is_instance_valid(_tripod)),
+		str(get_viewport().get_camera_3d().name if get_viewport().get_camera_3d() else "none"),
+		_timer_num.text, _timer_hint.text])
+	if is_instance_valid(_tripod) and player != null:
+		var cam := get_viewport().get_camera_3d()
+		var kids: Array = []
+		for k in _tripod.get_children():
+			kids.append("%s vis=%s" % [str((k as Node3D).global_position.snapped(Vector3.ONE * 0.01)), str((k as Node3D).is_visible_in_tree())])
+		print("HOMECAM_TRIPOD at=%s player=%s dist=%.2f cam=%s on_screen=%s kids=%s" % [
+			str(_timer_xform.origin), str(player.global_position), player.global_position.distance_to(_timer_xform.origin),
+			str(cam.global_position) if cam else "-",
+			str(cam.unproject_position(_timer_xform.origin)) if cam else "-", str(kids)])
+
+
+## TEST ONLY: writes the newest album photo, as stored (no filter), to `path` as a PNG.
+func debug_export_last(path: String) -> void:
+	var recs := HomeAlbumStore.list()
+	if recs.is_empty():
+		print("HOMECAM_EXPORT none")
+		return
+	var img := HomeAlbumStore.decode_image(recs[recs.size() - 1])
+	var err := img.save_png(path) if img != null else ERR_INVALID_DATA
+	print("HOMECAM_EXPORT %s %s %s" % [path, error_string(err), str(img.get_size()) if img else "-"])
+
+
+## TEST ONLY: copies the newest photo `n` times (so one shot can be shown in every filter) and gives
+## the photos, oldest first, the filters in `filters` ("" = none).
+func debug_copy_last_and_filter(n: int, filters: Array) -> void:
+	var recs := HomeAlbumStore.list()
+	if recs.is_empty():
+		return
+	var img := HomeAlbumStore.decode_image(recs[recs.size() - 1])
+	for i in n:
+		if img != null:
+			HomeAlbumStore.add_photo(img)
+	recs = HomeAlbumStore.list()
+	for i in mini(filters.size(), recs.size()):
+		HomeAlbumStore.set_filter(str(recs[i].get("id", "")), str(filters[i]))
+
+
+func debug_clear_album() -> void:
+	HomeAlbumStore.clear_all()
+
+
+func debug_save() -> void:
+	print("HOMECAM_SAVE ok=%s" % str(SaveManager.save_game()))
+
+
+func debug_load() -> void:
+	print("HOMECAM_LOAD ok=%s" % str(SaveManager.load_game()))
+
+
+func debug_scramble_filters() -> void:
+	for r: Dictionary in HomeAlbumStore.list():
+		HomeAlbumStore.set_filter(str(r.get("id", "")), "")
+
+
 func debug_is_aiming() -> bool:
 	return _in_aim
 
@@ -458,5 +792,9 @@ func debug_dump() -> void:
 	var ids: Array = []
 	for r: Dictionary in HomeAlbumStore.list():
 		ids.append(str(r.get("id", "")))
-	print("HOMEALBUM_PROBE count=%d full=%s aiming=%s picker=%s ids=%s" % [
-		ids.size(), str(HomeAlbumStore.is_full()), str(_in_aim), str(is_instance_valid(_picker_backdrop)), str(ids)])
+	var filters: Array = []
+	for r: Dictionary in HomeAlbumStore.list():
+		filters.append(HomeAlbumStore.get_filter(r))
+	print("HOMEALBUM_PROBE count=%d full=%s aiming=%s picker=%s ids=%s filters=%s" % [
+		ids.size(), str(HomeAlbumStore.is_full()), str(_in_aim), str(is_instance_valid(_picker_backdrop)), str(ids),
+		str(filters)])

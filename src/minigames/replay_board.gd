@@ -91,7 +91,12 @@ const PANEL_SCRIPT := preload("res://src/minigames/replay_board_panel.gd")
 ## Stardust for the first finish of each board entry on each game day. A PHASE 6 PACING NUMBER
 ## (docs/BUILD_PLAN.md "Phase 6: Pacing pass"): a first guess, small on purpose next to a project
 ## step, to be tuned from a timed play-through. CORE_LOOP: "a little stardust ... not a promise".
-const REPLAY_STARDUST := 10
+## ECON (2026-09-29, docs/ECONOMY_REPORT.md Rulings: "they also need to earn money by a few methods in
+## case the safari gets old"): 10 -> 60, so the board is a real way to earn. A replay is a rocket trip
+## there and back plus the game (~3 real minutes), so 60 is ~20 a minute - under a safari's ~40-50,
+## over nothing. Once per game per day: three unlocked games pay 180 a day, all five 300. Measured in
+## the ECON day simulator.
+const REPLAY_STARDUST := 60
 
 const FLAG_PENDING := "replay_pending"
 const FLAG_PAID_PREFIX := "replay_paid_day:"

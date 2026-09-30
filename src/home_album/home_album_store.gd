@@ -31,7 +31,7 @@ const THUMB_LOSSY := true
 const THUMB_QUALITY := 0.82
 
 
-## Every photo, oldest first, as {id, thumb_b64, day, hour}. Duplicated so a caller can freely
+## Every photo, oldest first, as {id, thumb_b64, day, hour} (+ "filter" once one was chosen). Duplicated so a caller can freely
 ## mutate its own copy.
 static func list() -> Array:
 	var out: Array = []
@@ -78,6 +78,28 @@ static func add_photo(img: Image) -> String:
 	})
 	GameState.flags[F_HOME_ALBUM] = recs
 	return id
+
+
+## FILTERS (docs/JUNGLE_PLANET_SPEC.md 6.1, builder HOMECAM 2026-09-30): one look per photo, stored as
+## the record's "filter" id beside the untouched `thumb_b64` - the original is always kept, and the
+## look is drawn on top (HomeAlbumFilters). "" (or a record from before filters existed) is no filter.
+static func get_filter(rec: Dictionary) -> String:
+	var f := str(rec.get("filter", ""))
+	return f if HomeAlbumFilters.is_known(f) else ""
+
+
+## Sets photo `id`'s filter ("" clears it). False for an unknown photo or filter id. Ownership is
+## the caller's check (the album only offers owned filters); this only refuses ids it cannot draw.
+static func set_filter(id: String, filter_id: String) -> bool:
+	if id == "" or not HomeAlbumFilters.is_known(filter_id):
+		return false
+	var recs := _raw_records().duplicate(true)
+	for r in recs:
+		if r is Dictionary and str((r as Dictionary).get("id", "")) == id:
+			(r as Dictionary)["filter"] = filter_id
+			GameState.flags[F_HOME_ALBUM] = recs
+			return true
+	return false
 
 
 ## True when a photo with that id existed and was removed.

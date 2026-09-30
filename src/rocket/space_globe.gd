@@ -95,6 +95,10 @@ func setup(planet_data: PlanetData, globe_radius: float) -> void:
 			# THE COUNT MUST MATCH `vela.tres`'s `moon_count`, the way Zorp's 2 and Grig's 2 do:
 			# these moons are the map-scale stand-in for the ones the ground sky builds.
 			_build_moons(1)
+		"jungle":
+			# Two moons (jungle.tres moon_count 2) and a thin haze of cloud over the canopy.
+			_build_moons(2)
+			_build_clouds(2)
 
 
 func _process(delta: float) -> void:
@@ -178,6 +182,8 @@ const BIOME_ANCHOR := {
 	"chalk": [Color("#b9b09a"), 0.40],
 	# The only COOL anchor in the dict, and it has to be: Grig already owns "pale ball".
 	"frost": [Color("#b9cddb"), 0.34],
+	# THE TANGLE: a deep jungle green, pulled hard so it never reads as home's lawn from orbit.
+	"jungle": [Color("#3f7a5e"), 0.40],
 }
 
 
@@ -285,6 +291,15 @@ func _apply_biome() -> void:
 			# Mode 6 paints the CAPS in `low_color`, so on a frost world `ground_color_low` is the
 			# frost tone rather than a shore tone - see the note in vela.tres's contract.
 			_material.set_shader_parameter("low_color", data.ground_color_low.lightened(0.04))
+		"jungle":
+			# THE TANGLE from orbit: mottled deep greens (mode 1's two-tone land) threaded with thin
+			# teal glowing water courses - the swamp pools and the night glow at map scale.
+			_material.set_shader_parameter("mode", 1)
+			_material.set_shader_parameter("pattern_scale", 3.0)
+			_material.set_shader_parameter("accent", Color("#6fd8bf"))
+			_material.set_shader_parameter("accent_glow", 0.35)
+			_material.set_shader_parameter("rim_color", Color("#a8dcc4"))
+			_material.set_shader_parameter("rim_strength", 0.30)
 		_:
 			_material.set_shader_parameter("mode", 3)
 			_material.set_shader_parameter("pattern_scale", 1.7)

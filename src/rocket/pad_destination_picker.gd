@@ -61,8 +61,17 @@ const ROW_MARGIN := 24.0
 ## Below this a tile is too narrow for an 84 px globe with a two-line world name under it. If the
 ## arithmetic in `_tile_width()` ever asks for less, the row genuinely does not fit and the layout
 ## has to change (a scroll, or paging) rather than the tile shrinking further.
-const TILE_MIN_W := 150.0
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
+## Lowered 150 -> 140 for EIGHT worlds (seven tiles once The Tangle is open): the arithmetic above
+## asks for 144 at a 1280 px viewport, and the 150 floor pushed the row 42 px past the card, cutting
+## the last tile and the right chevron off at 1280x720 (captured, J1 builder 2026-09-29). Two-line
+## names were re-checked at 144 in the same capture. Six tiles still get the unchanged 150+.
+const TILE_MIN_W := 140.0
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela", "jungle"]
+## Worlds that are not on this card at all until a story flag opens them: id -> GameState flag.
+## THE TANGLE is a mystery world (docs/JUNGLE_PLANET_SPEC.md): no tile, no "Needs N parts" hint - it
+## simply is not a place you can go until the story (or the dev menu) sets `jungle_open`. Once open it
+## is never range-gated: CampaignData's tiers do not list it, and `planet_in_range` would lock it.
+const LOCKED_UNTIL := {"jungle": "jungle_open"}
 ## One line of flavour per world - the same copy the map card used.
 const BLURB := {
 	"home": "Home sweet orbit.",
@@ -72,6 +81,7 @@ const BLURB := {
 	"fen": "Fen's long dusk. Mirror pools, huge sun.",
 	"grig": "Grig's chalk steps. All the way up.",
 	"vela": "Vela's long array. Cold, quiet, listening.",
+	"jungle": "A tangle of glowing jungle. Nobody's charted it.",
 }
 ## Seconds `interact` is ignored after the card opens. The player just pressed E to board; without
 ## this, pressing it again — the most natural thing in the world — launches before they have read
@@ -111,6 +121,8 @@ func setup(origin_id: String) -> void:
 	_options.clear()
 	for id in ORDER:
 		if id == origin_id:
+			continue
+		if LOCKED_UNTIL.has(id) and not GameState.flag(str(LOCKED_UNTIL[id])):
 			continue
 		if ResourceLoader.exists("res://src/planet/data/%s.tres" % id):
 			_options.append(id)
@@ -291,11 +303,17 @@ func _make_tile(id: String, index: int) -> PanelContainer:
 	inner.add_child(disc)
 	_discs.append(disc)
 
+	# NARROW (seven tiles, i.e. once The Tangle is open): the tile's panel adds ~21 px of content
+	# margin a side and the pill ~18, so the shipped insets (26 / 40) made each child WIDER than the
+	# tile's own content box and the row grew to ~160 px tiles - 1280x720 cut the last tile and the
+	# right chevron off (captured, J1 builder 2026-09-29). Narrow tiles get insets that fit inside
+	# the panel and a 17 px name. Five and six tiles (>= 150 px) are untouched.
+	var narrow := _tile_size.x < 150.0
 	var label := UIStyle.make_label(Hud.planet_display_name(id), "", HORIZONTAL_ALIGNMENT_CENTER)
-	label.add_theme_font_size_override("font_size", 19)
+	label.add_theme_font_size_override("font_size", 17 if narrow else 19)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	# Tracks the tile, so a narrower row wraps "Zorp's Violet Hollow" instead of overflowing it.
-	label.custom_minimum_size = Vector2(_tile_size.x - 26.0, 52.0)
+	label.custom_minimum_size = Vector2(_tile_size.x - (46.0 if narrow else 26.0), 52.0)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	inner.add_child(label)
 	_names.append(label)
@@ -312,7 +330,7 @@ func _make_tile(id: String, index: int) -> PanelContainer:
 	# minimum size, which would widen the whole tile past `_tile_width()`'s arithmetic and reopen
 	# the row-overflow bug that function's header comment already fixed once for the name label.
 	# A fixed height keeps a one-line and a two-line pill sitting at the same spot in every tile.
-	pill_label.custom_minimum_size = Vector2(_tile_size.x - 40.0, 34.0)
+	pill_label.custom_minimum_size = Vector2(_tile_size.x - (82.0 if narrow else 40.0), 34.0)
 	pill_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pill.add_child(pill_label)
@@ -470,6 +488,11 @@ func _recompute_locks() -> void:
 	_locked.clear()
 	_needed.clear()
 	for id in _options:
+		if LOCKED_UNTIL.has(id):
+			# Only on the card at all once its flag is set (see `setup`), and then always open.
+			_locked.append(false)
+			_needed.append(0)
+			continue
 		_locked.append(not CampaignData.planet_in_range(id))
 		_needed.append(CampaignData.parts_needed_for(id))
 

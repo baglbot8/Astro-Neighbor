@@ -56,25 +56,15 @@ const LANDMARK_SPOTS: Array[Vector2] = [Vector2(88, -36), Vector2(104, 36), Vect
 	Vector2(52, -78)]
 ## Shards keep this far (m of surface) from a landmark's centre.
 const LANDMARK_CLEAR_M := 7.0
-## THE LOOKOUTS (builder METEOR3, spec 9.6.4; the user: "looking for the last beacon feels a bit like pick a direction
-## and hope you see it ... at least 2 higher up things you can climb on ... the higher up vantage point should let
-## you see further for the red lights"). Two lookouts (MeteorVantage), each placed by a search over the rock (the
-## builder's report): >= 45 deg (17 m) from every weak point, >= 30 deg from every landmark, and with weak points
-## 50-60 deg away that the ground cannot show but the top can. Since builder RISE (2026-09-29; the user on the stair
-## towers: "make it more natural and not stairs. Find another way to guide players to it that isnt so obvious")
-## each is a low rocky rise of the crust itself - a gentle walkable back up to a crest 3 m over the ground, a crystal
-## vein up the back and one small glowing crystal on the crest - at the same spot, crest and height as builder
-## LOOKOUT's small rock, so the sight lines are unchanged (ray casts to the glow column, 0-13.8 m over a crack): the
-## far rise's crest shows cracks 3, 4, 5 from 1.5, 1.5, 1.25 m up; the near one's crack 2 from 2.0 m and crack 3
-## from 2.75 m; from the foot the same cracks show only from 2.25-7.5 m up, or not at all. [around, bearing] as
-## CRACK_SPOTS, then the cracks it looks out on (0-based; the walkable back faces the start, inside the widest gap
-## between them, `_build_lookouts`).
-const VANTAGE_SPOTS: Array = [[Vector2(144, -138), [2, 3, 4]], [Vector2(60, 162), [1, 2]]]
-## Shards keep this far (m of surface) from a rise's centre: its walkable back runs out ~8.5 m, and from the crest
-## a shard just past its foot stood as a big dark block in the foreground of the look toward crack 5 (builder RISE).
-const VANTAGE_CLEAR_M := 10.5
+## THE HOVER (builder HOVER, 2026-09-30; docs/JUNGLE_PLANET_SPEC.md 6, the user: "also solves the meteor beacon
+## problem so that we dont need awkward large cliffs"). The two rocky rises (builder RISE's MeteorVantage) are gone:
+## the jetpack hover is always on here, whatever Moss's lesson (PlanetSafari.hover_enabled; Player "photo hover"),
+## and lifting the eye from 1.1 m to ~4.6 m is what shows the far red glows (the builder's report has the sight
+## lines). The Professor says so at the start and again after a failed try.
 const RETRY_MODAL := "meteor_retry"
-const START_LINES := ["Find the five glowing cracks. Snap each one!", "A good photo plants a beacon. Beat the clock!"]
+const START_LINES := ["Find the five glowing cracks. Snap each one!", "A good photo plants a beacon. Beat the clock!",
+	"Can't spot one? Use your jetpack! Tap Hover."]
+const START_LINE_HOVER_KEYS := "Can't spot one? Use your jetpack! Press V."
 const LINE_FIRST := "Splendid! The ships can see that one."
 const LINE_LAST_ONE := "One more! Now where did I put my pencil..."
 const LINE_HURRY := "Thirty seconds! You're doing fine."
@@ -84,9 +74,10 @@ const TIMEOUT_LINE := "No harm done. The rock's still here. Again!"
 const FILMOUT_TITLE := "Out of film!"
 const FILMOUT_LINE := "Here's a fresh roll. Let's start again!"
 const ALREADY_LINE := "Already marked! Find one that still glows."
-## After a failed try (spec 9.6.4: "The professor can give a hint too to climb up on them if you fail once"). Names
-## the rises in words (builder RISE: no flags or glowing steps any more; both rises stand by a lava flow).
-const LINE_CLIMB_HINT := "Tip: climb a rocky rise by the lava to spot the red glows!"
+## After a failed try (spec 9.6.4: "The professor can give a hint too ... if you fail once"): since builder HOVER,
+## hover up to spot the red glows (the rises are gone).
+const LINE_HOVER_HINT := "Tip: tap Hover and look around for red glows!"
+const LINE_HOVER_HINT_KEYS := "Tip: press V to hover and look for red glows!"
 ## THE STEAM HAZE (spec 9.6.6): the Environment's depth fog, steam-coloured and thicker, written every frame after
 ## environment.gd's own write (this node's process_priority is later) and put back by `_restore`. Clear near the
 ## eye, ~13% at 7 m (the horizon from a standing eye; the eye is 1.1 m up), ~28% at 15 m, at its thickest past HAZE_END_M; the cracks' light is fog-free and reads through it.
@@ -98,7 +89,6 @@ const HAZE_CURVE := 0.9
 
 var cracks: Array = []   # {key, root, plume, beacon, marked, dir}
 var landmarks: Array = []   # {name, root, dir, look_y}
-var lookouts: Array = []    # {root, dir, sees}
 var steam: MeteorSteam
 var _fog_env: Environment
 var _fog_saved: Dictionary = {}
@@ -163,7 +153,7 @@ func _start() -> void:
 	hud.show_play(true)
 	await layer.fade_to(0.0, FADE_SEC)
 	for l: String in START_LINES:
-		hud.say(l)
+		hud.say(l if l != START_LINES[-1] or MobileUI.is_mobile() else START_LINE_HOVER_KEYS)
 	_begin_attempt()
 
 
@@ -230,7 +220,6 @@ func _enter_rock() -> void:
 	player.input_enabled = true
 	_build_cracks(rng)
 	_build_landmarks(rng)
-	_build_lookouts()
 	_build_shards(rng)
 	steam = MeteorSteam.new()
 	steam.rock = rock
@@ -244,6 +233,8 @@ func _enter_rock() -> void:
 	_set_start_pitch()
 	rig.set_fov_deg(PHOTO_MODE_OFF_FOV)
 	player.set_safari_walk(true)
+	hover_enabled = true
+	player.set_safari_hover(true)
 	_make_puff_material()
 
 
@@ -308,10 +299,6 @@ func _build_shards(rng: RandomNumberGenerator) -> void:
 			if acos(clampf(dir.dot(a), -1.0, 1.0)) * ROCK_RADIUS < LANDMARK_CLEAR_M:
 				ok = false
 				break
-		for l: Dictionary in lookouts:
-			if acos(clampf(dir.dot(l["dir"] as Vector3), -1.0, 1.0)) * ROCK_RADIUS < VANTAGE_CLEAR_M:
-				ok = false
-				break
 		if not ok:
 			continue
 		avoid.append(dir)
@@ -345,54 +332,6 @@ func _build_landmarks(rng: RandomNumberGenerator) -> void:
 		if root.has_meta("blobs"):
 			_blobs.append_array(root.get_meta("blobs"))
 		landmarks.append({"name": kind, "root": root, "dir": dir, "look_y": float(root.get_meta("look_y", 2.5))})
-
-
-## The lookouts: each rise stands at its spot with its walkable back turned toward the start (inside the widest gap between
-## the cracks it looks out on). Own seeded stream, so adding them leaves every other thing on the rock where it was.
-func _build_lookouts() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 60928
-	for v: Array in VANTAGE_SPOTS:
-		var spot: Vector2 = v[0]
-		var dir := dir_from_start(spot.x, spot.y)
-		# The walkable back runs out toward where players come from (the start), kept inside the widest gap between
-		# the cracks the lookout is for, so nobody climbs with their back to them and the slope never sits under the
-		# look toward one (builder LOOKOUT, 2026-09-29; kept by builder RISE).
-		var xf := planet.surface_transform(dir, start_dir)
-		var angles: Array = []
-		for ci: int in v[1]:
-			var cl: Vector3 = xf.basis.inverse() * (cracks[ci]["dir"] as Vector3)
-			angles.append(atan2(cl.z, cl.x))
-		angles.sort()
-		var gap_a0 := 0.0
-		var gap_w := -1.0
-		for i in range(angles.size()):
-			var a0: float = angles[i]
-			var a1: float = angles[(i + 1) % angles.size()] + (TAU if i == angles.size() - 1 else 0.0)
-			if a1 - a0 > gap_w:
-				gap_w = a1 - a0
-				gap_a0 = a0
-		var sl: Vector3 = xf.basis.inverse() * start_dir
-		var start_a := gap_a0 + fposmod(atan2(sl.z, sl.x) - gap_a0, TAU)
-		var margin := minf(deg_to_rad(40.0), gap_w * 0.35)
-		var steps_a := clampf(start_a, gap_a0 + margin, gap_a0 + gap_w - margin)
-		if start_a > gap_a0 + gap_w and start_a - (gap_a0 + gap_w) > TAU - start_a + gap_a0:
-			steps_a = gap_a0 + margin   # nearer the gap's first edge the other way round
-		# MeteorVantage runs its walkable back out along local -Z (atan2 angle -PI/2); this turns it to `steps_a`.
-		xf.basis = xf.basis * Basis(Vector3.UP, -PI * 0.5 - steps_a)
-		var looks: Array = []
-		for ci: int in v[1]:
-			looks.append((cracks[ci]["root"] as Node3D).global_position)
-		var crag := MeteorVantage.build(planet, xf, rng, looks)
-		_content.add_child(crag)
-		crag.global_transform = xf
-		var seen: Array = []
-		for c: Dictionary in cracks:
-			seen.append(snappedf(rad_to_deg(acos(clampf(dir.dot(c["dir"] as Vector3), -1.0, 1.0))), 0.1))
-		lookouts.append({"root": crag, "dir": dir, "sees": v[1]})
-		_log("lookout at %s: degrees to cracks 1-5 %s, looks out on %s; back %.0f deg off the way to the start, in a %.0f deg gap; crystal %.0f deg off the nearest look" % [
-			str(spot), str(seen), str(v[1]), rad_to_deg(absf(angle_difference(steps_a, atan2(sl.z, sl.x)))), rad_to_deg(gap_w),
-			float(crag.get_meta("crystal_off_look_deg", 0.0))])
 
 
 ## The fountain's blobs, every frame (a dozen transforms; runs in every phase so it never freezes on a fade).
@@ -450,6 +389,7 @@ func _begin_attempt() -> void:
 		(c["beacon"] as Node3D).visible = false
 	hud.set_marks(0, CRACK_COUNT)
 	hud.set_clock(TIME_LIMIT)
+	player.set_safari_hover(true)   # a full tank for every try
 	player.set_move_locked(false)
 	phase = Phase.AWAKE
 	_log("attempt %d: go (film %d, %.0f s)" % [attempt, film_left, TIME_LIMIT])
@@ -618,6 +558,8 @@ func _retry(title: String, line: String, why: String) -> void:
 		return
 	_retrying = true
 	holding = false
+	if player.is_hovering():
+		player.stop_hover(true)
 	if camera_up:
 		set_camera_up(false)   # before the phase changes: set_camera_up only acts while AWAKE
 	phase = Phase.SLEEPING
@@ -641,7 +583,7 @@ func _retry(title: String, line: String, why: String) -> void:
 	player.set_move_locked(true)
 	await layer.fade_to(0.0, FADE_SEC)
 	hud.say("Attempt %d. You've got this!" % attempt)
-	hud.say(LINE_CLIMB_HINT)
+	hud.say(LINE_HOVER_HINT if MobileUI.is_mobile() else LINE_HOVER_HINT_KEYS)
 	player.set_move_locked(false)
 	phase = Phase.AWAKE
 	_retrying = false
@@ -653,6 +595,8 @@ func _complete() -> void:
 		return
 	_done = true
 	holding = false
+	if player.is_hovering():
+		player.stop_hover(true)
 	if camera_up:
 		set_camera_up(false)
 	phase = Phase.SLEEPING

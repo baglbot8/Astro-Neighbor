@@ -71,6 +71,12 @@ var film_pos := Vector2.ZERO
 var frame_size := Vector2.ZERO
 ## The End button's hit rect, top-right corner (see END_W/END_H).
 var end_rect := Rect2()
+## THE HOVER BUTTON (builder HOVER; PlanetSafari.hover_enabled): a satellite-sized round button on the
+## bottom row, just LEFT of the Camera/shutter button - never over it, and clear of the Walk button (above
+## the shutter) and the zoom slider (right edge). Its rim is the fuel meter: the arc is the tank.
+var hover_c := Vector2.ZERO
+var hover_r := MobileUI.SAT_R
+var hover_hit := MobileUI.SAT_HIT_R
 
 ## pointer id -> role ("raise", "shutter", "lower", "slider")
 var _pointers: Dictionary = {}
@@ -483,6 +489,8 @@ func _layout() -> void:
 	var bottom := vp.y - sa.w - MobileUI.EDGE
 	main_c = Vector2(right - main_hit, bottom - main_hit)
 	alt_c = main_c + Vector2(0.0, -(main_r + alt_r + 26.0))
+	# Bottom-aligned with the shutter, one gap to its left: the two hit circles are 4 px apart.
+	hover_c = main_c + Vector2(-(main_hit + hover_hit + 4.0), main_r - hover_r)
 	end_rect = Rect2(Vector2(right - END_W, top), Vector2(END_W, END_H))
 	# The zoom's own "Zoom" label pill sits just above the slider (see _draw_slider): pushed down by
 	# the End button's height + a gap, so neither ever overlaps it.
@@ -521,6 +529,10 @@ func _input(event: InputEvent) -> void:
 			return
 		if k.physical_keycode == KEY_Q and k.pressed:
 			safari.set_camera_up(not safari.camera_up)
+			get_viewport().set_input_as_handled()
+		elif k.physical_keycode == KEY_V and safari.hover_enabled:
+			if k.pressed:
+				safari.hover_press()
 			get_viewport().set_input_as_handled()
 		elif k.physical_keycode == KEY_F:
 			if k.pressed:
@@ -567,6 +579,9 @@ func _press(id: int, pos: Vector2) -> bool:
 	if end_rect.grow(6.0).has_point(pos):
 		role = "end"
 		safari.request_end()
+	elif safari.hover_enabled and pos.distance_to(hover_c) <= hover_hit:
+		role = "hover"
+		safari.hover_press()
 	elif pos.distance_to(main_c) <= main_hit:
 		if safari.camera_up:
 			role = "shutter"
@@ -733,6 +748,8 @@ class _Drawer:
 		_draw_dial(L, s, font)
 		_draw_film(L, s, font)
 		_draw_end(L, font)
+		if s.hover_enabled:
+			_draw_hover(L, s, font)
 		if s.camera_up:
 			_draw_shutter(L, s, font)
 			_draw_round(L.alt_c, L.alt_r, UIStyle.CREAM, UIStyle.CREAM_EDGE, 0.85)
@@ -875,6 +892,28 @@ class _Drawer:
 		var box := Rect2(Vector2(L.film_pos.x, L.film_pos.y - 24.0), Vector2(w + 28.0, 36.0))
 		draw_style_box(UIStyle.make_pill_style(Color(UIStyle.NAVY, 0.6), Color(UIStyle.CREAM, 0.5), 2), box)
 		draw_string(font, Vector2(box.position.x + 14.0, box.position.y + 26.0), t, HORIZONTAL_ALIGNMENT_LEFT, -1, size, UIStyle.CREAM if s.film_left > 0 else UIStyle.RED)
+
+	## THE HOVER BUTTON: an up-chevron and "Hover" on a cream disc (warm yellow while hovering); its rim is
+	## the fuel meter - a full ring on a full tank, draining clockwise from the top, red while too low to
+	## light. On a desktop the key, "V", sits under the word.
+	func _draw_hover(L: SafariLayer, s: PlanetSafari, font: Font) -> void:
+		var p := s.player
+		var fuel := p.get_hover_fuel() if is_instance_valid(p) else 1.0
+		var on := is_instance_valid(p) and p.is_hovering()
+		var low := not on and fuel < Player.HOVER_RESTART_FUEL
+		var c := L.hover_c
+		var r := L.hover_r
+		_draw_round(c, r, UIStyle.YELLOW if on else UIStyle.CREAM, UIStyle.CREAM_EDGE, 0.9 if on else 0.85)
+		draw_arc(c, r + 7.0, 0.0, TAU, 48, Color(UIStyle.NAVY, 0.55), 7.0, true)
+		if fuel > 0.005:
+			var col := UIStyle.RED if low else (UIStyle.STARDUST if on else UIStyle.CREAM)
+			draw_arc(c, r + 7.0, -PI * 0.5, -PI * 0.5 + TAU * fuel, 48, col, 5.0, true)
+		var ink := Color(UIStyle.TEXT_BROWN, 0.5 if low else 1.0)
+		var g := c + Vector2(0, -14)
+		draw_polyline(PackedVector2Array([g + Vector2(-11, 6), g + Vector2(0, -5), g + Vector2(11, 6)]), ink, 4.0, true)
+		_text_centred(font, "Hover", c + Vector2(0, 15), 19, ink)
+		if not MobileUI.is_mobile():
+			_text_centred(font, "V", c + Vector2(0, 34), 16, Color(UIStyle.TEXT_SOFT, 0.9))
 
 	## THE END BUTTON (top-right corner, always shown - camera up or down). A single tap only opens
 	## the confirm card (PlanetSafari.request_end); it never ends the safari by itself.

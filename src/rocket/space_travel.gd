@@ -111,11 +111,20 @@ const LAYOUT := {
 	# need re-deriving, because they are what make the relative sizes honest.
 	"vela": {"radius": 2.1, "orbit": 32.5, "angle_deg": 166.0, "y": -2.5,
 		"desc": "Vela's long array. Cold, quiet, listening."},
+	# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md) - the mystery world. Orbit 44.5 threads between Grig's 42
+	# and the hub's 47 (inside the showcase camera's r = 62 circle), angle 352 sits in the widest angular
+	# gap left (hub 318 -> home 24) and y 3.2 is the highest slot, so it stacks with no one. Radius 2.2:
+	# a 14 m world, a touch bigger than Fen's 13. HIDDEN from the map until GameState.flags["jungle_open"]
+	# (see `_shown`), except on a trip that starts or ends there.
+	"jungle": {"radius": 2.2, "orbit": 44.5, "angle_deg": 352.0, "y": 3.2,
+		"desc": "A tangle of glowing jungle. Nobody's charted it."},
 }
 ## Every id here MUST also be in LAYOUT: `_build_orbits()` indexes LAYOUT[id] with no guard at all
 ## (`_build_globes()` is protected by the .tres existence check ahead of it, this one is not), so an
 ## id in ORDER and missing from LAYOUT is a hard crash on entering the space map.
-const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela"]
+const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vela", "jungle"]
+## Worlds that stay off the map until a story flag opens them: id -> GameState flag.
+const LOCKED_UNTIL := {"jungle": "jungle_open"}
 
 ## Planet the rocket is docked at (empty = read GameState.previous_planet_id, then "home").
 @export var origin_id: String = ""
@@ -241,7 +250,7 @@ func _ready() -> void:
 		_origin = "home"
 	_focus = _origin
 	for id in ORDER:
-		if id != _origin:
+		if id != _origin and _shown(id):
 			_destinations.append(id)
 
 	# Space is night: emissives (rivers, seams, engine glow) run at full strength here — but see
@@ -506,6 +515,8 @@ func _build_sun() -> void:
 
 func _build_globes() -> void:
 	for id: String in ORDER:
+		if not _shown(id):
+			continue
 		var path := "res://src/planet/data/%s.tres" % id
 		if not ResourceLoader.exists(path):
 			continue
@@ -527,6 +538,8 @@ func _build_orbits() -> void:
 	# seam frame, where the planet sky has nothing like them.
 	root.visible = not _journey
 	for id: String in ORDER:
+		if not _shown(id):
+			continue
 		var mi := RocketMeshLib.mi(RocketMeshLib.dashed_ring(float(LAYOUT[id]["orbit"]), 132, 0.45),
 			mat, root, Vector3(0.0, float(LAYOUT[id]["y"]), 0.0), "Orbit_" + id)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -605,6 +618,14 @@ func _build_rocket() -> void:
 
 
 # ============================================================================= geometry helpers
+## False for a locked world (LOCKED_UNTIL) whose flag is not set - unless this very trip starts or ends
+## there, so a dev-menu hop or a future story trip always has its globe to fly to and from.
+func _shown(id: String) -> bool:
+	if not LOCKED_UNTIL.has(id):
+		return true
+	return GameState.flag(str(LOCKED_UNTIL[id])) or id == _origin or id == _journey_dest
+
+
 func _planet_pos(id: String) -> Vector3:
 	var e: Dictionary = LAYOUT[id]
 	var a := deg_to_rad(float(e["angle_deg"]))

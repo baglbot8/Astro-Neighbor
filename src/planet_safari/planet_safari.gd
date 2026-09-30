@@ -245,6 +245,17 @@ const FILM_OUT_MODAL := "safari_film_out"
 ## "Zoomed on their own": the lens this far (degrees) inside the wide end.
 const TIP_ZOOMED_DEG := 0.5
 
+## THE PHOTO HOVER (docs/JUNGLE_PLANET_SPEC.md 6; builder HOVER). Moss's lesson sets this flag; from then on
+## every safari shows SafariLayer's Hover button (key H): one tap lifts the astronaut Player.HOVER_HEIGHT and
+## holds them while its small tank lasts, then they drift down (Player, "photo hover"). The camera works as
+## normal up there. The meteor survey turns it on whatever the flag (MeteorSurveyLevel).
+const HOVER_FLAG := "hover_learned"
+## Said once per game, the first safari with the hover, after the opening line has gone.
+const HOVER_HINT_FLAG := "planet_safari_hover_hint"
+const HOVER_HINT_AT := 6.0
+const HOVER_HINT := "Tap Hover to rise and look around!"
+const HOVER_HINT_KEYS := "Press V to hover and look around!"
+
 enum Phase { PENDING, FADE_IN, AWAKE, SLEEPING, FADE_OUT, REVIEW, DONE }
 
 ## The safari running right now, or null.
@@ -312,6 +323,9 @@ var _tip_pending := false
 var _tip_log: Array = []
 ## THE END BUTTON's own confirm, and the once-only out-of-film offer (see END_MODAL/FILM_OUT_MODAL).
 var _end_pending := false
+## True while this photo mode offers the hover (see HOVER_FLAG).
+var hover_enabled := false
+var _hover_hint_due := false
 var _film_out_offered := false
 
 
@@ -517,7 +531,9 @@ func _run() -> void:
 
 func _begin_behind_black() -> void:
 	PhotoMode.begin(planet_id)
-	film_start = GameState.film_capacity()
+	# ECON (2026-09-29): the camera upgrade (film_capacity) and any spare plates bought at Cosmo
+	# Depot (GameState.take_film_spares, used up here) both load into this trip.
+	film_start = GameState.film_capacity() + GameState.take_film_spares()
 	film_left = film_start
 	focus_m = planet.radius
 	focus_target_m = focus_m
@@ -536,6 +552,9 @@ func _begin_behind_black() -> void:
 	_set_start_pitch()
 	rig.set_fov_deg(PHOTO_MODE_OFF_FOV)
 	player.set_safari_walk(true)
+	hover_enabled = bool(GameState.flags.get(HOVER_FLAG, false))
+	player.set_safari_hover(hover_enabled)
+	_hover_hint_due = hover_enabled and not GameState.flags.get(HOVER_HINT_FLAG, false)
 	_make_puff_material()
 	add_child(_content)
 	_content.build(self)
@@ -642,6 +661,10 @@ func _process(delta: float) -> void:
 	if _content != null:
 		_content.tick(elapsed, delta)
 	_update_camera_mode(delta)
+	if _hover_hint_due and elapsed >= HOVER_HINT_AT:
+		_hover_hint_due = false
+		GameState.flags[HOVER_HINT_FLAG] = true
+		announce(HOVER_HINT if MobileUI.is_mobile() else HOVER_HINT_KEYS, 3.5)
 	if elapsed >= DURATION:
 		_go_to_sleep()
 
@@ -895,7 +918,11 @@ func set_camera_up(on: bool) -> void:
 	_nudge_want_s = 0.0
 	_nudge_clock = NUDGE_EVERY   # the first read is on the first camera-up frame
 	aim_info = {}
-	player.set_move_locked(on)
+	# THE STEADY GRIP (GOODS, docs/JUNGLE_PLANET_SPEC.md 6.1): owned -> the camera up walks slowly
+	# (Player.STEADY_WALK_SPEED) instead of locking. The meteor survey inherits this function, so it has it too.
+	var grip := on and GameState.flag(CameraGoods.GRIP_FLAG)
+	player.set_move_locked(on and not grip)
+	player.set_steady_walk(grip)
 	rig.set_zoom_input_drives_fov(on)
 	rig.set_fov_deg(camera_fov if on else PHOTO_MODE_OFF_FOV)
 	_apply_look_scale()
@@ -1021,6 +1048,24 @@ func shutter_up() -> void:
 	if phase != Phase.AWAKE or not camera_up or film_left <= 0:
 		return
 	_take_photo()
+
+
+## The Hover button / H key (see HOVER_FLAG): a tap starts a hover, a tap while hovering lets go.
+func hover_press() -> void:
+	if phase != Phase.AWAKE or not hover_enabled or not is_instance_valid(player):
+		return
+	# Found the button on their own: no need for the hint.
+	if _hover_hint_due:
+		_hover_hint_due = false
+		GameState.flags[HOVER_HINT_FLAG] = true
+	var was := player.is_hovering()
+	var now := player.toggle_hover()
+	if now == was and not now:
+		announce("Jetpack's refilling. Land for a moment.", 1.6)
+		AudioManager.play_sfx("blocked", -10.0)
+		return
+	AudioManager.play_sfx("ui_tick" if now else "ui_close", -8.0)
+	_log("hover %s fuel=%.2f h=%.2f" % ["UP" if now else "off", player.get_hover_fuel(), player.get_ground_height()])
 
 
 func _space() -> PhysicsDirectSpaceState3D:
@@ -1222,6 +1267,8 @@ func _public_entry(e: Dictionary) -> Dictionary:
 # ======================================================================================== THE END
 func _go_to_sleep() -> void:
 	holding = false
+	if is_instance_valid(player) and player.is_hovering():
+		player.stop_hover(true)
 	if camera_up:
 		set_camera_up(false)   # before the phase changes: set_camera_up only acts while AWAKE
 	phase = Phase.SLEEPING
@@ -1305,6 +1352,10 @@ func _restore(teleport: bool) -> void:
 	if _content != null and is_instance_valid(_content):
 		_content.queue_free()
 		_content = null
+	if is_instance_valid(player):
+		player.set_safari_hover(false)
+		player.set_steady_walk(false)
+	hover_enabled = false
 	if not teleport:
 		return
 	if is_instance_valid(rig):
@@ -1334,6 +1385,9 @@ func debug_state() -> Dictionary:
 		"focus_m": focus_m, "focus_target_m": focus_target_m, "holding": holding,
 		"fov": rig.get_fov_deg() if is_instance_valid(rig) else -1.0,
 		"photos": _photos.size(), "woke": _woke.keys(), "photo_mode": PhotoMode.active,
+		"hover": {"enabled": hover_enabled, "on": is_instance_valid(player) and player.is_hovering(),
+			"fuel": player.get_hover_fuel() if is_instance_valid(player) else 0.0,
+			"h": player.get_ground_height() if is_instance_valid(player) else 0.0},
 		"awake": awake_subjects().map(func(s: Dictionary) -> String: return str(s["key"])),
 		"max_frame_ms": _max_frame_ms,
 		"zoom_nudge": zoom_nudge,

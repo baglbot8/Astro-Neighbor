@@ -98,7 +98,7 @@ static func definition() -> Dictionary:
 	return {
 		"npc": "bolt",
 		"part": "part_bolt",
-		"part_fit_scrap": 8,
+		"part_fit_scrap": 60,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
 			"Hello. I have a problem. 3 machines are broken.",
 			"We leave soon. I will not leave them broken.",

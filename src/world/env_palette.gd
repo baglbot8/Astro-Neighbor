@@ -49,6 +49,11 @@ const BIOME_DUST := {
 	# a frost world must not share with Grig is a warm limb band. S 0.236 keeps it inside the
 	# 0.22-0.32 window above; this is ice fog, not a blue sky (R2.1 forbids the dome).
 	"frost": Color("#9fb4d0"),
+	# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md): a turquoise spore haze, hue 176 - the only cyan-side limb
+	# band that is not Vela's ice (218), and the complement of the Tangle's wine floor. S 0.25 inside the
+	# 0.22-0.32 window. Thin atmosphere still: a band, never a sky. (L1 LOOK 2026-09-29: was a green
+	# #92bf9f, retired with the green foliage.)
+	"jungle": Color("#8fc0bd"),
 }
 ## Per-biome tint mixed into the deep-space stops (10%) so Zorp's sky is faintly violet etc.
 const BIOME_DEEP := {
@@ -63,6 +68,8 @@ const BIOME_DEEP := {
 	# A near-black glacial teal - the coldest deep in the dict, and the only one on the cyan side
 	# of the navy the other five sit around.
 	"frost": Color("#132e33"),
+	# A near-black wine - the Tangle's deep, on the red side of Fen's plum (L1 LOOK: was moss green).
+	"jungle": Color("#301428"),
 }
 
 ## Night fill light. Strongly blue on purpose: the reference night grade washes the whole world in

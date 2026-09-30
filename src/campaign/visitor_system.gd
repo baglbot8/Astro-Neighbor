@@ -155,8 +155,9 @@ const VISIT_EVERY_DAYS := 1
 const PLAY_CHANCE := 0.5
 ## Friendship for a visit handed in. A project step gives 5 (ProjectSystem.FRIENDSHIP_PER_STEP), a favour 2.
 const VISIT_FRIENDSHIP := 3
-## Stardust for a visit handed in. A replay pays 10 (replay_board.gd), a favour 60-140 (being reworked).
-const VISIT_STARDUST := 15
+## Stardust for a visit handed in. ECON (2026-09-29): 15 -> 50, with the replay (now 60) and prices
+## raised ~2.5x; a favour pays 60-140 plus a decoration. Once a day.
+const VISIT_STARDUST := 50
 ## A visit's game is never longer than the story's, and shorter where the story's is long. The ring run
 ## cannot go under 4 (ring_game.gd COUNT_RANGE).
 const VISIT_COUNT_MAX := {"catch": 3, "rings": 4, "guide": 3, "hunt": 2, "call": 2}

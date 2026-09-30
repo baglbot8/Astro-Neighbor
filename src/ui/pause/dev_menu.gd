@@ -160,6 +160,8 @@ var _day_label: Label
 var _scrap_label: Label
 var _stardust_label: Label
 var _campaign_toggle: ToggleSwitch
+## THE TANGLE's lock (GameState.flags["jungle_open"], docs/JUNGLE_PLANET_SPEC.md).
+var _jungle_toggle: ToggleSwitch
 var _story_toggle: ToggleSwitch
 var _board_all_toggle: ToggleSwitch
 ## The retired space safari's one switch (docs/PLANET_SAFARI_SPEC.md 15.1), World tab. Never saved.
@@ -1444,6 +1446,16 @@ func _build_world_tab(list: VBoxContainer) -> void:
 	var planets := _section("World", "planets", "Go to planet — the pad's own loader, no flight")
 	for pid: String in GameState.PLANET_IDS:
 		_add_action_row(planets, Journal.planet_name(pid), func() -> void: _jump_to(pid), "Go")
+	# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md): the mystery world is not in PLANET_IDS - it stays off
+	# the pad's card and the space map until `jungle_open` is set. The story unlock is not decided yet;
+	# this switch is the only way to open it. "Go" opens it too, then hops there.
+	var jungle_row := _row(planets, "The Tangle (locked)")
+	_jungle_toggle = ToggleSwitch.new()
+	_jungle_toggle.toggled.connect(func(on: bool) -> void: _set_jungle_open(on))
+	jungle_row.add_child(_jungle_toggle)
+	jungle_row.add_child(_small_button("Go", func() -> void:
+		GameState.set_flag("jungle_open", true)
+		_jump_to("jungle")))
 
 	var time_sec := _section("World", "time", "Time and clock")
 	var time_row := _row(time_sec, "Time")
@@ -1556,6 +1568,12 @@ func _go_to_building_dir(planet_id: String, building_id: String, label: String) 
 
 
 # ============================================================================= actions: planets
+## Opens or re-locks THE TANGLE (rocket pad card + space map). Saved with the game like any flag.
+func _set_jungle_open(on: bool) -> void:
+	GameState.set_flag("jungle_open", on)
+	_finish_action("The Tangle: %s" % ("open on the rocket pad" if on else "locked"))
+
+
 func _jump_to(planet_id: String) -> void:
 	if SceneRouter.is_busy():
 		EventBus.toast_requested.emit("Already travelling — try again in a moment.", "warn")
@@ -1660,6 +1678,10 @@ func _refresh_values() -> void:
 	# BLOCKED, not a plain assignment (docs/OPEN_ISSUES.md item 49): ToggleSwitch has no
 	# set_pressed_no_signal — its `on` setter always emits `toggled` itself, and this sync runs on
 	# every open/refresh, so without the block a hand tap's own toast would fire twice.
+	if _jungle_toggle != null:
+		_jungle_toggle.set_block_signals(true)
+		_jungle_toggle.on = GameState.flag("jungle_open")
+		_jungle_toggle.set_block_signals(false)
 	if _campaign_toggle != null:
 		_campaign_toggle.set_block_signals(true)
 		_campaign_toggle.on = GameState.campaign_active

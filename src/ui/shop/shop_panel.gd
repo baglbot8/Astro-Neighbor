@@ -46,7 +46,11 @@ signal fitted(part_id: String)
 ## the bar, not 0.2. Dropped to 0.15 (2026-09-20). The price tag and the sell confirm dialog both read
 ## `price_for()` live, so the lower payout is honest everywhere it shows without a separate wording
 ## change.
-const SELL_RATIO := 0.15
+## ECON (2026-09-29): 0.15 -> 0.10. Prices went up about 2.5x (docs/ECONOMY_REPORT.md Rulings), so at
+## 0.15 a favour's gift decoration (mean list price now ~1,000) would sell for ~150, more than the
+## favour's own stardust - OPEN_ISSUES 66's "selling gifts beats playing" again. At 0.10 it sells for
+## ~100: selling found things is one of the ways to earn, and keeping a gift costs you something.
+const SELL_RATIO := 0.10
 ## BUILD_PLAN Phase 2 files ship separately from this panel (see "src/ui/pause/dev_menu.gd" for the
 ## same pattern). This file never types anything as `ProjectSystem` - the bench read below goes
 ## through `ResourceLoader.exists()` + `load(PATH).call(...)` so it still parses and runs with
@@ -238,6 +242,11 @@ func _bench_entries() -> Array[Dictionary]:
 		var def := Catalog.get_item(id)
 		if str(def.get("kind", "")) != "rocket_part":
 			continue
+		# ECON (2026-09-29): the fit costs scrap on a ladder in FIT ORDER (GameState.part_fit_scrap:
+		# 30/60/90/120/150), not the part's own Catalog number - a copy, so the Catalog is untouched.
+		# Every read below (card, cost row, Need-N button, _try_fit) goes through this entry's def.
+		def = def.duplicate()
+		def["scrap_cost"] = GameState.part_fit_scrap()
 		out.append({"id": id, "def": def, "count": GameState.item_count(id), "price": -1, "kind": "fit"})
 	return out
 
@@ -409,6 +418,20 @@ func _try_buy(entry: Dictionary) -> void:
 	var ok: bool = await _confirm.ask("Buy %s for %d?" % [item_name, p], "Buy", "No", p)
 	if not ok or not is_open:
 		_leave_actions()
+		return
+	# ECON (2026-09-29): the camera lens and spare film at Cosmo Depot are not bag items -
+	# CameraGoods applies them to GameState's camera store, then the camera entries are re-read (the
+	# next lens tier, or the film count) so the shelf never offers something already bought.
+	if CameraGoods.is_camera_good(def):
+		if not CameraGoods.buy(def):
+			_cant_afford()
+			return
+		UIStyle.play_sfx("ui_buy")
+		EventBus.toast_requested.emit(CameraGoods.bought_line(def), "star")
+		purchased.emit(id)
+		_stock.assign(CameraGoods.restock(_stock))
+		_leave_actions()
+		refresh()
 		return
 	if not GameState.spend_stardust(p):
 		_cant_afford()

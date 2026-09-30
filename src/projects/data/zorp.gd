@@ -125,7 +125,7 @@ static func definition() -> Dictionary:
 	return {
 		"npc": "zorp",
 		"part": "part_zorp",
-		"part_fit_scrap": 8,
+		"part_fit_scrap": 30,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
 			"Oh no, oh no! My rivers are going dark!",
 			"They used to glow all night long. Now, barely.",

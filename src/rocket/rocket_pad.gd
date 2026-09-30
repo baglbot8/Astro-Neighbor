@@ -203,6 +203,8 @@ const TRAIL_COLORS := {
 	# Vela's ice: a cold pale stone with a warm amber chevron, which is both the only warm thing
 	# on the world and the colour of her own rim lamps - the trail reads as array signage.
 	"frost": [Color("#c3d2dc"), Color("#ffc46a")],
+	# THE TANGLE: mossy stepping stones, an amber chevron (the jungle's glow colour).
+	"jungle": [Color("#a9b49a"), Color("#ffc46b")],
 }
 ## Stepping stones every this many metres along the spawn->pad great circle.
 const TRAIL_STEP_M := 2.0

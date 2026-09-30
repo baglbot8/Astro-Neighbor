@@ -68,6 +68,8 @@ func populate(p: Planet, props_root: Node3D, collectibles_root: Node3D) -> void:
 			_grig()
 		"frost":
 			_vela()
+		"jungle":
+			_jungle()
 		_:
 			_meadow()
 	_collectibles()
@@ -2690,6 +2692,12 @@ static func _drift_fin(powder: Color, shade: Color, variant: int) -> ArrayMesh:
 ## no rng is drawn and no other tuft changes. The first version picked before the grass and registered
 ## the footprint only after the story, so three home collectibles jumped when the story ended
 ## (CAVEPOL, 2026-09-28: home_6, home_7 and home_star1).
+# ============================================================================================ jungle
+## THE TANGLE (docs/JUNGLE_PLANET_SPEC.md). The whole scatter lives in JungleProps (and its meshes in
+## JungleMeshes) so this shared file carries one dispatch line and this one function.
+func _jungle() -> void:
+	JungleProps.new(self).build()
+
 func _cave_entrance() -> void:
 	var cave_dir := CaveEntrance.pick_dir(planet, coll_root, func(d: Vector3) -> bool:
 		return not _on_paved(d, CaveEntrance.FOOTPRINT_M))

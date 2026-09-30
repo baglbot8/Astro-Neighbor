@@ -149,7 +149,7 @@ static func definition() -> Dictionary:
 	return {
 		"npc": "fen",
 		"part": "part_fen",
-		"part_fit_scrap": 8,
+		"part_fit_scrap": 90,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
 			"The glow moths flew off with my pools' light!",
 			"I can't leave them lost. Not before I go.",

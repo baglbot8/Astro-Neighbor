@@ -525,6 +525,10 @@ func _ready() -> void:
 	_open_sight()
 	# The shots are searched over the next frames (SLICE_USEC each); the sight space stays open until then.
 	_solve_all()
+	# Moss's glow pods (docs/JUNGLE_PLANET_SPEC.md 6): spots from the finished layout; lit from the start on a
+	# stage 2-3 load (he has been), hidden until his beat at stage 1. After the shot search began, so no
+	# solved shot depends on them.
+	_place_party(_stage0 >= 2)
 	var u4 := Time.get_ticks_usec()
 	_stats["setup_ms"] = [(u1 - u0) / 1000.0, (u2 - u1) / 1000.0, (u3 - u2) / 1000.0, (u4 - u3) / 1000.0]
 	_beat("staged stage=%d pass=%s axis_k=%d %s ms spawn+heads %.1f sight %.1f spots %.1f place+opening+first-slice %.1f (opening_frame %.1f)" % [
@@ -704,6 +708,497 @@ func ask(id: String, prompt: String, options: Array, arm_delay: float = ARM_DELA
 	if runner == null:
 		return -1
 	return await _guarded_ask(runner, npc(id), prompt, options, arm_delay)
+
+
+# ============================================================================= Moss and his glow pods
+## MOSS AT THE PARTY (docs/JUNGLE_PLANET_SPEC.md 6, the lead's ruling on the user's point 4: "At the farewell
+## party Moss arrives (introduced by the Professor if you never met him) with a crate of glow pods from the
+## jungle as party lights. Later those glow pods are the beacons"). MEETING's "moss" action, after Grig's
+## first line: Moss walks in from the flank with a crate hovering beside him (MOSS_ENTER_M further out along
+## the row than his stop), the crowd and the astronaut turn to him, his own two-shot (`_moss_shot`: over his
+## crate, the crowd behind him); the Professor's line (MOSS_NEW or MOSS_MET on GameState flag "moss_met"),
+## Moss's two boxes; the camera goes to W and the pods fly out of the crate to their spots round the square;
+## his goodnight on W; he walks back out the way he came and is freed off camera (MOSS_GONE_MAX at most).
+## Measured on the desktop run: about 25 s with the boxes read at once.
+##
+## THE PODS. POD_COUNT of MeteorProps.glow_pod (the survey beacon's own pod, so the pod you plant on the meteor
+## is the one from the party), on spots round the crowd centre: rings POD_RINGS, azimuth 0 = straight out
+## behind the crowd, only within POD_AZ_MAX of it (never toward the pad, where the send-off and the photo
+## tripod stand), each clear of VisitorSystem's ground rules (`_ground`), POD_CLEAR_M from every crowd,
+## step-back and mark spot, a parked ship's footprint + POD_SHIP_M, POD_EYE_M from every low eye of the
+## send-off's authored path, and POD_GAP_M from each other. Deterministic, so a reload puts them back.
+## Heat: 3 draws a pod (body, seams, glow quad), 4 for the crate; no light, no shadow from the glow.
+const MOSS_SCENE := "res://src/characters/npcs/moss.tscn"
+const MOSS_WALK_MPS := 1.8
+const MOSS_STOP_ALONG := 4.8
+const MOSS_STOP_LATS: Array[float] = [3.8, 4.4, 3.3, 5.0]
+const MOSS_ENTER_M := 5.0
+const MOSS_WALK_MAX := 5.0
+const MOSS_GONE_MAX := 12.0
+const MOSS_HEAD_H := 0.95
+const MOSS_CRATE_SIDE_M := 0.8
+const MOSS_WALK_BLOCKERS: PackedStringArray = ["water", "house", "prop", "decoration"]
+const MOSS_SHOT_FOV := 44.0
+const MOSS_SHOT_DISTS: Array[float] = [3.2, 3.8, 2.7]
+const MOSS_SHOT_EYE_H := 1.35
+const POD_COUNT := 7
+const POD_RINGS: Array[float] = [3.2, 3.9, 4.6, 5.3, 6.0, 6.7, 7.4, 8.1, 8.8]
+const POD_AZ_STEP := 10.0
+const POD_AZ_MAX := 130.0
+const POD_GAP_M := 2.2
+const POD_CLEAR_M := 1.4
+const POD_GROUND_OK: PackedStringArray = ["stones", "landing", "spawn", "uneven", "slope"]
+const POD_SHIP_M := 0.8
+const POD_EYE_M := 1.8
+const POD_EYE_LOW_H := 2.2
+const POD_FLY_S := 1.0
+const POD_STAGGER_S := 0.14
+const POD_HOP_M := 2.2
+const CRATE_COL := Color("#6e5a44")
+
+var _party: Node3D
+var _crate: Node3D
+var _pods: Array[Node3D] = []
+var _pod_dirs: Array[Vector3] = []
+var _moss_stop_dir := Vector3.ZERO
+var _moss_enter_dir := Vector3.ZERO
+var _moss: Node3D
+
+
+## Builds the party node (crate + pods) and picks every spot. `lit`: pods on their spots and the crate on the
+## ground now (a stage 2-3 load); otherwise all hidden until `_moss_beat`.
+func _place_party(lit: bool) -> void:
+	if planet == null or _mark == Vector3.ZERO:
+		return
+	_pick_moss_spots()
+	_pick_pod_dirs()
+	_party = Node3D.new()
+	_party.name = "MossParty"
+	add_child(_party)
+	_crate = _make_crate()
+	_party.add_child(_crate)
+	for i in _pod_dirs.size():
+		var pod := MeteorProps.glow_pod(1.0, 1.1 + 0.13 * float(i % 3), 0.25)
+		pod.name = "Pod%d" % i
+		_party.add_child(pod)
+		pod.global_transform = _pod_xf(_pod_dirs[i], i)
+		pod.visible = lit
+		_pods.append(pod)
+	if _moss_stop_dir != Vector3.ZERO:
+		_crate.global_transform = _crate_ground_xf()
+	_crate.visible = lit and _moss_stop_dir != Vector3.ZERO
+	_beat("moss party: %d pods, stop=%s walk-in %.1f m lit=%s refused=%s" % [_pods.size(), str(_moss_stop_dir != Vector3.ZERO),
+		planet.surface_distance(_moss_stop_dir, _moss_enter_dir) if _moss_stop_dir != Vector3.ZERO else 0.0, str(lit), str(_pod_why)])
+
+
+## Moss's stop spot on the flank (MOSS_STOP_ALONG out, MOSS_STOP_LATS to either side, the side with the
+## clearer walk first) and where he walks in from (MOSS_ENTER_M further out along the row). A walk crossing a
+## pond, a house, a prop or a decoration is refused; with no clear walk he walks the last metres only.
+func _pick_moss_spots() -> void:
+	_moss_stop_dir = Vector3.ZERO
+	_moss_enter_dir = Vector3.ZERO
+	for lat: float in MOSS_STOP_LATS:
+		for sgn: float in [1.0, -1.0]:
+			var stop := _slot_dir(_axis, MOSS_STOP_ALONG, lat * sgn)
+			if not _pod_spot_ok(stop, 0.9, false):
+				continue
+			var crate := _crate_dir_for(stop, sgn)
+			if not _pod_spot_ok(crate, 0.9, false):
+				continue
+			# He walks in from MOSS_ENTER_M away (then shorter), first straight out along the row, then
+			# swinging round toward the far side of the square (never from the crowd's side).
+			var p := planet.surface_point(stop)
+			var up := planet.up_at(p)
+			var out_t := _tangent(planet.surface_point(_slot_dir(_axis, MOSS_STOP_ALONG, 50.0 * sgn)) - p, up, _axis)
+			for enter_m: float in [MOSS_ENTER_M, MOSS_ENTER_M * 0.7, 2.0]:
+				for swing: float in [0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0]:
+					var enter := planet.dir_of(p + out_t.rotated(up, deg_to_rad(swing)) * enter_m)
+					if _walk_clear(enter, stop):
+						_moss_stop_dir = stop
+						_moss_enter_dir = enter
+						return
+
+
+func _crate_dir_for(stop: Vector3, sgn: float) -> Vector3:
+	var p := planet.surface_point(stop)
+	var up := planet.up_at(p)
+	var outward := _tangent(planet.surface_point(_slot_dir(_axis, MOSS_STOP_ALONG, 50.0 * sgn)) - p, up, _axis)
+	return planet.dir_of(p + outward * MOSS_CRATE_SIDE_M)
+
+
+func _walk_clear(a: Vector3, b: Vector3) -> bool:
+	var n := int(ceil(planet.surface_distance(a, b) / 0.6))
+	for i in n + 1:
+		var d := a.slerp(b, float(i) / float(maxi(n, 1))).normalized()
+		var g := _ground(d)
+		for bad: String in MOSS_WALK_BLOCKERS:
+			if g == bad:
+				return false
+		if _ships != null and bool(_ships.call("blocks", d, 0.5)):
+			return false
+	return true
+
+
+## A spot a pod (or Moss, or the crate) may stand on: `_ground` clear, `clear_m` from every crowd, step-back
+## and mark spot, off the ships, and (for a pod) off the send-off's low eyes.
+func _pod_spot_ok(d: Vector3, clear_m: float, check_eyes: bool) -> bool:
+	return _pod_spot_why(d, clear_m, check_eyes) == ""
+
+
+var _pod_why: Dictionary = {}
+
+
+func _pod_spot_why(d: Vector3, clear_m: float, check_eyes: bool) -> String:
+	var g := _ground(d)
+	# A 1 m pod may stand on paving, by the landing spot or the spawn (rules for where a PERSON may stand).
+	if g != "" and not POD_GROUND_OK.has(g):
+		return g
+	var p := planet.surface_point(d)
+	if p.distance_to(_mark) < clear_m + 0.6 or p.distance_to(planet.surface_point(_board_dir)) < clear_m:
+		return "mark"
+	for id in _dirs:
+		if p.distance_to(planet.surface_point(_dirs[id] as Vector3)) < clear_m:
+			return "crowd"
+	for id in _back_dirs:
+		if p.distance_to(planet.surface_point(_back_dirs[id] as Vector3)) < clear_m:
+			return "stepback"
+	if _ships != null and bool(_ships.call("blocks", d, POD_SHIP_M)):
+		return "ship"
+	if check_eyes:
+		var up := planet.dir_of(p)
+		for e: Vector3 in _launch_eyes():
+			var v := e - p
+			var over := v.dot(up)
+			if over < POD_EYE_LOW_H and (v - up * over).length() < POD_EYE_M:
+				return "eye"
+	return ""
+
+
+var _eyes_cache := PackedVector3Array()
+var _eyes_done := false
+
+
+## FinaleLaunch's authored send-off eyes, exactly as `_place_ships` computes them for the ships.
+func _launch_eyes() -> PackedVector3Array:
+	if _eyes_done:
+		return _eyes_cache
+	_eyes_done = true
+	if not ResourceLoader.exists(LAUNCH_PATH):
+		return _eyes_cache
+	var acc := Vector3.ZERO
+	var cnt := 0
+	for id in _back_dirs:
+		acc += planet.surface_point(_back_dirs[id] as Vector3)
+		cnt += 1
+	var lc := planet.surface_point(planet.dir_of(acc / float(cnt))) if cnt > 0 else _crowd_centre
+	var up_l := planet.dir_of(lc)
+	var b_c := _tangent(_pad_ground - lc, up_l, -_axis)
+	_eyes_cache = load(LAUNCH_PATH).call("eye_samples", planet, lc, b_c, up_l.cross(b_c).normalized())
+	return _eyes_cache
+
+
+func _pick_pod_dirs() -> void:
+	_pod_dirs.clear()
+	var c := _crowd_centre
+	var up_c := planet.dir_of(c)
+	var back := _tangent(c - _pad_ground, up_c, _axis)
+	var right := back.cross(up_c).normalized()
+	# Azimuths from behind the crowd outward, alternating sides, so the pods spread round the back first.
+	var azs: Array[float] = [0.0]
+	var a := POD_AZ_STEP
+	while a <= POD_AZ_MAX + 0.01:
+		azs.append(a)
+		azs.append(-a)
+		a += POD_AZ_STEP
+	var stop_p := planet.surface_point(_moss_stop_dir) if _moss_stop_dir != Vector3.ZERO else Vector3.INF
+	for rho: float in POD_RINGS:
+		for az: float in azs:
+			if _pod_dirs.size() >= POD_COUNT:
+				return
+			var r := deg_to_rad(az)
+			var d := planet.dir_of(c + (back * cos(r) + right * sin(r)) * rho)
+			var why := _pod_spot_why(d, POD_CLEAR_M, true)
+			if why != "":
+				_pod_why[why] = int(_pod_why.get(why, 0)) + 1
+				continue
+			var p := planet.surface_point(d)
+			if stop_p != Vector3.INF and p.distance_to(stop_p) < POD_GAP_M:
+				continue
+			var near := false
+			for q: Vector3 in _pod_dirs:
+				if p.distance_to(planet.surface_point(q)) < POD_GAP_M:
+					near = true
+					break
+			if not near:
+				_pod_dirs.append(d)
+
+
+func _pod_xf(d: Vector3, i: int) -> Transform3D:
+	var xf := planet.surface_transform(d, _axis)
+	xf.basis = xf.basis.rotated(xf.basis.y.normalized(), 0.9 * float(i)) * Basis.from_scale(Vector3.ONE * (0.85 + 0.1 * float(i % 3)))
+	xf.origin -= xf.basis.y.normalized() * 0.04
+	return xf
+
+
+func _crate_ground_xf() -> Transform3D:
+	var d := _crate_dir_for(_moss_stop_dir, _moss_side())
+	return planet.surface_transform(d, _tangent(_crowd_centre - planet.surface_point(d), planet.dir_of(planet.surface_point(d)), _axis))
+
+
+## +1 when Moss's spot is on the astronaut's right, -1 on the left.
+func _moss_side() -> float:
+	if _moss_stop_dir == Vector3.ZERO:
+		return 1.0
+	var right := _slot_dir(_axis, MOSS_STOP_ALONG, 1.0)
+	var left := _slot_dir(_axis, MOSS_STOP_ALONG, -1.0)
+	return 1.0 if _moss_stop_dir.distance_to(right) < _moss_stop_dir.distance_to(left) else -1.0
+
+
+## The crate: a packing crate with one pod peeking out of it (1 + 3 draws).
+func _make_crate() -> Node3D:
+	var root := Node3D.new()
+	root.name = "PodCrate"
+	# The same packing crate the neighbours' ships stand beside (NeighbourShips.make_crates, the Commons'
+	# own building material), in Fen's swampy palette; a plain box if that file is missing.
+	var box: MeshInstance3D = null
+	if ResourceLoader.exists(SHIPS_PATH):
+		box = load(SHIPS_PATH).call("make_crates", "fen", -0.26, 1) as MeshInstance3D
+	if box == null:
+		box = MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.7, 0.5, 0.6)
+		box.mesh = bm
+		box.material_override = MaterialLib.toon(CRATE_COL)
+		box.position = Vector3(0.0, 0.25, 0.0)
+	box.name = "Box"
+	root.add_child(box)
+	var peek := MeteorProps.glow_pod(0.45, 1.3, 0.25)
+	peek.name = "Peek"
+	peek.position = Vector3(0.05, 0.36, 0.0)
+	peek.rotation = Vector3(0.0, 0.0, -0.25)
+	root.add_child(peek)
+	return root
+
+
+## MEETING's "moss" action. Awaitable. Nothing happens (logged) when no spot passed or Moss's scene is missing:
+## the pods then simply appear on W and the party goes on.
+func _moss_beat(runner: DialogueRunner) -> void:
+	var have_moss := _moss_stop_dir != Vector3.ZERO and ResourceLoader.exists(MOSS_SCENE) and _party != null
+	if not have_moss:
+		_beat("moss: no spot or no scene; pods only")
+		await _pods_fly()
+		return
+	# Moss walks in with the crate hovering at his outer side.
+	_moss = _spawn_moss()
+	var stop_p := planet.surface_point(_moss_stop_dir)
+	var head := stop_p + planet.up_at(stop_p) * MOSS_HEAD_H
+	_hold_crowd(head)
+	_face_player_toward(head)
+	var shot := _moss_shot(stop_p)
+	# A cut behind a short navy dip, not a blend: the move from the last close-up to the flank crossed the
+	# crowd's heads (first run, frame moss_walk1).
+	await dip(1.0, DIP_OUT_S)
+	if not is_inside_tree():
+		return
+	_snap_camera(shot[0] as Transform3D, float(shot[1]))
+	_rule = "moss"
+	_crate.visible = true
+	_carry_crate(0.0)
+	await _wait(DIP_HOLD_S)
+	await dip(0.0, DIP_IN_S)
+	var t := 0.0
+	# His own first physics frame places him (NPC._place_home); stroll_to is a no-op before that.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if not is_inside_tree():
+		return
+	if is_instance_valid(_moss):
+		_moss.call("stroll_to", _moss_stop_dir)
+	while is_inside_tree() and t < MOSS_WALK_MAX and is_instance_valid(_moss) and bool(_moss.call("is_strolling")):
+		t += minf(get_process_delta_time(), MAX_STEP)
+		_carry_crate(t)
+		await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	await _set_crate_down()
+	if is_instance_valid(_moss):
+		_moss.call("hold_facing", _mark_look())
+	await _await_camera(CAMERA_WAIT_MAX)
+	if not is_inside_tree():
+		return
+	_beat("moss arrived (walk %.2f s) shot=%s" % [t, str(shot[2])])
+	var prof := npc(PROF)
+	var intro: Array = _lines.get("MOSS_MET" if GameState.flag("moss_met") else "MOSS_NEW") if _lines != null else []
+	for turn: Dictionary in intro:
+		await runner.say(prof, turn.get("lines", []))
+	if not is_inside_tree():
+		return
+	var arrive: Array = _lines.get("MOSS_ARRIVE") if _lines != null else []
+	for turn: Dictionary in arrive:
+		if is_instance_valid(_moss):
+			await runner.say(_moss, turn.get("lines", []))
+	if not is_inside_tree():
+		return
+	# The pods fly out round the square; the whole crowd on W, looking at them.
+	_hold_crowd(_mark_look())
+	_face_player_toward(_crowd_centre)
+	camera_to("W")
+	await _await_camera(CAMERA_WAIT_MAX)
+	await _pods_fly()
+	if not is_inside_tree():
+		return
+	var leave: Array = _lines.get("MOSS_LEAVE") if _lines != null else []
+	for turn: Dictionary in leave:
+		if is_instance_valid(_moss):
+			await runner.say(_moss, turn.get("lines", []))
+	if is_instance_valid(_moss):
+		_moss.call("release_facing")
+		_moss.call("play_emote", "wave")
+		_moss_walk_off()
+	_beat("moss beat done")
+
+
+func _spawn_moss() -> Node3D:
+	var m := (load(MOSS_SCENE) as PackedScene).instantiate() as NPC
+	m.name = "MossGuest"
+	m.set("stall_home", _moss_enter_dir)
+	var root := _world.get_node_or_null("NPCs")
+	if root == null:
+		root = _world
+	root.add_child(m)
+	m.planet = planet
+	m.walk_speed = MOSS_WALK_MPS
+	m.wander_enabled(false)
+	return m
+
+
+## Moss's two-shot: from the flank, over his shoulder side, his head and the crate in frame and the crowd behind
+## him. Candidates round him (yaw from the look at the crowd, MOSS_SHOT_DISTS out, MOSS_SHOT_EYE_H up); each eye
+## must stand on clear ground off the ships, and the sight line to his head must hit nothing (a physics ray on
+## every layer but the player's). The best puts the crowd centre nearest behind him. Returns [xf, fov, note].
+func _moss_shot(stop_p: Vector3) -> Array:
+	var up := planet.up_at(stop_p)
+	var head := stop_p + up * MOSS_HEAD_H
+	var aim := stop_p + up * (MOSS_HEAD_H - 0.25)
+	var crowd_h := _crowd_centre + planet.up_at(_crowd_centre) * 1.0
+	var to_mark := _tangent(_mark - stop_p, up, _axis)
+	var space := planet.get_world_3d().direct_space_state
+	var bodies: Array[Vector3] = [_player.global_position]
+	for id in _ids:
+		var n := npc(id)
+		if n != null:
+			bodies.append(n.global_position)
+	var best: Array = []
+	var best_score := -INF
+	for dist: float in MOSS_SHOT_DISTS:
+		for yaw_deg: float in [0.0, 20.0, -20.0, 40.0, -40.0, 60.0, -60.0]:
+			var dir := to_mark.rotated(up, deg_to_rad(yaw_deg))
+			var foot := stop_p + dir * dist
+			var d := planet.dir_of(foot)
+			var g := _ground(d)
+			if g == "water" or g == "house" or g == "prop" or g == "decoration":
+				continue
+			if _ships != null and bool(_ships.call("blocks", d, 0.8)):
+				continue
+			var ground_p := planet.surface_point(d)
+			var near := false
+			for q: Vector3 in bodies:
+				if ground_p.distance_to(q) < 1.0:
+					near = true
+			if near:
+				continue
+			var eye := ground_p + planet.up_at(ground_p) * MOSS_SHOT_EYE_H
+			var q := PhysicsRayQueryParameters3D.create(eye, head)
+			if _moss != null and is_instance_valid(_moss):
+				q.exclude = [(_moss as CollisionObject3D).get_rid()]
+			if not space.intersect_ray(q).is_empty():
+				continue
+			var f := (aim - eye).normalized()
+			# His face (he faces the mark), the least turn off it, and the crowd as near the frame as it comes.
+			var score := 0.4 * f.dot((crowd_h - eye).normalized()) - 0.25 * absf(yaw_deg) / 20.0 - 0.1 * absf(dist - 3.2)
+			if score > best_score:
+				best_score = score
+				best = [Transform3D(Basis.looking_at(f, up), eye), MOSS_SHOT_FOV, "yaw%d d%.1f s%.2f" % [int(yaw_deg), dist, score]]
+	if best.is_empty():
+		var xf_w: Array = shot_xf("W")
+		if xf_w.size() == 2:
+			return [xf_w[0], xf_w[1], "W (no clear moss shot)"]
+		var eye0 := stop_p + to_mark * 3.2 + up * MOSS_SHOT_EYE_H
+		return [Transform3D(Basis.looking_at((aim - eye0).normalized(), up), eye0), MOSS_SHOT_FOV, "fallback"]
+	return best
+
+
+## While Moss walks: the crate floats at his outer side, knee-high, bobbing a little.
+func _carry_crate(t: float) -> void:
+	if not is_instance_valid(_moss):
+		return
+	var mxf := (_moss as Node3D).global_transform
+	var up := planet.up_at(mxf.origin)
+	var side := _tangent(planet.surface_point(_crate_dir_for(_moss_stop_dir, _moss_side())) - planet.surface_point(_moss_stop_dir), up, mxf.basis.x)
+	var pos := mxf.origin + side * MOSS_CRATE_SIDE_M + up * (0.35 + 0.05 * sin(t * 5.0))
+	_crate.global_transform = Transform3D(mxf.basis, pos)
+
+
+func _set_crate_down() -> void:
+	var from := _crate.global_transform
+	var to := _crate_ground_xf()
+	var t := 0.0
+	while is_inside_tree() and t < 0.4:
+		t += minf(get_process_delta_time(), MAX_STEP)
+		_crate.global_transform = from.interpolate_with(to, _ease_io(t / 0.4))
+		await get_tree().process_frame
+	_crate.global_transform = to
+
+
+static func _ease_io(x: float) -> float:
+	var k := clampf(x, 0.0, 1.0)
+	return k * k * (3.0 - 2.0 * k)
+
+
+## Every pod flies out of the crate in a hop to its spot, one after another (POD_STAGGER_S), growing to full
+## size on the way. Awaitable: returns when the last one has landed.
+func _pods_fly() -> void:
+	var start := _crate.global_transform.origin + planet.up_at(_crate.global_transform.origin) * 0.5 if _crate != null else _crowd_centre
+	var total := POD_FLY_S + POD_STAGGER_S * float(maxi(_pods.size() - 1, 0))
+	var t := 0.0
+	var ends: Array[Transform3D] = []
+	for i in _pods.size():
+		ends.append(_pod_xf(_pod_dirs[i], i))
+	AudioManager.play_sfx("ui_open", -10.0)
+	while is_inside_tree() and t < total:
+		t += minf(get_process_delta_time(), MAX_STEP)
+		for i in _pods.size():
+			var k := clampf((t - POD_STAGGER_S * float(i)) / POD_FLY_S, 0.0, 1.0)
+			var pod := _pods[i]
+			pod.visible = k > 0.0
+			if k <= 0.0:
+				continue
+			var e := ends[i]
+			var up := planet.up_at(e.origin)
+			var pos := start.lerp(e.origin, _ease_io(k)) + up * (POD_HOP_M * 4.0 * k * (1.0 - k))
+			var sc := lerpf(0.35, 1.0, _ease_io(k))
+			pod.global_transform = Transform3D(e.basis.orthonormalized().scaled_local(Vector3.ONE * sc * e.basis.get_scale().x), pos)
+		await get_tree().process_frame
+	for i in _pods.size():
+		_pods[i].visible = true
+		_pods[i].global_transform = ends[i]
+
+
+## He walks back out the way he came, then is freed once the camera cannot see him (or MOSS_GONE_MAX).
+func _moss_walk_off() -> void:
+	var m := _moss
+	m.call("stroll_to", _moss_enter_dir)
+	var t := 0.0
+	while is_inside_tree() and is_instance_valid(m) and t < MOSS_GONE_MAX:
+		t += minf(get_process_delta_time(), MAX_STEP)
+		var cam := get_viewport().get_camera_3d()
+		var seen := cam != null and cam.is_position_in_frustum((m as Node3D).global_position + planet.up_at((m as Node3D).global_position) * 0.6)
+		if not bool(m.call("is_strolling")) and not seen:
+			break
+		await get_tree().process_frame
+	if is_instance_valid(m):
+		m.queue_free()
+	_moss = null
 
 
 # ============================================================================= the night (§0)
@@ -1606,6 +2101,8 @@ func _play_meeting() -> void:
 					camera_to("W")
 					await _await_camera(CAMERA_WAIT_MAX)
 					await _wait(PAUSE_S)
+				"moss":
+					await _moss_beat(runner)
 				_:
 					# "All turn to the player": the crowd turns to the astronaut and the rocket behind them
 					# (from the crowd both lie along the axis), framed side-on (S), as the old "turn to the rocket".

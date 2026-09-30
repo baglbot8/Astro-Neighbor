@@ -1293,7 +1293,11 @@ const SCRAPBOOK_TITLES := {
 }
 ## The planets the scrapbook lists, in the story's order (planet_score.gd TRUST_NPCS; written out so this
 ## autoload names no other class). Only those with a safari manifest are shown.
-const SCRAPBOOK_PLANETS: Array[String] = ["zorp", "bolt", "fen", "grig", "vela"]
+## "jungle" (The Tangle, JWIRE 2026-09-29, docs/JUNGLE_PLANET_SPEC.md) is not part of that story order -
+## it is a locked side world, so `scrapbook_planets()` also gates it on GameState.flags["jungle_open"]
+## (the same flag the rocket pad and space map lock it behind) rather than showing its "???" pages before
+## the player has ever been able to go there.
+const SCRAPBOOK_PLANETS: Array[String] = ["zorp", "bolt", "fen", "grig", "vela", "jungle"]
 
 ## Emitted when a paid session raises a planet's best total (spec 15.2's "one safari worth N").
 signal best_total_changed(planet_id: String, total: int)
@@ -1945,6 +1949,11 @@ func _close_planet_panel() -> void:
 func scrapbook_planets() -> Array:
 	var out: Array = []
 	for pid: String in SCRAPBOOK_PLANETS:
+		# The Tangle is locked (JUNGLE_PLANET_SPEC.md 2, "a new rocket destination... locked by
+		# GameState.flags['jungle_open']"): its pages stay out of the scrapbook until that flag is set,
+		# same as the rocket pad and space map hide the world itself until then.
+		if pid == "jungle" and not GameState.flag("jungle_open"):
+			continue
 		if not _planet_manifest(pid).is_empty():
 			out.append(pid)
 	for pid: String in planet_ids_with_data():
@@ -2105,8 +2114,11 @@ func _refresh_planet_panel() -> void:
 			var mine := rows.filter(func(x: Dictionary) -> bool: return str(x["planet"]) == pid)
 			var got := mine.filter(func(x: Dictionary) -> bool: return bool(x["filled"])).size()
 			var host := _planet_host(pid)
-			_planet_body.add_child(_planet_section_header("%s's world - %d of %d" % [
-				_npc_display_name(host) if host != "" else pid.capitalize(), got, mine.size()]))
+			# The Tangle's heading names the WORLD, not Moss (JUNGLE_PLANET_SPEC.md 3: Moss hosts the
+			# safari but is "not a neighbour" - "Moss's world" would wrongly read like a neighbour's).
+			var heading := "The Tangle" if pid == "jungle" else (
+				_npc_display_name(host) + "'s world" if host != "" else pid.capitalize() + "'s world")
+			_planet_body.add_child(_planet_section_header("%s - %d of %d" % [heading, got, mine.size()]))
 			grid = _planet_grid()
 		grid.add_child(_planet_subject_row(str(r["key"])))
 	# A Friends favourite no roster lists (an old save, a neighbour from a world without a manifest).
@@ -2211,7 +2223,19 @@ func _home_photo_cell(rec: Dictionary) -> Control:
 	row.add_theme_constant_override("separation", 12)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var id := str(rec.get("id", ""))
-	row.add_child(_planet_thumb_rect(str(rec.get("thumb_b64", "")), "Home photo"))
+	var b64 := str(rec.get("thumb_b64", ""))
+	var thumb := _planet_thumb_rect(b64, "Home photo")
+	row.add_child(thumb)
+	# FILTERS (builder HOMECAM, docs/JUNGLE_PLANET_SPEC.md 6.1): the stored photo is never changed; its
+	# look is drawn on top (HomeAlbumFilters), here and in the enlarged view. The thumb's own
+	# tap-to-enlarge is re-pointed so the big view shows the same look.
+	var fid := HomeAlbumStore.get_filter(rec)
+	HomeAlbumFilters.apply_to(thumb, fid)
+	for n in thumb.find_children("*", "Button", true, false):
+		var tap := n as Button
+		for c: Dictionary in tap.pressed.get_connections():
+			tap.pressed.disconnect(c["callable"])
+		tap.pressed.connect(func(): _home_show_enlarged(b64, fid))
 
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2230,9 +2254,43 @@ func _home_photo_cell(rec: Dictionary) -> Control:
 	cb.toggled.connect(func(on: bool): _home_toggle_select(id, on))
 	info.add_child(cb)
 
+	if not HomeAlbumFilters.owned().is_empty() or fid != "":
+		var fb := _mk_button("Filter: %s" % HomeAlbumFilters.display_name(fid), func(): _home_cycle_filter(id, fid))
+		fb.name = "HomeFilterButton"
+		info.add_child(fb)
+
 	info.add_child(_mk_button("Throw away", func():
 		_confirm_popup("Throw away this photo?", "Throw away", func(): _home_delete_one(id))))
 	return row
+
+
+## One tap moves a photo to the next owned filter, then back to None (HomeAlbumFilters.next_after).
+func _home_cycle_filter(id: String, current: String) -> void:
+	HomeAlbumStore.set_filter(id, HomeAlbumFilters.next_after(current))
+	_refresh_planet_panel()
+
+
+func _home_show_enlarged(b64: String, fid: String) -> void:
+	var title := "Home photo" if fid == "" else "Home photo - %s" % HomeAlbumFilters.display_name(fid)
+	_show_enlarged(b64, title)
+	if is_instance_valid(_enlarge_panel):
+		HomeAlbumFilters.apply_to(_enlarge_panel, fid)
+
+
+## SYNTHETIC - opens the enlarged view of home photo number `i` (oldest first) with its filter.
+func debug_open_home_enlarge(i: int) -> bool:
+	var recs := HomeAlbumStore.list()
+	if i < 0 or i >= recs.size():
+		return false
+	_home_show_enlarged(str(recs[i].get("thumb_b64", "")), HomeAlbumStore.get_filter(recs[i]))
+	return _enlarge_overlay != null
+
+
+## SYNTHETIC - the tap handler of photo `i`'s "Filter" button, without a finger.
+func debug_home_cycle_filter(i: int) -> void:
+	var recs := HomeAlbumStore.list()
+	if i >= 0 and i < recs.size():
+		_home_cycle_filter(str(recs[i].get("id", "")), HomeAlbumStore.get_filter(recs[i]))
 
 
 func _home_toggle_select(id: String, on: bool) -> void:

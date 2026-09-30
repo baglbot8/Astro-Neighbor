@@ -332,7 +332,10 @@ func _on_door(player: Node3D) -> void:
 	while true:
 		var choice: int = await ask("What'll it be?", ["Buy", "Sell", "Leave"])
 		if choice == 0:
-			await _open_shop(daily_stock(), "buy")
+			# ECON (2026-09-29): spare film leads the shelf (CameraGoods). MOSS2 (2026-09-30): the lenses
+			# moved to Moss on The Tangle (docs/JUNGLE_PLANET_SPEC.md 6); film stays here so nobody is
+			# stuck early.
+			await _open_shop(CameraGoods.depot_stock() + daily_stock(), "buy")
 		elif choice == 1:
 			await _open_shop([], "sell")
 		else:

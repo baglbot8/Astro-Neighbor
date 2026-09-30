@@ -205,6 +205,15 @@ func _setup_terrain() -> void:
 		if bd != Vector3.ZERO:
 			_add_reserved(bid, bd, (HUB_BUILDING_FLAT_RADIUS if bid != "player_home" else HOME_BUILDING_FLAT_RADIUS) + 1.0)
 	_reserve_npc_homes()
+	# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md, JungleLayout). The stall pitch by the pad and a line of
+	# samples down every trail are reserved HERE, before the craters are dug, so no swamp pool opens on a
+	# trail and no tree, rock or collectible grows on one. Kept after the crater/plateau trim below
+	# because they are appended before those entries.
+	if data.biome == "jungle":
+		_add_reserved(JungleLayout.STALL_ID, JungleLayout.stall_dir(data),
+			JungleLayout.STALL_FLAT_RADIUS + JungleLayout.STALL_MARGIN_M)
+		for td in JungleLayout.trail_samples(data):
+			_add_reserved("trail", td, JungleLayout.TRAIL_CLEAR_M)
 
 	# Craters: soft bowls with a raised rim, away from every reserved zone. Radius AND depth scale
 	# together — scaling only the radius (which is what this did before R2.11) turns a crater on a
@@ -239,6 +248,8 @@ func _setup_terrain() -> void:
 	# Flattened discs (after craters so their target height is final).
 	_add_flat(spawn, HUB_SPAWN_FLAT_RADIUS if is_hub else SPAWN_FLAT_RADIUS)
 	_add_flat(pad, PAD_FLAT_RADIUS)
+	if data.biome == "jungle":
+		_add_flat(JungleLayout.stall_dir(data), JungleLayout.STALL_FLAT_RADIUS)
 	for bid in data.buildings:
 		var bd := building_dir(bid)
 		if bd != Vector3.ZERO:
@@ -797,6 +808,22 @@ func _build_water() -> void:
 			m.set_shader_parameter("deep_range", 0.7)
 			# The chrome-only oil-film lever, used here with a low sun for the first time.
 			m.set_shader_parameter("sheen_strength", 0.18)
+		"jungle":
+			# THE TANGLE's swamp pools: still, dark and murky, with a faint teal glow from below that
+			# the eye reads as something living down there. Opaque enough that the crater floor goes.
+			m.set_shader_parameter("glow_color", Color("#5fd1b4"))
+			m.set_shader_parameter("glow_strength", 0.06)
+			m.set_shader_parameter("alpha_shallow", 0.88)
+			m.set_shader_parameter("alpha_deep", 0.96)
+			m.set_shader_parameter("deep_range", 0.9)
+			m.set_shader_parameter("wave_speed", 0.10)
+			m.set_shader_parameter("wave_strength", 0.12)
+			m.set_shader_parameter("bob", 0.004)
+			m.set_shader_parameter("foam_width", 0.14)
+			m.set_shader_parameter("foam_color", Color("#7a8f8c"))
+			m.set_shader_parameter("streak_strength", 0.08)
+			m.set_shader_parameter("sparkle_strength", 0.5)
+			m.set_shader_parameter("sheen_strength", 0.10)
 	water_mesh.material_override = m
 	add_child(water_mesh)
 
@@ -1149,6 +1176,43 @@ func _make_ground_material() -> ShaderMaterial:
 				# planet whose one warm colour is reserved for Vela's relay lamps. Same two-place rule Grig
 				# records above: the other half is "frost" in PlanetProps._collect_paths()'s early return,
 				# which only handles prop avoidance and does not stop the shader drawing the arc.
+			elif data.biome == "jungle":
+				# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md) - a moss floor under a canopy. The triangle
+				# generator runs dense and fine (moss, not lawn); the macro shade term is pushed up so the
+				# floor reads as canopy shade with sun flecks through it, which is what the eye expects
+				# under trees even where no tree happens to stand.
+				m.set_shader_parameter("cell_size", 0.34)
+				m.set_shader_parameter("tri_radius", 0.15)
+				m.set_shader_parameter("tri_density", 0.80)
+				# Muddy margin round every swamp pool. Above 0.12 on purpose - see the "chalk" arm's trap.
+				m.set_shader_parameter("sand_band", 0.34)
+				m.set_shader_parameter("shore_color", Color("#6e5560"))
+				m.set_shader_parameter("crater_color", Color("#6f6068"))
+				m.set_shader_parameter("patch_strength", 0.12)
+				m.set_shader_parameter("shadow_patch", 0.50)
+				m.set_shader_parameter("sun_patch", 1.90)
+				m.set_shader_parameter("sun_patch_lo", 0.60)
+				m.set_shader_parameter("sun_patch_amt", 0.65)
+				m.set_shader_parameter("sun_patch_tint", Color(1.0, 0.98, 0.88))
+				m.set_shader_parameter("limb_darken", 0.58)
+				m.set_shader_parameter("limb_tint", Color(0.58, 0.60, 0.76))
+				# Faint glowing moss specks (Zorp's spot generator, a fraction of its strength).
+				m.set_shader_parameter("speck_strength", 0.20)
+				m.set_shader_parameter("speck_color_a", Color("#9fe0cf"))
+				m.set_shader_parameter("speck_color_b", Color("#e9c58a"))
+				m.set_shader_parameter("river_glow", 0.0)
+				m.set_shader_parameter("shade_tint", Color(0.60, 0.70, 0.82))
+				m.set_shader_parameter("shadow_fill_color", Color("#a9a2c8"))
+				m.set_shader_parameter("shadow_fill", 0.28)
+				m.set_shader_parameter("pastel_max", 0.42)
+				m.set_shader_parameter("detail_grass", 2.9)
+				m.set_shader_parameter("detail_bump", 0.20)
+				# Trodden trails: a warm peat, darker than the meadow's tan so it sits in the shade.
+				m.set_shader_parameter("path_color", Color("#a58d73"))
+				m.set_shader_parameter("path_edge_color", Color("#84715d"))
+				m.set_shader_parameter("path_width", JungleLayout.TRAIL_WIDTH)
+				for arc in JungleLayout.trail_arcs(data):
+					pa2.append(arc[0]); pb2.append(arc[1])
 			else:
 				m.set_shader_parameter("crater_color", data.bank_color.lightened(0.12))
 				m.set_shader_parameter("sun_patch", 1.30)

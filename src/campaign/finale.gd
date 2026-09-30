@@ -68,6 +68,12 @@ const TURN_TIE_DEG := 3.0
 const PROFESSOR_ACCENT := Color("#c9a15c")
 ## docs/PHASE5_SPEC.md §1's table, verbatim, for stages 1/2 when you are not on the Commons.
 const ELSEWHERE_TOAST := "Everyone is waiting on the Commons."
+## THE TANGLE'S UNLOCK (docs/JUNGLE_PLANET_SPEC.md 6: "The Tangle opens mid-game, after the 4th part: Vela
+## hears a strange signal; it appears on the rocket map"). The flag space_travel.gd and
+## pad_destination_picker.gd already read (their LOCKED_UNTIL), set by `_run_signal_call` after the FOURTH
+## part's celebration, or silently (with SIGNAL_TOAST) on any load already past it - see `_jungle_on_load`.
+const JUNGLE_FLAG := "jungle_open"
+const SIGNAL_PARTS := 4
 
 const CLI_ARG_PREFIX := "--finale="
 
@@ -83,6 +89,7 @@ var _saved_time_scale := 1.0
 ## hung (`_hang_radio`): docs/PHASE5_SPEC.md §0 "K call framing" - only the Call after the celebration
 ## must frame the gold rocket; a Call from a load plays wherever the astronaut stands.
 var _call_after_celebration := false
+var _awaiting_signal := false
 
 
 # ============================================================================= entry point
@@ -114,6 +121,7 @@ func _ready() -> void:
 	if cli_key != "":
 		_run_cli(cli_key)
 		return  # fire-and-forget: the debug function this kicks off ends in go_to_planet either way.
+	_jungle_on_load()
 	if not CampaignData.gates_on():
 		return  # INERT: old save, finished story, or a Director run without --campaign.
 	_run_arrival_logic()
@@ -127,13 +135,18 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _awaiting_calm:
+	if not _awaiting_calm and not _awaiting_signal:
 		return
 	if _pc != null and is_instance_valid(_pc) and _pc._can_start():
 		_calm_t += delta
 		if _calm_t >= CALM_HOLD:
-			_awaiting_calm = false
-			_run_call()
+			if _awaiting_signal:
+				_awaiting_signal = false
+				_calm_t = 0.0
+				_run_signal_call()
+			elif _awaiting_calm:
+				_awaiting_calm = false
+				_run_call()
 	else:
 		_calm_t = 0.0
 
@@ -227,13 +240,87 @@ func _watch_for_call() -> void:
 		_pc.finished.connect(_on_part_celebration_finished)
 	if GameState.rocket_part_count() >= CampaignData.PARTS.size():
 		_begin_calm_wait(false)
+	elif _jungle_due():
+		_begin_signal_wait()  # a home load at part 4 whose signal call never played (`_jungle_on_load`).
 
 
 func _on_part_celebration_finished(_skipped: bool) -> void:
 	if FinaleState.stage() != 0:
 		return
 	if GameState.rocket_part_count() >= CampaignData.PARTS.size():
+		# Parts 4 and 5 fitted into one celebration: the Professor's Call wins; the Tangle opens quietly.
+		if _jungle_due():
+			_open_jungle_quietly("part 5 with part 4")
 		_begin_calm_wait(true)
+	elif _jungle_due():
+		_begin_signal_wait()
+
+
+# ============================================================================= the Tangle's signal (part 4)
+func _jungle_due() -> bool:
+	return GameState.rocket_part_count() >= SIGNAL_PARTS and not GameState.flag(JUNGLE_FLAG)
+
+
+## Every load: a save already past the fourth part gets the flag now, silently with SIGNAL_TOAST - except a
+## campaign home load at exactly part 4 at finale stage 0, where Vela's call plays once the world is calm
+## (`_watch_for_call` starts that wait; the call sets the flag as it begins).
+func _jungle_on_load() -> void:
+	if not _jungle_due():
+		return
+	var call_here := CampaignData.gates_on() and GameState.current_planet_id == HOME_ID \
+		and FinaleState.stage() == 0 and GameState.rocket_part_count() < CampaignData.PARTS.size()
+	if not call_here:
+		_open_jungle_quietly("load")
+
+
+func _open_jungle_quietly(why: String) -> void:
+	GameState.set_flag(JUNGLE_FLAG)
+	print("FINALE jungle_open set (%s, parts %d)" % [why, GameState.rocket_part_count()])
+	if CampaignData.gates_on():
+		EventBus.toast_requested.emit(FinaleLines.SIGNAL_TOAST, "star")
+
+
+func _begin_signal_wait() -> void:
+	if _awaiting_signal or _running_call:
+		return
+	_awaiting_signal = true
+	_calm_t = 0.0
+	set_process(true)
+
+
+## Vela on the radio (FinaleLines.SIGNAL), hung and framed exactly like the Professor's Call after a
+## celebration (`_hang_radio` with `_call_after_celebration`: the rocket in frame). The flag is written as it
+## starts, so quitting mid-call still opens the Tangle; a checkpoint after it (FinaleState.checkpoint, which
+## respects --no-autosave) keeps the call from playing again on the next load.
+func _run_signal_call() -> void:
+	if _running_call:
+		return
+	_running_call = true
+	set_process(_awaiting_calm)
+	GameState.set_flag(JUNGLE_FLAG)
+	print("FINALE jungle_open set (Vela's signal call, parts %d)" % GameState.rocket_part_count())
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		_running_call = false
+		EventBus.toast_requested.emit(FinaleLines.SIGNAL_TOAST, "star")
+		return
+	var accent := Color(str(NpcData.get_data("vela").get("accent", "#a98a9e")))
+	var radio := RadioSpeaker.make("vela_radio", "%s (radio)" % Journal.npc_name("vela"), "vela", accent)
+	var was_after := _call_after_celebration
+	_call_after_celebration = true
+	_hang_radio(radio, player)
+	_call_after_celebration = was_after
+	AudioManager.play_sfx("ui_open", -8.0)
+	var runner := DialogueRunner.get_or_create(self)
+	runner.begin(radio, player)
+	for turn: Dictionary in FinaleLines.SIGNAL:
+		await runner.say(radio, turn.get("lines", []))
+	runner.finish()
+	if is_instance_valid(radio):
+		radio.queue_free()
+	EventBus.toast_requested.emit(FinaleLines.SIGNAL_TOAST, "star")
+	FinaleState.checkpoint()
+	_running_call = false
 
 
 func _begin_calm_wait(after_celebration: bool) -> void:

@@ -40,7 +40,8 @@ const OPEN_FLAG := "professor_neighbour_photo_open"
 
 ## THE PAYMENT, unchanged from the lantern-fish task (a modest thank-you, not an economy change; paid in
 ## STARDUST - the lead's 2026-09-22 unit fix). Spec 15.3 names the number: 15 stardust, once.
-const PROFESSOR_PAY := 15
+## ECON (2026-09-29): 15 -> 50, in step with the visitor's pay and the raised prices (once, ever).
+const PROFESSOR_PAY := 50
 
 
 ## Opens the task. Called by the radio call; a no-op once he has been paid (the dev menu's replay).

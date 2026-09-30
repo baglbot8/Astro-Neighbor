@@ -195,11 +195,15 @@ static func plume() -> MeshInstance3D:
 	return mi
 
 
-## THE TARGET BEACON placed on a marked weak point: a ring round the outcrop, a pole with a blinking lamp,
-## and a thin beam straight up (the ships fly to these, spec 9.1). Amber (BEACON), in meteor_beacon_glow's MIXED
-## light, not meteor_fx's additive one: additive, the lamp and the ring's edge read cream-white whatever the
-## energy (that shader's header has the measurements). The lamp is the same camera-facing glow the send-off
-## shows on the rock, so the beacon planted here is the one seen there.
+## THE TARGET BEACON placed on a marked weak point: a ring round the outcrop, one of MOSS'S GLOW PODS planted
+## on its edge with its amber glow, and a thin beam straight up (the ships fly to these, spec 9.1). The pods are
+## the ones Moss brought to the goodbye party as its lights (docs/JUNGLE_PLANET_SPEC.md 6, the user: "Bonus
+## points if the thing that Moss provides for the farewell party ends up being used as the beacons"), so the
+## pod is `glow_pod()` - the same builder finale_meeting.gd plants round the Commons. Amber (BEACON), in
+## meteor_beacon_glow's MIXED light, not meteor_fx's additive one: additive, the glow and the ring's edge read
+## cream-white whatever the energy (that shader's header has the measurements). The pod's glow is the same
+## camera-facing glow the send-off shows on the rock, so the beacon planted here is the one seen there.
+## Child names: Ring, Pod, Lamp (the glow), Beam.
 static func beacon() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Beacon"
@@ -215,27 +219,12 @@ static func beacon() -> Node3D:
 	ring.position = Vector3(0.0, 0.12, 0.0)
 	ring.scale = Vector3(1.0, 0.35, 1.0)
 	root.add_child(ring)
-	var pole := MeshInstance3D.new()
-	pole.name = "Pole"
-	var c := CylinderMesh.new()
-	c.top_radius = 0.05
-	c.bottom_radius = 0.07
-	c.height = 3.2
-	c.radial_segments = 10
-	pole.mesh = c
-	pole.material_override = MaterialLib.metal(POLE_METAL)
-	pole.position = Vector3(1.85, 1.3, 0.0)
-	root.add_child(pole)
-	var lamp := MeshInstance3D.new()
-	lamp.name = "Lamp"
-	var q := QuadMesh.new()
-	# The glow's solid disc (a third of the half-size, meteor_beacon_glow `core`) is the old 0.2 m lamp.
-	q.size = Vector2(1.2, 1.2)
-	lamp.mesh = q
-	lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	lamp.material_override = beacon_mat(0, 0.6, 5.0, 0.45)
-	lamp.position = Vector3(1.85, 2.98, 0.0)
-	root.add_child(lamp)
+	# The pod stands where the old pole did (on the ring, 1.85 m out), 1.25x a party pod so it still reads from
+	# the survey's usual 6-12 m. Its own Lamp is the beacon's blinking lamp (blink 5.0, like the old lamp).
+	var pod := glow_pod(1.25, 5.0, 0.45)
+	pod.name = "Pod"
+	pod.position = Vector3(1.85, 0.0, 0.0)
+	root.add_child(pod)
 	var beam := MeshInstance3D.new()
 	beam.name = "Beam"
 	var b := CylinderMesh.new()
@@ -248,8 +237,50 @@ static func beacon() -> Node3D:
 	b.cap_bottom = false
 	beam.mesh = b
 	beam.material_override = beacon_mat(1, 0.9, 5.0, 0.3, 0.9)
-	beam.position = Vector3(1.85, 3.1 + 20.0, 0.0)
+	beam.position = Vector3(1.85, POD_H * 1.25 + 20.0, 0.0)
 	root.add_child(beam)
+	return root
+
+
+## Height of a glow pod at scale 1 (JungleMeshes.seed_pod variant 0: 1.22 x 0.85 m, plus its tip).
+const POD_H := 1.15
+## The Tangle's own pod colours (jungle_props.gd POD_SHELL / POD_CAP: gold husk, indigo cap).
+const POD_SHELL := Color("#9e7d4c")
+const POD_CAP := Color("#4b3d5c")
+## The light inside a glow pod's shell (BEACON, a touch deeper so the shell's own gold still shows).
+const POD_INNER := Color("#e08a2c")
+
+
+## ONE OF MOSS'S GLOW PODS: the Tangle's own seed-pod mesh (JungleMeshes.seed_pod, the pods that stand in
+## the jungle) with its seams lit amber, and the beacon's camera-facing amber glow ("Lamp") round its middle.
+## Used for the goodbye party's lights (finale_meeting.gd) and for the survey beacon above, so the pod the
+## player plants on the meteor is visibly the one from the party. Three draws (body, seams, glow quad), no
+## light, no shadow from the glow. `blink_speed` / `blink_amount` pulse the glow (a party pod breathes slowly,
+## a beacon blinks).
+static func glow_pod(size: float = 1.0, blink_speed: float = 1.2, blink_amount: float = 0.25) -> Node3D:
+	var root := Node3D.new()
+	root.name = "GlowPod"
+	var body := MeshInstance3D.new()
+	body.name = "Body"
+	body.mesh = JungleMeshes.seed_pod(POD_SHELL, POD_CAP, 0)
+	# The shell glows from inside (a warm amber emission under the bloom threshold, so it keeps its hue): at
+	# night a plain lit shell read as a dark rock (first party frame, choice_02).
+	body.set_surface_override_material(0, MaterialLib.toon_vertex_color({"emission": POD_INNER, "emission_strength": 0.55, "shade": 0.2}))
+	if body.mesh.get_surface_count() > 1:
+		body.set_surface_override_material(1, MaterialLib.flat_unlit(BEACON))
+	body.scale = Vector3.ONE * size
+	root.add_child(body)
+	var lamp := MeshInstance3D.new()
+	lamp.name = "Lamp"
+	var q := QuadMesh.new()
+	# 2.4x the pod's width, so the halo shows round the shell (the half of the quad behind the shell is hidden
+	# by depth, which is what makes it read as light from inside, not a disc in front).
+	q.size = Vector2(2.4, 2.4) * size
+	lamp.mesh = q
+	lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lamp.material_override = beacon_mat(0, 0.5, blink_speed, blink_amount)
+	lamp.position = Vector3(0.0, POD_H * 0.55 * size, 0.0)
+	root.add_child(lamp)
 	return root
 
 

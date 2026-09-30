@@ -118,9 +118,12 @@ var time_of_day: float = 9.5
 var day_count: int = 1
 
 ## FILM builder pass: how many camera upgrades have been bought. WIRE round: the cap and the cost
-## are SafariScoring's (FILM_UPGRADE_MAX_TIER 2, FILM_UPGRADE_COSTS [400, 850] scrap), not the FILM
-## round's own 2 x 340 stardust - "film numbers come from SafariScoring".
+## are SafariScoring's (FILM_UPGRADE_MAX_TIER 2, FILM_UPGRADE_COSTS - STARDUST since ECON 2026-09-29),
+## "film numbers come from SafariScoring".
 var film_upgrades: int = 0
+## ECON (2026-09-29): spare plates bought at Cosmo Depot (CameraGoods), waiting for the next planet
+## safari. `take_film_spares()` loads at most `film_spare_max()` of them into a trip; the rest wait.
+var film_spares: int = 0
 ## DAY round: `film_day` / `film_used` (the WIRE round's day box) ARE GONE. There is no per-day
 ## film state left to persist, because there is no per-day film. A save that still carries those
 ## two keys just ignores them (see `from_dict`), and a save written now does not write them.
@@ -256,6 +259,19 @@ func fit_rocket_part(part_id: String) -> bool:
 func rocket_part_count() -> int:
 	return rocket_parts.size()
 
+## ECON (2026-09-29, docs/ECONOMY_REPORT.md option 1): fitting a part costs scrap on a ladder IN FIT
+## ORDER - the first part you fit costs 30, the fifth 150 (450 in all) - whichever neighbour's it is,
+## since Zorp/Bolt and Fen/Grig run in parallel and the player picks the order. At the report's
+## ~55-75 scrap a day that is about half a day of sweeping per part, rising, never a hard wall.
+## The Build Bench reads this for every unfitted part (shop_panel.gd `_bench_entries`); the
+## neighbours' own `part_fit_scrap` in src/projects/data/*.gd carries the same ladder in the
+## campaign's usual order, for readers that look a part up in the Catalog (finale_state's dev reset).
+const PART_FIT_LADDER := [30, 60, 90, 120, 150]
+
+## Scrap the bench charges to fit the NEXT part (by how many are already fitted).
+func part_fit_scrap() -> int:
+	return int(PART_FIT_LADDER[clampi(rocket_parts.size(), 0, PART_FIT_LADDER.size() - 1)])
+
 # ----------------------------------------------------------------------------- inventory
 func add_item(item_id: String, count: int = 1) -> void:
 	inventory[item_id] = int(inventory.get(item_id, 0)) + count
@@ -347,7 +363,7 @@ func flag(key: String) -> bool:
 ##
 ## WHERE THE NUMBERS COME FROM, ONE PLACE NOW (SAFARI_FLIGHT_SPEC.md item 5, 2026-09-22, G4): all
 ## of it is `SafariScoring` - `FILM_BASE` (10), `FILM_UPGRADE_COSTS`/`FILM_UPGRADE_MAX_TIER`/
-## `FILM_UPGRADE_STEP` (400 then 850 scrap, 2 tiers, +3 plates a tier) and `FILM_BUY_PRICE`/
+## `FILM_UPGRADE_STEP` (stardust since ECON, 2 tiers, +3 plates a tier) and `FILM_BUY_PRICE`/
 ## `FILM_BUY_MAX` (23 dust, up to 4). This file used to carry its own live `FILM_BASE` (5) beside
 ## SafariScoring's dead one (4) - the papercut the lead flagged rather than silently pick a side on.
 ## `FILM_BASE` here is now an alias (see its own comment, above `film_upgrades`), so there is one
@@ -406,18 +422,41 @@ func film_upgrade_available() -> bool:
 	return film_upgrades < SafariScoring.FILM_UPGRADE_MAX_TIER
 
 
-## Spends the next tier's SCRAP (SafariScoring.film_upgrade_cost) to raise `film_capacity()` by
+## Spends the next tier's STARDUST (SafariScoring.film_upgrade_cost) to raise `film_capacity()` by
 ## FILM_UPGRADE_STEP plates ON EVERY TRIP, permanently: 10 -> 13 -> 16. Returns false, spending
-## nothing, if maxed or unaffordable. DAY round: it used to read "one plate a day"; the plates it
-## buys are per trip now.
+## nothing, if maxed or unaffordable. ECON (2026-09-29): was scrap, sold only by the retired space
+## safari; the user picked option 3 - stardust, at Cosmo Depot (CameraGoods) - so it applies to the
+## planet safari, which reads `film_capacity()` at the start of every trip.
 func buy_film_upgrade() -> bool:
 	if not film_upgrade_available():
 		return false
 	var cost := SafariScoring.film_upgrade_cost(film_upgrades)
-	if cost < 0 or not spend_scrap(cost):
+	if cost < 0 or not spend_stardust(cost):
 		return false
 	film_upgrades += 1
+	# A bigger magazine lowers film_spare_max(); spares past it would sit unusable - refund them.
+	var over := film_spares - film_spare_max()
+	if over > 0:
+		film_spares -= over
+		add_stardust(over * SafariScoring.FILM_BUY_PRICE)
 	return true
+
+## ECON: one spare plate, bought for the next safari. False, spending nothing, when the spares
+## already fill what one trip can load (`film_spare_max()`) or the stardust is short.
+func buy_film_spare() -> bool:
+	if film_spares >= film_spare_max():
+		return false
+	if not spend_stardust(SafariScoring.FILM_BUY_PRICE):
+		return false
+	film_spares += 1
+	return true
+
+## ECON: the planet safari calls this once as a trip starts: hands over (and uses up) the spares
+## that trip can carry. Film is still per trip - spares not taken wait for the next one.
+func take_film_spares() -> int:
+	var n := clampi(film_spares, 0, film_spare_max())
+	film_spares -= n
+	return n
 
 # ----------------------------------------------------------------------------- the day clock
 ## DAY round (2026-09-21): ADVANCE THE CLOCK FROM OUTSIDE A WORLD SCENE.
@@ -460,6 +499,7 @@ func to_dict() -> Dictionary:
 		"time_of_day": time_of_day,
 		"day_count": day_count,
 		"film_upgrades": film_upgrades,
+		"film_spares": film_spares,
 		"home_planet_name": home_planet_name,
 		"home_planet_size": home_planet_size,
 		"flags": flags,
@@ -498,6 +538,7 @@ func from_dict(d: Dictionary) -> void:
 	# A save from before this round, or from the old per-day box, has no key here: 0 upgrades bought,
 	# the honest default - it does not owe anyone a free upgrade they never paid for.
 	film_upgrades = clampi(int(d.get("film_upgrades", 0)), 0, SafariScoring.FILM_UPGRADE_MAX_TIER)
+	film_spares = clampi(int(d.get("film_spares", 0)), 0, SafariScoring.FILM_BUY_MAX)
 	# DAY round: a save written by the WIRE round still has "film_day"/"film_used" in it. They are
 	# read by nobody now - film is per trip - so they are dropped on the floor here and not written
 	# back out. A player mid-day in an old save gets a full magazine on their next flight, which is

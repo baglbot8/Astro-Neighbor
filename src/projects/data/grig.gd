@@ -122,7 +122,7 @@ static func definition() -> Dictionary:
 	return {
 		"npc": "grig",
 		"part": "part_grig",
-		"part_fit_scrap": 8,
+		"part_fit_scrap": 120,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
 			"Hmph. My chalk is dry. No water in it at all.",
 			"My stairs are dusty. Nothing grows on them.",
@@ -234,7 +234,16 @@ static func definition() -> Dictionary:
 				# everything)") - fitting for the one neighbour whose own voice is entirely about
 				# counting and totals, not a single named sight.
 				#
-				# N = 140, MEASURED (CLAUDE.md "no fitted constants" - not guessed), between the
+				# ECON RE-MEASURE (2026-09-29): N = 225. Grig's safari had gained content since 09-26 and
+				# all 6 diagnosis runs cleared 140 (docs/ECONOMY_REPORT.md problem 4). Same rule, same
+				# players, 5 seeds each, headless --fixed-fps 60, scratch copy "AN V1 ECON 0929", PAY_SCALE
+				# 0.90 (unchanged), 10 plates:
+				#   careless totals: 168, 171, 190, 199, 211 -> median 190
+				#   careful  totals: 198, 238, 260, 272, 279 -> median 260
+				# 225 is the midpoint of the two medians: every careless run falls short, 3 of 5 careful
+				# runs clear it. A bought lens (13 plates) lifts careless to 227-253 (3 runs), so the
+				# camera upgrade is one honest way past it. The history below is the 09-26 number.
+				# (old) N = 140, MEASURED (CLAUDE.md "no fitted constants" - not guessed), between the
 				# careless and careful test players' median SESSION totals on Grig
 				# (tools/ps_careless_player.gd / ps_careful_player.gd), 5 seeded runs each
 				# (--ps-seed=1..5), headless, --rendering-method gl_compatibility, --fixed-fps 60, in a
@@ -246,20 +255,20 @@ static func definition() -> Dictionary:
 				# (gets close, waits for a moment) clears it on most of the sampled runs (3 of 5 here) but
 				# not trivially on every one - not re-tuned against a bigger sample, per the same rule.
 				"type": "planet_photo",
-				"title": "Safari score: 140 stardust",
+				"title": "Safari score: 225 stardust",
 				"planet": "grig",
 				"kind": "score",
-				"target": 140,
+				"target": 225,
 				"lines": {
 					"ask": [
 						"Before I go. One safari here, on my hill.",
-						"Take photos worth 140 stardust. At least.",
+						"Take photos worth 225 stardust. At least.",
 					],
 					"progress": [
-						"Not 140 yet? Go again. Get closer this time.",
+						"Not 225 yet? Go again. Get closer this time.",
 					],
 					"already_have": [
-						"Already past 140? Hmph. You beat me to it.",
+						"Already past 225? Hmph. You beat me to it.",
 					],
 					"done": [
 						# STORY_HOME_SPEC.md 5.4 / PLANET_SAFARI_SPEC.md 17.1 rule 12: names the REAL session

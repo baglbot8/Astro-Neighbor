@@ -129,11 +129,45 @@ const BOOST_LOOP_CANDIDATES := ["jetpack_loop", "thruster_loop", "rocket_loop"]
 ## to be made per planet once the user has played it. Normal walking is untouched — this applies only
 ## while `set_safari_walk(true)`.
 const SAFARI_WALK_SPEED := 1.5
+## THE STEADY GRIP (GOODS, docs/JUNGLE_PLANET_SPEC.md 6.1: "walk slowly with the camera raised"): with the
+## camera up and the grip owned, the stick walks the astronaut at this speed instead of locking it. Half
+## the safari walk - a design number, like SAFARI_WALK_SPEED, to be tuned once the user has played it. No
+## run, hop or jetpack while it is on. Set by PlanetSafari.set_camera_up (`set_steady_walk`).
+const STEADY_WALK_SPEED := 0.75
 ## Apex of the hop kept during a safari, in metres (5.1: "a small hop is kept"). The normal jump peaks
 ## at 1.20 m (JUMP_VELOCITY^2 / 2g), which at eye height is a 2.3 m leap; the launch speed is solved
 ## from this height and the body's own gravity at the moment of the hop, so it stays this height on any
 ## planet. A design number, to be tuned with the walk after the user plays it.
 const SAFARI_HOP_HEIGHT := 0.5
+
+# ============================================================================= photo hover (builder HOVER)
+## docs/JUNGLE_PLANET_SPEC.md 6 (the user, 2026-09-30: "maybe he teaches you a skill like how to use your
+## jetpack during the safari? which helps you look around to help spot rarer events"). In a first-person
+## photo mode (a safari once Moss's lesson is learnt; the meteor survey always) one tap lifts the astronaut
+## HOVER_HEIGHT over the ground under them and holds them there while the small tank lasts; then (or on a
+## second tap) they drift down at HOVER_DRIFT_SPEED. A TAP, not a hold: on the phone the same thumb has to
+## reach the shutter while up there. The camera, the zoom and the shutter work as normal all the while.
+## Like the jetpack it only ever writes the velocity ALONG `up`: gravity, the walk and the sphere
+## alignment are untouched, and the tank refills only with both feet on the ground.
+## Feet over the ground held at the top: eye ~4.6 m, ~4x the standing eye. On the 22 m meteor rock the
+## horizon goes from 7 m to 14 m away (sqrt(2 R h)).
+const HOVER_HEIGHT := 3.5
+## Seconds of lift on a full tank (the climb takes ~1.3 s of it, the rest is the hold).
+const HOVER_FUEL_SEC := 5.0
+## Seconds on the ground to refill an empty tank, after HOVER_REFILL_DELAY on the ground.
+const HOVER_REFILL_SEC := 3.0
+const HOVER_REFILL_DELAY := 0.25
+## A tank below this will not light (so an empty one cannot be stuttered).
+const HOVER_RESTART_FUEL := 0.25
+## Climb speed, and the braking the climb uses to stop at HOVER_HEIGHT: the target speed is the one that
+## stops exactly at the height at this deceleration (sqrt(2 a d)), so there is no overshoot to tune away.
+const HOVER_RISE_SPEED := 3.2
+const HOVER_BRAKE := 6.0
+## Radial accel the thrust may apply on top of beating gravity (see BOOST_RISE_ACCEL: these are net + g).
+const HOVER_ACCEL := 45.0
+## The drift down once the tank is empty or the button tapped again: a slow, steady sink, so the view
+## keeps working on the way down (3.5 m takes ~3 s).
+const HOVER_DRIFT_SPEED := 1.2
 
 const EMOTE_CYCLE := ["wave", "happy", "dance"]
 ## Extra seconds allowed past an emote's nominal length before the watchdog force-clears it.
@@ -208,7 +242,13 @@ var _shadow_query: PhysicsRayQueryParameters3D
 var _dev_teleport_checked := false
 # ---- planet safari
 var _safari_walk := false
+var _hover_allowed := false
+var _hover_on := false
+var _hover_drift := false
+var _hover_fuel := 1.0
+var _hover_ground_t := 0.0
 var _move_locked := false
+var _steady_walk := false
 ## instance id -> the `layers` a GeometryInstance3D under this player had before first person moved it
 ## onto the hidden layer (see `set_first_person_hidden`).
 var _fp_saved_layers: Dictionary = {}
@@ -397,6 +437,9 @@ func dev_teleport(pos: Vector3) -> String:
 	_boosting = false
 	_boost_thrust = 0.0
 	_boost_hold = 0.0
+	_hover_on = false
+	_hover_drift = false
+	_hover_thrust = 0.0
 	_air_time = 0.0
 	_was_on_floor = true
 	_land_timer = 0.0
@@ -441,10 +484,61 @@ func _consume_pending_dev_teleport() -> void:
 ## and a SAFARI_HOP_HEIGHT hop instead of the full jump. Everything else about movement is unchanged.
 func set_safari_walk(on: bool) -> void:
 	_safari_walk = on
+	if not on:
+		_steady_walk = false
+	if not on:
+		set_safari_hover(false)
 
 
 func is_safari_walk() -> bool:
 	return _safari_walk
+
+
+## Photo hover on or off for this photo mode (see HOVER_HEIGHT). Off also stops a hover in progress
+## (no drift: the caller is about to move or restore the astronaut).
+## Turning it on fills the tank.
+func set_safari_hover(allowed: bool) -> void:
+	_hover_allowed = allowed
+	if allowed:
+		_hover_fuel = 1.0
+	else:
+		stop_hover(false)
+
+
+func is_hover_allowed() -> bool:
+	return _hover_allowed
+
+
+## One tap: start a hover (true) when allowed and the tank has at least HOVER_RESTART_FUEL; a tap while
+## hovering ends it and the drift down begins. Returns whether the astronaut is now hovering.
+func toggle_hover() -> bool:
+	if not _hover_allowed:
+		return false
+	if _hover_on:
+		stop_hover(true)
+	elif _hover_fuel >= HOVER_RESTART_FUEL:
+		_hover_on = true
+		_hover_drift = false
+	return _hover_on
+
+
+## Ends a hover; `drift` true lets the astronaut sink at HOVER_DRIFT_SPEED, false drops the state outright.
+func stop_hover(drift: bool) -> void:
+	_hover_on = false
+	_hover_drift = drift
+
+
+func is_hovering() -> bool:
+	return _hover_on
+
+
+func is_hover_drifting() -> bool:
+	return _hover_drift
+
+
+## 0 (empty) .. 1 (full): the hover tank the safari's fuel ring shows.
+func get_hover_fuel() -> float:
+	return _hover_fuel
 
 
 ## Camera up (5.3, and every photo game the research studied): the stick stops walking the astronaut —
@@ -456,6 +550,16 @@ func set_move_locked(on: bool) -> void:
 
 func is_move_locked() -> bool:
 	return _move_locked
+
+
+## Camera up WITH the Steady Grip (see STEADY_WALK_SPEED): the stick walks slowly, no run, hop or jetpack.
+## `set_move_locked(true)` still wins over it (a card, the end of a safari).
+func set_steady_walk(on: bool) -> void:
+	_steady_walk = on
+
+
+func is_steady_walk() -> bool:
+	return _steady_walk
 
 
 ## FIRST PERSON HIDES THE ASTRONAUT BY RENDER LAYER, NEVER BY `visible` (docs/PLANET_SAFARI_SPEC.md
@@ -578,6 +682,10 @@ func _physics_process(delta: float) -> void:
 		running = false
 		jump_pressed = false
 		boost_pressed = false
+	elif _steady_walk:
+		running = false
+		jump_pressed = false
+		boost_pressed = false
 	var jump_just := jump_pressed and not _jump_was_pressed
 	var interact_just := interact_pressed and not _interact_was_pressed
 	var emote_just := emote_pressed and not _emote_was_pressed
@@ -610,6 +718,8 @@ func _physics_process(delta: float) -> void:
 	var max_speed := RUN_SPEED if (running or _boosting) else WALK_SPEED
 	if _safari_walk:
 		max_speed = SAFARI_WALK_SPEED
+	if _steady_walk:
+		max_speed = STEADY_WALK_SPEED
 	var target_vel := wish * max_speed * wish_len
 	var tv := get_tangent_velocity()
 	var accel := ACCEL if wish_len > 0.01 else DECEL
@@ -654,6 +764,7 @@ func _physics_process(delta: float) -> void:
 	# The thruster is applied AFTER gravity and only along `up`, so it overrides the fall without
 	# ever touching the tangent-plane motion or the radial gravity model.
 	_apply_boost_thrust(delta)
+	_apply_hover(delta, on_floor_before)
 	move_and_slide()
 
 	# ---- landing
@@ -688,7 +799,7 @@ func _physics_process(delta: float) -> void:
 	# sprinting, because `is_on_floor()` does.
 	_dust_run.emitting = (on_floor or _grounded_enough()) and speed > RUN_DUST_MIN_SPEED
 	# The model owns the plume; it needs the world velocity so each puff inherits some of it.
-	_model.set_boost_thrust(_boost_thrust, velocity)
+	_model.set_boost_thrust(maxf(_boost_thrust, _hover_thrust), velocity)
 
 	# ---- ground / shadow
 	_update_shadow()
@@ -854,12 +965,42 @@ func _apply_boost_thrust(delta: float) -> void:
 	velocity += up * (move_toward(radial, target, rate * delta) - radial)
 
 
+var _hover_thrust := 0.0
+
+
+## THE PHOTO HOVER (see HOVER_HEIGHT). Runs after gravity, like the jetpack, and writes only the radial
+## velocity: climbing it drives toward the speed that stops exactly at HOVER_HEIGHT; drifting it only
+## caps the fall at HOVER_DRIFT_SPEED. The tank burns while hovering and refills on the ground.
+func _apply_hover(delta: float, on_floor: bool) -> void:
+	_hover_ground_t = _hover_ground_t + delta if on_floor else 0.0
+	if _hover_on:
+		_hover_fuel = maxf(_hover_fuel - delta / HOVER_FUEL_SEC, 0.0)
+		if _hover_fuel <= 0.0:
+			stop_hover(true)
+	elif on_floor and _hover_ground_t >= HOVER_REFILL_DELAY:
+		_hover_fuel = minf(_hover_fuel + delta / HOVER_REFILL_SEC, 1.0)
+	if _hover_drift and on_floor and _hover_ground_t > 0.0 and velocity.dot(up) <= 0.01:
+		_hover_drift = false
+	var radial := velocity.dot(up)
+	if _hover_on:
+		# A miss (99) reads as "high": no climb, the hold target is a gentle sink, never a runaway.
+		var d := HOVER_HEIGHT - minf(_ground_height, HOVER_HEIGHT + 2.0)
+		var target := signf(d) * minf(sqrt(2.0 * HOVER_BRAKE * absf(d)), HOVER_RISE_SPEED if d > 0.0 else HOVER_DRIFT_SPEED)
+		velocity += up * (move_toward(radial, target, HOVER_ACCEL * delta) - radial)
+	elif _hover_drift and radial < -HOVER_DRIFT_SPEED:
+		velocity += up * (move_toward(radial, -HOVER_DRIFT_SPEED, HOVER_ACCEL * delta) - radial)
+	var spool := BOOST_SPOOL_UP if _hover_on else BOOST_SPOOL_DOWN
+	_hover_thrust = lerpf(_hover_thrust, 1.0 if _hover_on else 0.0, 1.0 - exp(-spool * delta))
+	if _hover_thrust < 0.02 and not _hover_on:
+		_hover_thrust = 0.0
+
+
 ## Soft looping thruster while the boost is held (R2.8). AudioManager owns the player, so a modal
 ## opening mid-flight silences it through the same path as letting go of the button.
 func _update_boost_loop() -> void:
 	if _boost_loop_sfx == "":
 		return
-	var want := _boost_thrust > 0.12
+	var want := maxf(_boost_thrust, _hover_thrust) > 0.12
 	if want == _boost_loop_on:
 		return
 	_boost_loop_on = want

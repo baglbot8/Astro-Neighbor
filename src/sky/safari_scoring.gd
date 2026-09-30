@@ -255,7 +255,12 @@ const FILM_DAILY_RESET := true
 const FILM_BUY_PRICE := 23
 const FILM_BUY_MAX := 4
 
-## FILM_UPGRADE_COSTS: scrap, one entry per tier. UNCHANGED THIS ROUND (400 then 850) - the lead's
+## FILM_UPGRADE_COSTS: STARDUST since ECON (2026-09-29), one entry per tier: 1200 then 2400. The user
+##   picked "option 3" (docs/ECONOMY_REPORT.md Rulings): the camera upgrade is sold for stardust at
+##   Cosmo Depot (CameraGoods) so it works on the planet safari, priced as a real choice against
+##   decorations - tier 1 = 1.5 D, tier 2 = 3 D, D being a mixed player's day (~800), measured by the
+##   ECON day simulator. The paragraph below is the history of the old SCRAP price.
+## (old) FILM_UPGRADE_COSTS: scrap, one entry per tier. UNCHANGED THIS ROUND (400 then 850) - the lead's
 ##   #6.3 table fixes the PLATE numbers (10 -> 13 -> 16 across the two tiers, FILM_UPGRADE_STEP
 ##   below) but says nothing about re-pricing the scrap sink, and re-pricing it is a balance call,
 ##   not an arithmetic one - CLAUDE.md's "no fitted constants" cuts against inventing a new price
@@ -266,7 +271,7 @@ const FILM_BUY_MAX := 4
 ##   the spec's "upgradeable to 16" (#6.3). Capped at 2 tiers, same as before: a fully upgraded
 ##   camera (16) still falls short of a busy lane's 18-sight high end, so "you still have to
 ##   choose" survives even maxed out, same as the old 6-vs-7 headroom did.
-const FILM_UPGRADE_COSTS := [400, 850]
+const FILM_UPGRADE_COSTS := [1200, 2400]
 const FILM_UPGRADE_MAX_TIER := 2
 const FILM_UPGRADE_STEP := 3
 
@@ -279,7 +284,7 @@ static func film_for_trip(upgrade_tiers: int, bought_extra: int) -> int:
 	return FILM_BASE + tiers * FILM_UPGRADE_STEP + extra
 
 
-## Scrap cost of the next upgrade tier, or -1 if already maxed.
+## Stardust cost of the next upgrade tier (ECON: was scrap), or -1 if already maxed.
 static func film_upgrade_cost(current_tier: int) -> int:
 	if current_tier < 0 or current_tier >= FILM_UPGRADE_MAX_TIER:
 		return -1

@@ -35,15 +35,21 @@ func _ready() -> void:
 		if norm_script is GDScript and (norm_script as GDScript).has_method("ensure_items_registered"):
 			(norm_script as GDScript).call("ensure_items_registered")
 
+## FOUND MATERIALS SELL (ECON, 2026-09-29, docs/ECONOMY_REPORT.md "Rulings": at least three ways to
+## earn besides the safari, one of them "selling found items"). A price > 0 puts a material in Pip &
+## Pop's sell list at ShopPanel.SELL_RATIO (0.10): a common one sells for 6, a crystal for 9 - a
+## world's 8 materials about 50-70, the same again as its 5 stardust pickups. They
+## are NOT stocked for sale (Catalog.store_items only stocks decorations and clothes). Keeping them
+## still has a use - bring-favours ask for 2-4 - so selling is a choice, not free money.
 func _register_builtin() -> void:
 	register({"id": "stardust_shard", "name": "Stardust Shard", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "Glittering dust that fell from a passing comet.", "icon_color": "#ffe27a"})
-	register({"id": "moon_flower", "name": "Moon Flower", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A pale bloom that only opens under starlight.", "icon_color": "#cfe4ff"})
-	register({"id": "crystal_chunk", "name": "Crystal Chunk", "kind": "collectible", "category": "material", "rarity": "uncommon", "price": 0, "desc": "Hums faintly when you hold it.", "icon_color": "#b58cff"})
-	register({"id": "gear_bit", "name": "Gear Bit", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A little brass gear. Bolt would love this.", "icon_color": "#ffb05c"})
+	register({"id": "moon_flower", "name": "Moon Flower", "kind": "collectible", "category": "material", "rarity": "common", "price": 60, "desc": "A pale bloom that only opens under starlight.", "icon_color": "#cfe4ff"})
+	register({"id": "crystal_chunk", "name": "Crystal Chunk", "kind": "collectible", "category": "material", "rarity": "uncommon", "price": 90, "desc": "Hums faintly when you hold it.", "icon_color": "#b58cff"})
+	register({"id": "gear_bit", "name": "Gear Bit", "kind": "collectible", "category": "material", "rarity": "common", "price": 60, "desc": "A little brass gear. Bolt would love this.", "icon_color": "#ffb05c"})
 	# Fen and Grig. Without these two the ids in fen.tres / grig.tres `collectible_kind` resolve to
 	# an empty catalog entry: the pickup has no name, no icon colour and no journal line.
-	register({"id": "salt_bloom", "name": "Salt Bloom", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A crust flower grown at a pool's edge.", "icon_color": "#e6dcc4"})
-	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 0, "desc": "A drilled plug of chalk from Grig's stairs.", "icon_color": "#d8cba4"})
+	register({"id": "salt_bloom", "name": "Salt Bloom", "kind": "collectible", "category": "material", "rarity": "common", "price": 60, "desc": "A crust flower grown at a pool's edge.", "icon_color": "#e6dcc4"})
+	register({"id": "chalk_core", "name": "Chalk Core", "kind": "collectible", "category": "material", "rarity": "common", "price": 60, "desc": "A drilled plug of chalk from Grig's stairs.", "icon_color": "#d8cba4"})
 	# BUILD_PLAN Phase 1 "D: scrap and economy" (CORE_LOOP.md "Scrap and stardust"). Grows on every
 	# world, including home; picking one up calls GameState.add_scrap (collectible.gd). icon_color
 	# matches the metal/rust of its own pickup mesh and the HUD scrap pill (hud.gd ScrapIcon) - grey,

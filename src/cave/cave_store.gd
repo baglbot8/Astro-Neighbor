@@ -12,7 +12,8 @@ extends RefCounted
 ## only reads ROSTER, `record_for` and `filled_count`. This file names no other game class on purpose:
 ## SkyJournal is an autoload and loads whatever it names at boot.
 ##
-## Record: {id, name, grade, grade_idx, craft, day, hour, thumb_b64}. The thumbnail is a small WebP in
+## Record: {id, name, grade, grade_idx, craft, scores, day, hour, thumb_b64} (`scores` since 2026-09-30, for
+## the review's side-by-side bars; an older record without it shows empty bars). The thumbnail is a small WebP in
 ## base64 (JSON has no bytes) - the same technique sky_journal.gd and HomeAlbumStore use.
 
 const F_CAVE := "cave_journal"
@@ -109,16 +110,62 @@ static func count_filled_raw() -> int:
 	return _records().size()
 
 
+## The page id a cave photo files to ("" if it is not a cave subject with a page).
+## A kind met in two places is two subjects, one page: "glow_caps@2" files to "glow_caps" (CAVE3).
+static func page_id(photo: Dictionary) -> String:
+	var key := str(photo.get("subject_key", ""))
+	if not key.begins_with("cave:"):
+		return ""
+	var id := key.get_slice(":", 1).get_slice("@", 0)
+	return id if not roster_entry(id).is_empty() else ""
+
+
+## THE REVIEW'S "KEEP NEW" (cave_review.gd, 2026-09-30): writes this photo onto its page whatever the page
+## held. Returns the page id, or "" for a photo that has no page.
+static func keep_new(photo: Dictionary) -> String:
+	var id := page_id(photo)
+	if id == "":
+		return ""
+	var recs := _records()
+	recs[id] = _record_of(id, photo)
+	GameState.flags[F_CAVE] = recs
+	return id
+
+
+## Puts a page back exactly as it was (the review's swap back to the old photo). {} blanks the page.
+static func restore_record(id: String, rec: Dictionary) -> void:
+	if roster_entry(id).is_empty():
+		return
+	var recs := _records()
+	if rec.is_empty():
+		recs.erase(id)
+	else:
+		recs[id] = rec.duplicate(true)
+	GameState.flags[F_CAVE] = recs
+
+
+static func _record_of(id: String, photo: Dictionary) -> Dictionary:
+	var gi := int(photo.get("grade_idx", 0))
+	var sc: Variant = photo.get("scores", {})
+	return {
+		"id": id,
+		"name": str(roster_entry(id)["name"]),
+		"grade": str(photo.get("grade", GRADES[clampi(gi, 0, 3)])),
+		"grade_idx": gi,
+		"craft": float(photo.get("craft", 0.0)),
+		"scores": (sc as Dictionary).duplicate() if sc is Dictionary else {},
+		"day": GameState.day_count,
+		"hour": GameState.time_of_day,
+		"thumb_b64": encode_image(photo.get("image")),
+	}
+
+
 ## Files one PlanetSafari photo (planet_safari.gd `_photo_record`: subject_key "cave:<id>", grade,
 ## grade_idx, craft, image). Returns "new" (first page of it), "better" (replaced a worse one),
 ## "kept" (the page already holds a photo at least as good) or "" (not a cave subject).
 static func offer_photo(photo: Dictionary) -> String:
-	var key := str(photo.get("subject_key", ""))
-	if not key.begins_with("cave:"):
-		return ""
-	# A kind met in two places is two subjects, one page: "glow_caps@2" files to "glow_caps" (CAVE3).
-	var id := key.get_slice(":", 1).get_slice("@", 0)
-	if roster_entry(id).is_empty():
+	var id := page_id(photo)
+	if id == "":
 		return ""
 	var old := record_for(id)
 	var gi := int(photo.get("grade_idx", 0))
@@ -127,18 +174,8 @@ static func offer_photo(photo: Dictionary) -> String:
 		var ogi := int(old.get("grade_idx", 0))
 		if gi < ogi or (gi == ogi and craft <= float(old.get("craft", 0.0))):
 			return "kept"
-	var rec := {
-		"id": id,
-		"name": str(roster_entry(id)["name"]),
-		"grade": str(photo.get("grade", GRADES[clampi(gi, 0, 3)])),
-		"grade_idx": gi,
-		"craft": craft,
-		"day": GameState.day_count,
-		"hour": GameState.time_of_day,
-		"thumb_b64": encode_image(photo.get("image")),
-	}
 	var recs := _records()
-	recs[id] = rec
+	recs[id] = _record_of(id, photo)
 	GameState.flags[F_CAVE] = recs
 	return "new" if old.is_empty() else "better"
 
