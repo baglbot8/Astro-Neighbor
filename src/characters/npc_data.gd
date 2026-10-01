@@ -142,12 +142,12 @@ const DATA := {
 			],
 			"mid": [
 				"Hello, friend. I counted the days since your last visit.",
-				"You came back. My chest dial is spinning.",
+				"You came back. My beads are clicking.",
 				"Hello! I saved you the shiniest gear.",
 				"Hello again. I oiled my knees for this.",
 			],
 			"high": [
-				"Best friend! My dial is spinning very fast.",
+				"Best friend! My beads are clicking very fast.",
 				"You! I oiled a hinge just for you.",
 				"Hello! I made a chart of all our talks.",
 				"My best friend is here. I checked twice.",
@@ -166,7 +166,7 @@ const DATA := {
 			"I counted your steps today. You took 214.",
 			"Zorp laughs at my facts. I do not know why.",
 			"I built a small chair. It has 4 legs. Correct.",
-			"My chest dial spins when I am happy. Watch.",
+			"My beads click when I am happy. Watch.",
 			"Vela and I swap spare parts. It is very fair.",
 		],
 		"time_lines": {
@@ -201,7 +201,7 @@ const DATA := {
 				"Good. My chart has a line going up.",
 			],
 			"thanks": [
-				"Thank you! My chest dial is spinning. That is joy.",
+				"Thank you! My beads are clicking. That is joy.",
 				"Take this. I am very grateful.",
 			],
 			"decline": [

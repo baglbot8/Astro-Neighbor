@@ -68,8 +68,14 @@ const CRACK := Color("#8797ae")       ## H 215 S 0.224 V 0.682 (round 2: #b9c2d6
 ## S 0.54-0.55: 17-18 deg from Pop. It also stays
 ## a full value step brighter than Pop (V ~0.94 vs 0.70) and is a smooth tube where Pop is a fur ball.
 ## The lighting warms it ~8 deg and the toon ramp lifts S ~1.17x, hence the pinker base swatch.
-const TENTACLE := Color("#db7d76")      ## H 4 S 0.46 V 0.86 (round 1: #db8776, H 10)
-const TENTACLE_TIP := Color("#e3908a")  ## H 4 S 0.39 V 0.89 — the small tentacles (round 1: #e39b8a)
+##
+## GREEN SINCE 2026-10-01. The user: "Can we also make norm's tentacles green?" The big tentacle and
+## the eight small ones were coral (#db7d76 / #e3908a, H 4). They are now a leaf green at the same
+## saturation and close to the same value, so the rest of Norm is untouched. The Pop clash above no
+## longer applies (Pop is amber, H 28). The hue is kept well on the yellow side of the suit's faded
+## teal (H 169) so the tentacle still separates from the suit by hue.
+const TENTACLE := Color("#7dc472")      ## H 112 S 0.42 V 0.77 (coral until 2026-10-01: #db7d76)
+const TENTACLE_TIP := Color("#93d389")  ## H 112 S 0.35 V 0.83 — the small tentacles (was #e3908a)
 
 # ---------------------------------------------------------------------------- shape
 ## Variant A's helmet: a fairly round bubble, closest in KIND to the player's dome — which is the

@@ -6,8 +6,12 @@ extends ChibiModel
 ## inverse), with small oval eyes under a resting brow bar, a single "^ ^" arc, a single "O O" ring,
 ## a single "- -" dash, and one calm smile over a real open mouth. No blush — R2.3 asks for none on
 ## the robots, and two pink cheek patches painted on a display were the most Cocomelon thing here.
-## Extras: one antenna with a blinking orange light, round claw hands, chunky feet, a chest dial
-## that spins while he talks, a shoulder vent that puffs when he is happy, and a rear vent grille.
+## Extras: round claw hands, chunky feet, a shoulder vent that puffs when he is happy, a rear vent
+## grille, and THE ABACUS (2026-10-01, the user's pick "Bolt Abacus" from the design sheets): he is
+## "the robot who counts everything", so the chest carries a three-rail abacus caught mid-count in
+## place of the old pressure-gauge dial, the antenna is a straight centre rod with two counting beads
+## under the blinking light, and the screen eyes are round dots with no brow bars so the face reads
+## as a display and not as a child's face. One bead per rail slides while he talks (the dial's old job).
 
 ## R2.6 (PASTEL AND MATTE), re-measured in the current game:
 ##   shell  #6fcdc5 S0.46 V0.80 -> #7fb9b3 S0.31 V0.73
@@ -47,7 +51,9 @@ const FACE_Z := -0.326             ## the plane the features are drawn on (just 
 const EYE_SPACING := 0.1768
 
 var _screen: Node3D
-var _dial: Node3D
+## The abacus beads that slide while he talks: [node, rest x, slide in metres, phase].
+var _live_beads: Array = []
+var _count_amt: float = 0.0
 var _vent: GPUParticles3D
 var _antenna_mat: ShaderMaterial
 var _screen_mat: ShaderMaterial
@@ -60,8 +66,9 @@ func _init() -> void:
 	# R2.3 ("smaller and less glossy eyes relative to the head"): scaled with the base class's
 	# own 19 % reduction so the robots keep their slightly chunkier screen features without going
 	# back to the baby-doll size.
-	eye_w = 0.0383
-	eye_h = 0.0478
+	# 2026-10-01 (abacus look): round dot eyes, 0.0400 x 0.0420, where the oval was 0.0383 x 0.0478.
+	eye_w = 0.0400
+	eye_h = 0.0420
 	eye_d = 0.0130
 	mouth_w = 0.0560
 	mouth_h = 0.0460
@@ -85,14 +92,7 @@ func _build_geometry() -> void:
 		_mi(rounded_box(Vector3(0.026, 0.330, 0.300), 0.010, 10), m_seam, _torso, Vector3(0.216 * sx0, TORSO_Y + 0.010, 0.0), "SideSeam")
 	_mi(rounded_box(Vector3(0.405, 0.052, 0.345), 0.016, 12), m_accent, _torso, Vector3(0.0, TORSO_Y - 0.140, 0.0), "Belt")
 	_mi(rounded_box(Vector3(0.325, 0.048, 0.280), 0.014, 12), m_accent, _torso, Vector3(0.0, TORSO_Y + 0.200, 0.0), "Collar")
-	# chest dial (spins while talking)
-	_dial = _node("Dial", _torso, Vector3(0.0, TORSO_Y + 0.010, -0.196))
-	_mi(cylinder(0.075, 0.075, 0.028, 20), m_dark, _dial, Vector3(0.0, 0.0, 0.0), "Bezel").rotation.x = PI * 0.5
-	var face_disc := _mi(cylinder(0.058, 0.058, 0.030, 20), MaterialLib.glow(Color("#ffd98a"), 1.1, Color("#3a2c18")), _dial, Vector3(0.0, 0.0, -0.004), "Face")
-	face_disc.rotation.x = PI * 0.5
-	var needle := _node("Needle", _dial, Vector3(0.0, 0.0, -0.022))
-	_mi(rounded_box(Vector3(0.012, 0.05, 0.008), 0.004, 10), m_accent, needle, Vector3(0.0, 0.022, 0.0), "Needle")
-	_mi(sphere(0.014, 10, 5), m_metal, needle, Vector3.ZERO, "Hub")
+	_build_abacus(m_dark, m_metal)
 	# shoulder vent
 	var vent := _node("Vent", _torso, Vector3(0.150, TORSO_Y + 0.150, 0.115))
 	for i in 3:
@@ -126,8 +126,46 @@ func _build_geometry() -> void:
 		ear.rotation.z = PI * 0.5
 		_mi(cylinder(0.03, 0.03, 0.056, 10), m_accent, _head, Vector3(0.340 * sx, -0.01, 0.02), "EarBolt").rotation.z = PI * 0.5
 	_build_screen_face()
-	var ant := _add_antenna(_head, Vector3(-0.050, 0.295, 0.02), -0.16, METAL, ACCENT, 0.115, 0.042)
+	# THE ABACUS ROD: a straight centre rod carrying two counting beads under the blinking light.
+	var ant := _add_antenna(_head, Vector3(0.0, 0.340, 0.0), 0.0, METAL, ACCENT, 0.210, 0.040)
+	for i in 2:
+		var bead := _mi(sphere(1.0, 8, 4), _toon(BEADS[i], _matte({"spec": 0.05})), ant,
+			Vector3(0.0, 0.050 + 0.062 * i, 0.0), "RodBead")
+		bead.scale = Vector3(0.052, 0.030, 0.052)
 	_antenna_mat = ant.get_meta("bulb_mat") as ShaderMaterial
+
+
+## Bead colours, one per rail (top to bottom); the rod's two beads use the first two.
+const BEADS: Array[Color] = [Color("#c98f7c"), Color("#d9c9a3"), Color("#bf9a72")]
+## Beads per rail as [his right side, his left side]: caught mid-count, never a neat full row.
+const BEAD_ROWS := [[2, 1], [3, 1], [1, 2]]
+const BEAD_SLIDE := 0.034
+
+
+## An abacus across the chest: a dark frame, a pale back, three metal rails and their beads. The
+## innermost bead of the fuller side of each rail is "live": `_animate_extras` slides it toward the
+## middle of the rail and back while he talks.
+func _build_abacus(m_dark: Material, m_metal: Material) -> void:
+	_live_beads.clear()
+	var frame := _node("Abacus", _torso, Vector3(0.0, TORSO_Y + 0.022, -0.203))
+	_mi(rounded_box(Vector3(0.310, 0.246, 0.022), 0.022, 6), m_dark, frame, Vector3.ZERO, "Frame")
+	var bk := BoxMesh.new()
+	bk.size = Vector3(0.268, 0.204, 0.022)
+	_mi(bk, _toon(SCREEN, _matte({})), frame, Vector3(0.0, 0.0, -0.004), "Back")
+	for r in 3:
+		var y := 0.064 - 0.064 * r
+		_mi(cylinder(0.005, 0.005, 0.262, 6), m_metal, frame, Vector3(0.0, y, -0.026), "Rail").rotation.z = PI * 0.5
+		var m_bead := _toon(BEADS[r], _matte({"spec": 0.06}))
+		var row: Array = BEAD_ROWS[r]
+		var live_side := 0 if int(row[0]) >= int(row[1]) else 1
+		for side in 2:
+			var sgn := 1.0 if side == 0 else -1.0
+			for i in int(row[side]):
+				var x := (0.110 - 0.042 * i) * sgn
+				var bead := _mi(sphere(1.0, 6, 3), m_bead, frame, Vector3(x, y, -0.028), "Bead")
+				bead.scale = Vector3(0.019, 0.030, 0.026)
+				if side == live_side and i == int(row[side]) - 1:
+					_live_beads.append([bead, x, -BEAD_SLIDE * sgn, 0.37 * r])
 
 
 func _build_claws() -> void:
@@ -160,6 +198,12 @@ func _build_screen_face() -> void:
 	var m_ink := _toon(INK, {"spec": 0.0, "rim": 0.0, "shade": 0.08})
 	var m_hl := _toon(INK_HL, {"spec": 0.0, "rim": 0.0, "shade": 0.02})
 	_add_flat_eyes(_screen, EYE_SPACING, 0.042, m_ink, m_hl)
+	# 2026-10-01 (abacus look): no brow bars. `_add_flat_eyes` always builds them; they are freed here
+	# and `_brows` emptied, so `_apply_face` (which walks `_brows` every frame) holds no dead node.
+	for b: Node3D in _brows:
+		b.get_parent().remove_child(b)
+		b.free()
+	_brows.clear()
 	_add_flat_mouth(_screen, -0.058, m_ink, Color("#6f3247"))
 	# R2.3: "restrained blush (or none on the robots)". Bolt is a machine with a display for a face;
 	# two pink cheek patches painted on a screen was the single most Cocomelon thing about him.
@@ -219,9 +263,15 @@ func _animate_extras(delta: float) -> void:
 	if _antenna_mat:
 		var blink := 1.0 if fmod(_t, 1.5) < 0.22 else 0.0
 		_antenna_mat.set_shader_parameter("emission_strength", 0.6 + 2.6 * blink)
-	if _dial:
-		var talking := pose(P.EXTRA_A) > 0.4
-		_dial.rotation.z += delta * (5.5 if talking else 0.35)
+	# counting while he talks: each live bead clicks toward the middle of its rail and back
+	var talking := pose(P.EXTRA_A) > 0.4
+	_count_amt = move_toward(_count_amt, 1.0 if talking else 0.0, delta / 0.2)
+	for lb: Array in _live_beads:
+		var bead := lb[0] as Node3D
+		if not is_instance_valid(bead):
+			continue
+		var click := clampf(0.5 + 1.6 * sin(TAU * (_t * 1.3 + float(lb[3]))), 0.0, 1.0)
+		bead.position.x = float(lb[1]) + float(lb[2]) * click * _count_amt
 	if _vent:
 		var want := pose(P.EXTRA_B) > 0.5
 		if want and _vent_armed:

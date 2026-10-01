@@ -116,3 +116,17 @@ These cost no triangles and no slots, and they are the first place to reach befo
 * ~~**Tentacles / horns around the head**~~ — claimed on 2026-09-14 by Zorp's tentacle beard and on 2026-09-19 by
   Norm's visor tentacle.
 * **A character that reads as YOUNG.** Costs no geometry; nobody stands on that axis.
+
+## Amendments (lead, 2026-10-01, after the user's design picks)
+
+The user picked new looks ("Zorp current, Bolt Abacus, Sunflower sprout, Grig grumpy carver but lets remove the
+nostrils and slide the mouth more towards the center and add the soft glow to Vela ... make norm's tentacles green").
+Where the table above disagrees, this wins:
+* **Bolt:** chest abacus (no dial), bead-rod antenna, round dot eyes, no brows.
+* **Fen:** young and sunny: butter petals, spring green, bigger eyes, a two-leaf sprout; the mouth is a bar with
+  upturned corners (counts as a bar, not a closed arc).
+* **Grig:** carver's kit (apron, chisel, mallet), a resting grumpy lid (same slot as his lid ridge), **no nose**, mouth
+  just under the middle of the face.
+* **Vela:** warm glowing bulb with a soft halo and two blush lamps; brighter when happy.
+* **Norm:** green tentacles (was coral).
+* **Moss** (new, The Tangle): a small third eye, axolotl-like pink gills, glowing freckles, a "w" mouth.

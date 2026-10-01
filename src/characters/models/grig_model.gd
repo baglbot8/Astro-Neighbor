@@ -34,14 +34,16 @@ extends ChibiModel
 ##   7. CRACKED CRAZE AND NOTHING ELSE. His skin runs `sd_skin` with the spot term switched fully
 ##      OFF, so he is cell walls only where Zorp is blobs only — see SURF_HEAD.
 ##
-## An eighth is TWO NOSTRIL HOLES, and it is new. Until this change he had no nose at all and a hard
-## dark RIM PLATE bedded under the stone capital. The user asked what that line across the middle of
-## his face was supposed to be and asked for two nostril holes in its place, so the rim is gone, the
-## lower face is one uninterrupted crazed field, and the nose is two sunk black slots in raised stone
-## lips. The capital tombstone under "head detail" below records what the rim was and how it was
-## identified (the capital it was bedded under is now ALSO gone, see the same tombstone);
-## `_build_nostrils` records the holes and the two "the mesh is not the extent you asked for" traps
-## that decide their primitives.
+## THE CARVER'S KIT (2026-10-01, the user's pick "Grig grumpy carver" from the design sheets): a
+## chalk-canvas apron with a pocket, a chisel in the pocket, a pale stone mallet over his shoulder
+## (a new corner in the outline), and the one brow and lid tipped into a sceptical squint. See
+## `_build_kit` and LID_ROLL.
+##
+## NO NOSE (2026-10-01). He wore two nostril holes from 2026-09-15 (a user request, in place of a rim
+## plate that crossed his face). The user, on the design sheets: "remove the nostrils and slide the
+## mouth more towards the center". At phone size the two slots read as a second pair of squinting
+## eyes under the eye on the stalk. The lower face is one uninterrupted crazed field with the grin in
+## it; MOUTH_PITCH_GRIG carries the move. The tombstone under "the nose" below keeps what they were.
 ##
 ## The STRATA BANDS that used to ring the head went with it. They never rendered, they cost 330
 ## triangles of buried geometry, and after this change they are one "fix" away from redrawing the
@@ -66,18 +68,12 @@ const SCLERA := Color("#ece4d4")      ## the big pale eyeball, so the dark oval 
 const EYE := Color("#241d18")
 const GRIN := Color("#3a2b22")        ## mouth cavity, V 0.227
 const TOOTH := Color("#efe7d6")
-## THE NOSTRIL BORES, and they are DELIBERATELY DARKER THAN THE MOUTH — V 0.133 against the grin's
-## 0.227. Not a stylistic preference: a hole reads as deep because of how much light fails to come
-## back out of it, and a 76 mm slot catches far less bounce than a 242 mm cavity, so painting them
-## the same value makes the small one read as the shallow one. Going darker still is not available —
-## `_matte`'s shade floor and the scene's navy ambient put a near-black under this in shadow anyway,
-## and the difference between #221a15 and pure black is under a value point once the toon shade term
-## has run. If the bores ever read FLAT rather than shallow, that is the ring lip's job, not this
-## colour's; see `_build_nostrils`.
-const NOSTRIL := Color("#221a15")
 const SMOCK := Color("#64798a")       ## a slate-blue mason's smock — the one cool note
 const SMOCK_DARK := Color("#4c5c6b")
 const TALLY := Color("#cabfa6")       ## the chalk slabs
+const APRON := Color("#cdbfa4")       ## chalk-dusted canvas (the carver's kit)
+const MALLET := Color("#b3ab9c")      ## pale chalk-stone mallet head, not his own clay
+const STEEL := Color("#9aa0a6")       ## chisel blade, mallet bands
 const FOOT := Color("#5a4f45")
 const WEDGE := Color("#8b8578")       ## the cutting wedge at his hip
 
@@ -152,6 +148,11 @@ const EYELID_SEMI := Vector3(0.120, 0.124, 0.148)
 const EYELID_CUT_Y := 0.042
 const EYELID_RIM := 0.075            ## rim tube, in the lid's unit space (~9 mm)
 const EYELID_LIFT := 0.80            ## radians the lid swings back for happy / surprised
+## The sceptical squint (2026-10-01, the carver's kit): the one brow and the lid are tipped 0.20 rad
+## (11 degrees) about the view axis, and the lid rests 0.05 rad lower over the pupil. The lift for
+## happy / surprised blends from this rest, so both emotes still open the eye fully.
+const LID_ROLL := 0.20
+const EYELID_REST := -0.05
 ## How far the stalk is allowed to trail the head, and how fast it catches up.
 ## 2.8 rather than the first build's 3.4: measured on a real head turn the faster filter only trailed
 ## 0.053 rad, which on a 0.226 m stalk moves the eyeball 12 mm and does not read at all. At 2.8 an
@@ -161,10 +162,13 @@ const EYE_LAG_MAX := 0.14
 const EYE_LAG_RATE := 2.8
 
 # ---------------------------------------------------------------------------------- the mouth
-## Low on the face, because the head is tall. At the chibi default (-20 deg) the mouth would float in
-## the middle of a blank plane and read as a nose. Raised from the first build's -46, which on the
-## shortened head put the mouth almost under his chin.
-const MOUTH_PITCH_GRIG := -26.0
+## 2026-10-01: -26 -> -12, the user with the nostrils removed: "slide the mouth more towards the
+## center". Measured on the built model: the grin's centre moves from head-local y -0.120 to -0.053
+## (36 % -> 16 % of the head's 0.330 half height), and its top edge (centre + GRIN_SIZE.y 0.026 *
+## MOUTH_SPREAD.y 1.70) lands at -0.008, just under the head's middle line. History: the first build
+## had it at -46 (almost under the chin on the shortened head), then -26, kept low while two nostril
+## holes filled the field above it.
+const MOUTH_PITCH_GRIG := -12.0
 ## DO NOT SHRINK THIS. Rendered grin width is 0.062 * 2 * 1.95 = 0.242 m = 44% of the 0.550 m head,
 ## which is over the style guide's 16-25% band — see the documented exemption for stalk-eyed
 ## neighbours in docs/NEXT_WORLDS.md, which Zorp also ships under. R4 makes the exemption a
@@ -336,13 +340,10 @@ func _build_geometry() -> void:
 	_make_cyclops()
 	_build_stalk()
 	_build_mouth()
-	# After the mouth, because the nostrils are placed RELATIVE to it — the blank field they sit in
-	# is bounded below by the grin cavity's top edge and above by the bare head's own crown curvature
-	# (the capital that used to bound it above is gone — see the tombstone under "head detail" below),
-	# and the lower number is derived in `_build_nostrils`' comment from constants the mouth declares.
-	_build_nostrils()
+	# No `_build_nostrils()` call - REMOVED 2026-10-01, see the tombstone under "the nose" below.
 	_build_tally_collar()
 	_build_wedge()
+	_build_kit()
 
 
 # ================================================================================= the one eye
@@ -396,6 +397,7 @@ func _build_stalk() -> void:
 	# than as a second dark mark. Built before the re-parent so it travels with everything else.
 	_lid = _node("LidRidge", _head, STALK_TIP + Vector3(0.0, 0.006, -0.030))
 	_lid.rotation.x = LID_TILT
+	_lid.rotation.z = LID_ROLL
 	_mi(arc_tube(LID_RING_R, LID_TUBE, deg_to_rad(14.0), deg_to_rad(166.0), 14, 6),
 		_toon(SKIN_DEEP, _matte({"rim": 0.02})), _lid, Vector3.ZERO, "Ridge")
 	# The upper eyelid (see EYELID_R): a flat-cut cap on the ball centre plus a soft rim along its
@@ -403,6 +405,7 @@ func _build_stalk() -> void:
 	# Built in unit space and scaled to EYELID_SEMI on the node, so rotating it swings it rigidly.
 	_eyelid = _node("Eyelid", _head, STALK_TIP)
 	_eyelid.scale = EYELID_SEMI
+	_eyelid.rotation.z = LID_ROLL
 	var h := EYELID_CUT_Y / EYELID_SEMI.y
 	var m_lid := _toon(SKIN, _matte({"spec": 0.04, "rim": 0.02}))
 	_mi(_cap_mesh(1.0, h, 5, 20), m_lid, _eyelid, Vector3.ZERO, "Cap")
@@ -561,7 +564,7 @@ func _adopt(n: Node3D, pivot: Node3D, origin: Vector3) -> void:
 ## something that follows the oval's OWN curvature rather than something that caps or bands it flat.
 
 
-## The grin, dropped to the bottom of the tall face, four blunt square uppers and two upward tusks.
+## The grin, just under the middle of the face, four blunt square uppers and two upward tusks.
 func _build_mouth() -> void:
 	var mouth_node := _face.get_node_or_null("Mouth") as Node3D
 	if mouth_node == null:
@@ -574,165 +577,51 @@ func _build_mouth() -> void:
 
 
 # ==================================================================================== the nose
-## TWO NOSTRIL HOLES, added when he still had no nose at all. The user asked for them in place of the
-## rim plate that used to cross his face (the capital tombstone above has the identification). "Nostril
-## HOLES" is the whole brief, so this is built to read as two things sunk INTO the head rather than
-## as two marks painted on it — which on an opaque closed shell that cannot be cut is entirely a
-## matter of standing something in front of something dark.
+## REMOVED 2026-10-01. The user, picking Grig's look from the design sheets: "remove the nostrils and
+## slide the mouth more towards the center".
 ##
-## THE ANATOMY OF THE FAKE HOLE. Per side: a torus LIP seated 2 mm proud of the shell, and a
-## cylinder BORE whose flat outward cap sits 2 mm proud in the middle of it. The lip's crest is
-## 8.0 mm proud, so the black cap sits 6.0 mm BEHIND the ring standing around it. That 6.0 mm of
-## standoff is the entire illusion; there is no other depth cue and nothing else to tune if it fails.
+## WHAT IT WAS, FOR ANYONE WHO GOES LOOKING: two nostril HOLES (a user request of 2026-09-15, in place
+## of a rim plate that crossed his face), one per side at yaw +/-12.5 deg, pitch +3 deg on the head.
+## Each was a squashed torus lip in SKIN (radii 0.034 / 0.050, squash 0.28, standing 2 mm proud) round
+## a squashed dark cylinder bore (#221a15, radius 0.038, 0.030 deep), rolled 0.10 rad so the outer
+## ends rode higher: 76 x 21 mm of slot per side. The design review's note on them: at phone size two
+## dark slots side by side under the stalk eye read as a second pair of squinting eyes.
 ##
-## WHY A CYLINDER AND NOT A SUPERELLIPSOID — the first of two "the mesh is not the extent you asked
-## for" traps on this part, and the same family of bug as the strata tombstone above. A CONVEX blob
-## seated 2 mm proud does not show its own width, it shows the tiny cap that clears the surface: the
-## same 0.038 half-width built as a superellipsoid 0.026 deep at n 2.4 and poked 2 mm out shows a cap
-## only 0.0184 half-wide — 48% of the shape asked for — and shows it as a soft dome, which reads as a
-## painted dot with a smudge on it. A cylinder's cap is FLAT, so it shows exactly its radius with a
-## hard silhouette
-## edge all the way round, and 2 mm of its side wall stands proud as a dark collar under the lip.
-## "Hole" is a hard edge; do not swap this primitive for a rounder one.
-##
-## WHY THE LIP IS SMOOTH SKIN AND NOT CRAZED — the second trap, and it is measured. toon_soft.gdshader
-## sets `v_objpos = VERTEX` and reads `wpos = v_objpos`, so the surface pattern is OBJECT space,
-## anchored per MeshInstance. SURF_HEAD runs sd_skin at surface_scale 2.2 = 7 * 2.2 = 15.4 cells/m,
-## a 65 mm cell. The lip is 100 mm across, so carrying SURF_HEAD onto it would land about ONE AND A
-## HALF cells on the whole part — a coin flip between an invisible interior and a solid dark donut,
-## decided by the hash and not by anything anyone can tune. Smooth SKIN in the same `_matte` family is
-## already how his other small dressed-stone parts shade (the wedge haft, the tally slabs' own faces),
-## and the material library's own header puts a 10% albedo change at ~1.5% on screen at 7.4 m, so at
-## gameplay the lip is pure silhouette and the
-## smooth/crazed difference does not exist. The BORE keeps the mouth cavity's exact material family —
-## `{"spec": 0.0, "rim": 0.0, "shade": 0.05}`, no `_matte` — so his two dark openings shade
-## identically instead of the small one catching a rim light and reading as a bead. NO alpha anywhere
-## (an alpha-0 colour renders BLACK on this material), and no new `surface_kind`.
-##
-## ===== THE TWO-EYES TRAP, WHICH IS THE REAL RISK ON THIS PART AND NOT A HYPOTHETICAL. =====
-## Two dark ovals side by side in the middle of a blank face are EYES. This file already records that
-## exact failure once — see `_build_geometry`, where two brow bars left on the head "read as a second
-## pair of eyes and put the generic animal face straight back" — and on a CYCLOPS whose one real eye
-## is up on a trunk off the head entirely, a second pair on the face is not a blemish, it is a
-## different creature. Three separate things fight it and ALL THREE have to survive any tuning:
-##   1. THEY ARE LOW, NOT CENTRED. The blank field runs from well up the bare crown's own curvature
-##      (the capital that used to bound it at y 0.176 is gone — see its tombstone under "head detail")
-##      to the top of the grin cavity (y -0.076: mouth centre -0.1204 plus GRIN_SIZE.y 0.026 *
-##      MOUTH_SPREAD.y 1.70). These sit at y 0.013, just 89 mm above the mouth, so low in that field
-##      that they still group with the MOUTH rather than floating where eyes live, which was true
-##      before the capital went and remains true now that the field above them is taller. Measured on
-##      the 6.5 m render, that is 70% of the way down the head, against the old rim's 49%. This is the
-##      mitigation that is doing the most work; give it up last.
-##   2. THEY ARE SQUASHED FLAT. 76 x 38 mm, a 2:1 SLOT. Eyes in this game are round-ish (his own
-##      pupil is 0.088 x 0.092, i.e. slightly TALLER than wide). A 2:1 slot is not an eye shape, and
-##      this is the mitigation the second build got wrong: at 1.6:1 the close-up read as a pair of
-##      eyes, pale lip standing in for a sclera and all. Flattening it is what fixed that.
-##   3. THEY NEARLY TOUCH. The two lips finish 10.6 mm apart and the whole nose is 211 mm wide — 38%
-##      of the 550 mm head, against a 242 mm mouth at 44% — so the pair merges into ONE nose mass
-##      instead of reading as two separate symmetric features. Eyes are spaced about one eye-width
-##      apart; these two bores are 34.6 mm apart against a 76 mm width, well under half that.
-## If a render ever reads as eyes, the fix order is: closer together, then squashed harder, then
-## lower. Making them SMALLER is the last resort — the user asked for holes and said nothing about
-## subtlety, so the failure mode to avoid is "I cannot see them".
-##
-## ANIMATION: NONE, DELIBERATELY. These are rigid head geometry, parented straight under `_face`/
-## `_head` with no filter of their own. They are NOT added to `_animate_extras`, which already carries
-## two named cast-unique traits (the lagging eye-track and the tally swing); a third first-order filter is budget
-## spent on something nobody asked for, and a flaring nostril is not in Grig's character. Nor are
-## they appended to `_eyes` / `_eye_ovals` / `_eye_happy` / `_eye_round` / `_eye_size` / `_brows`.
-## They are not eyes and `_apply_face`, which rewrites all five arrays every frame, must never see
-## them. Parented under `_face`, which sits at the head origin with no rotation, so `_orient_on_head`'s
-## head-space result drops in untouched (the same fact `_build_stalk` relies on).
-##
-## R4 VOCABULARY CAP: unaffected. The two hard/heavy slots are spent on the lid ridge and the tusks.
-## A nostril is a HOLE, not a protrusion; the only thing here that stands proud is an 8 mm lip. Over
-## this change as a whole the character LOSES one hard horizontal band and gains no hard silhouette,
-## and the triangle count goes DOWN. He gets softer, not harder.
+## IF A NOSE EVER COMES BACK it is a design change needing its own approval, and it should not be two
+## dark marks side by side at eye spacing.
 
-## Seat. `_orient_on_head` builds d = (sin(yaw)cos(pitch), sin(pitch), -cos(yaw)cos(pitch)) and drops
-## it on the head superellipsoid, giving p = (0.0553, 0.0134, -0.2495) with a surface normal of
-## (0.0268, 0.0007, -0.9996) — 1.54 degrees off dead forward. Both nostrils therefore sit on the same
-## near-flat frontal plane and face the camera squarely, which is what lets two separate meshes read
-## as one nose instead of as two beads wrapped round a curve.
-const NOSTRIL_YAW := 12.5           ## deg, mirrored -> x = +/-0.0553
-const NOSTRIL_PITCH := 3.0          ## deg -> y = +0.0134 (see the two-eyes note, point 1)
-## Torus inner/outer radius -> tube radius 0.008, centre radius 0.042.
-const NOSTRIL_LIP := Vector2(0.034, 0.050)
-## Vertical squash, applied as a node scale to BOTH parts so the lip and the hole stay concentric.
-## CHANGED 2026-09-15 from 0.50 to 0.28 — the user, after the 2:1 slot shipped: "shrink his nostrils
-## to thin slits." 0.28 makes the hole a 3.6:1 SLIT, against the 2:1 SLOT this replaces and the 1.6:1
-## the second build got wrong and read as eyes (see point 2 below). Squashing further, rather than
-## shrinking `NOSTRIL_BORE`, is deliberate: `NOSTRIL_BORE` is already the third of three sizes tried
-## and the smallest of them read as two faint dashes at the gameplay camera (see its own comment) — so
-## "thin slits" is answered by getting FLATTER at the same horizontal footprint, not smaller outright,
-## which keeps the part legible at range while making it unambiguously a slit up close. Re-measured on
-## both renderers at 2.6 m for this change (see the grig2 comparison sheet).
-const NOSTRIL_SQUASH := 0.28
-## The lip's DEPTH scale, and it is deliberately NOT NOSTRIL_SQUASH. The squash runs on the mesh's
-## Z (up the face) and the standoff on its Y (out of the face), so flattening the hole into a slit
-## with one number would flatten the lip's crest by the same factor and take the depth cue with it —
-## at squash 0.28 the crest would drop from 8.0 mm to 5.6 mm proud for no reason anyone asked for (it
-## was already the 0.50-squash case's 6.0 mm before this change tightened the slit further).
-## Keeping the two separate is what lets the slit get flatter WITHOUT the hole getting shallower.
-const NOSTRIL_LIP_DEPTH := 0.75
-## The lip PLANE off the shell. DO NOT TIDY THIS TO ZERO. At 0 the lip z-fights the shell and the
-## bore's cap is coplanar with an opaque surface; at a negative value both are inside a solid and
-## draw NOTHING AT ALL — the same silent-disappearance failure the strata bands died of. The shell is
-## nearly flat here (it recedes only 0.8-1.9 mm from the tangent plane out to the lip's outer edge),
-## so 2 mm clears everywhere on the part with room to spare and never floats: the tube's back reaches
-## 4.0 mm INTO the tangent plane and is buried by 2.1 mm even at the lip's widest point.
-const NOSTRIL_PROUD := 0.002
-## Bore radius, horizontal; vertical is this times NOSTRIL_SQUASH. 76 x 21 mm of hole per side as of
-## the 2026-09-15 squash change (was 76 x 38 mm at 0.50 squash). THE HORIZONTAL NUMBER IS SIZED FROM
-## RENDERS, NOT FROM TASTE, AND IT TOOK THREE. 60 mm wide measured 7 px at the 6.5 m camera and read
-## as two faint dashes rather than as holes. 68.5 mm was legible at gameplay but at the OLD 0.64 squash
-## its close-up read as EYES — round enough, ringed by a pale lip, sitting in a blank field. 76 mm is
-## the third: WIDER than the version that was too eye-like, which is what still keeps it legible now
-## that the squash has gone flatter still. Do not shrink THIS number, and do not make the part rounder,
-## without re-reading BOTH a portrait and a --gameplay capture — the squash is the dial for "thin
-## slit"; this radius is the dial for "still visible at range", and the two do different jobs.
-## The cap is 4 mm wider than the lip's opening horizontally and 2.0 mm taller vertically, so no
-## shell shows through the gap between them from any angle.
-const NOSTRIL_BORE := 0.038
-## Long enough that the far cap is deep inside the shell and can never poke out of the back of the
-## head as the surface curves; only the near cap and 2 mm of side wall are ever visible.
-const NOSTRIL_BORE_DEPTH := 0.030
-## rad. A little cant so the pair is not a perfectly level pair of dots — outer ends ride higher,
-## which is the direction that reads as a flared animal nostril rather than as a drilled hole. Sign
-## verified by render, not by reasoning: `_orient_on_head` leaves node-local +Z pointing INTO the
-## head, so a positive Z rotation lifts node-local +X, and node-local +X is the OUTBOARD side only
-## because the seat yaw is mirrored with the same `s`.
-const NOSTRIL_ROLL := 0.10
 
-func _build_nostrils() -> void:
-	# Both sides pass identical mesh arguments, so `_mesh_cache` hands out ONE torus and ONE cylinder
-	# for the pair and the second nostril is free in memory.
-	var m_lip := _toon(SKIN, _matte({"rim": 0.03, "spec": 0.02}))
-	var m_bore := _toon(NOSTRIL, {"spec": 0.0, "rim": 0.0, "shade": 0.05})
-	for s: float in [-1.0, 1.0]:
-		var seat := _node("Nostril%s" % ("L" if s < 0.0 else "R"), _face, Vector3.ZERO)
-		# inset 0.0: the seat sits exactly ON the shell and everything below is pushed out along -Z.
-		_orient_on_head(seat, s * NOSTRIL_YAW, NOSTRIL_PITCH, 0.0)
-		var roll := _node("Roll", seat, Vector3.ZERO)
-		roll.rotation.z = s * NOSTRIL_ROLL
-		# AXIS MAPPING, and it is the same for both meshes. TorusMesh and CylinderMesh both run along
-		# their own +Y; `_orient_on_head` leaves node-local -Z as the outward normal. Rotating -90 deg
-		# about X sends +Y to -Z, so the parts point OUT of the face, and sends the mesh's own +Z to
-		# node +Y (up the face). Godot applies `scale` in the mesh's LOCAL frame (Node3D builds the
-		# basis as rotation THEN `scale_local`), so the scale components below are read in MESH axes:
-		# X = across the face, Y = the outward axis, Z = up the face. That is why the vertical squash
-		# lands on Z and not on Y, and why the lip is squashed on Y as well (flattening its standoff
-		# so the crest stays a hair proud instead of a fat doughnut, at its own NOSTRIL_LIP_DEPTH).
-		var lip := _mi(torus(NOSTRIL_LIP.x, NOSTRIL_LIP.y, 18, 10), m_lip,
-			roll, Vector3(0.0, 0.0, -NOSTRIL_PROUD), "Lip")
-		lip.rotation.x = -PI * 0.5
-		lip.scale = Vector3(1.0, NOSTRIL_LIP_DEPTH, NOSTRIL_SQUASH)
-		# The cylinder is centred on its own origin, so pushing it back by half its depth puts the
-		# OUTWARD cap exactly NOSTRIL_PROUD off the shell and buries the rest.
-		var bore := _mi(cylinder(NOSTRIL_BORE, NOSTRIL_BORE, NOSTRIL_BORE_DEPTH, 14), m_bore,
-			roll, Vector3(0.0, 0.0, NOSTRIL_BORE_DEPTH * 0.5 - NOSTRIL_PROUD), "Bore")
-		bore.rotation.x = -PI * 0.5
-		bore.scale = Vector3(1.0, 1.0, NOSTRIL_SQUASH)
+# ============================================================================== the carver's kit
+## What says "carver" at gameplay distance (2026-10-01): a canvas apron, a chisel in its pocket and a
+## mallet over the shoulder. His line "My chisel is older than your planet" now has a chisel to point
+## at. Everything is rigid on the torso, so it rides every body animation. KNOWN LIMIT: the mallet is
+## fixed to his back and passes close to the raised arm in the happy emote.
+func _build_kit() -> void:
+	var semi := Vector3(TORSO_RX * TORSO_MUL.x, TORSO_RY * TORSO_MUL.y, TORSO_RZ * TORSO_MUL.z)
+	var m_apron := _toon(APRON, _matte(SURF_CLOTH))
+	# a narrower, deeper copy of the torso pushed forward: only its front shows, as a bib
+	_mi(superellipsoid(Vector3(semi.x * 0.70, semi.y * 0.80, semi.z * 1.0), 3.2, 16, 9), m_apron, _torso,
+		Vector3(0.0, TORSO_Y - 0.040, -0.022), "Apron")
+	var pk := BoxMesh.new()
+	pk.size = Vector3(0.150, 0.070, 0.012)
+	_mi(pk, _toon(APRON.darkened(0.14), _matte({})), _torso, Vector3(0.0, TORSO_Y - 0.085, -semi.z - 0.014), "Pocket")
+	# the chisel: steel blade down into the pocket, wooden handle up and out
+	var m_wood := _toon(SKIN_DEEP.darkened(0.25), _matte({}))
+	var ch := _node("Chisel", _torso, Vector3(0.040, TORSO_Y - 0.040, -semi.z - 0.026))
+	ch.rotation.z = deg_to_rad(16.0)
+	_mi(cylinder(0.019, 0.016, 0.085, 6), m_wood, ch, Vector3(0.0, 0.050, 0.0), "Handle")
+	var bl := BoxMesh.new()
+	bl.size = Vector3(0.026, 0.060, 0.008)
+	_mi(bl, _toon(STEEL, _matte({"spec": 0.12})), ch, Vector3(0.0, -0.020, 0.0), "Blade")
+	# the mallet on his back, head up beside his own: the silhouette's new corner
+	var ml := _node("Mallet", _torso, Vector3(-0.400, 0.800, 0.120))
+	ml.rotation = Vector3(0.0, 0.0, deg_to_rad(30.0))
+	_mi(cylinder(0.022, 0.020, 0.560, 6), m_wood, ml, Vector3(0.0, -0.250, 0.0), "Haft")
+	var hd := _mi(cylinder(0.082, 0.082, 0.200, 10), _toon(MALLET, _matte({})), ml, Vector3(0.0, 0.050, 0.0), "Head")
+	hd.rotation.z = PI * 0.5
+	for sx: float in [-1.0, 1.0]:
+		_mi(cylinder(0.086, 0.086, 0.022, 10), _toon(STEEL, _matte({"spec": 0.10})), ml,
+			Vector3(0.075 * sx, 0.050, 0.0), "Band").rotation.z = PI * 0.5
 
 
 # ================================================================================= worn stone
@@ -812,7 +701,7 @@ func _animate_extras(delta: float) -> void:
 			lift = 1.0
 		lift = maxf(lift, clampf((pose(P.EYE_WIDE) - 1.0) / 0.35, 0.0, 1.0))
 		_eyelid_lift = lerpf(_eyelid_lift, lift, 1.0 - exp(-14.0 * delta))
-		_eyelid.rotation.x = EYELID_LIFT * _eyelid_lift
+		_eyelid.rotation.x = EYELID_REST * (1.0 - _eyelid_lift) + EYELID_LIFT * _eyelid_lift
 	# The tally slabs swing on their cord: same first-order trick, driven by the torso roll at 0.4x.
 	# `_torso_pivot` applies -TORSO_ROLL, so a positive difference here is the slabs hanging behind
 	# the body as it rolls out from under them.

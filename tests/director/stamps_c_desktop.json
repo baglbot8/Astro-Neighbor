@@ -1,0 +1,80 @@
+[
+ {
+  "t": 2.0,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "before"
+   ]
+  }
+ },
+ {
+  "t": 2.2,
+  "capture": "c01_home_no_card"
+ },
+ {
+  "t": 2.4,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "open_view",
+   "args": []
+  }
+ },
+ {
+  "t": 3.6,
+  "capture": "c02_view_no_card"
+ },
+ {
+  "t": 3.8,
+  "tap": "ui_cancel"
+ },
+ {
+  "t": 4.6,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_start",
+   "args": []
+  }
+ },
+ {
+  "t": 4.8,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_tick",
+   "args": [
+    3
+   ]
+  }
+ },
+ {
+  "t": 6.0,
+  "capture": "c03_home_done_chip"
+ },
+ {
+  "t": 6.4,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "open_view",
+   "args": []
+  }
+ },
+ {
+  "t": 7.6,
+  "capture": "c04_view_desktop"
+ },
+ {
+  "t": 7.8,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "end"
+   ]
+  }
+ },
+ {
+  "t": 8.2,
+  "quit": true
+ }
+]

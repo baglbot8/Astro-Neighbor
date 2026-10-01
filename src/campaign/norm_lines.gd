@@ -99,3 +99,170 @@ static func reward_line(item_id: String) -> String:
 	if lines.is_empty():
 		return "For you! A normal human gift."
 	return str(lines.pick_random())
+
+
+# ============================================================================= THE STAMP CARD
+# docs/DAILY_STAMPS_SPEC.md 2 (2026-10-01): Norm is the stamp card's mascot. Same voice as above -
+# a normal human who gets human things a little wrong - in short, plain words a kid can read. Every
+# line is one dialogue box (60 characters or fewer). src/stamps/stamp_system.gd speaks them.
+
+## The first card ever, after INTRO if he has never been met.
+const STAMP_INTRO: Array[String] = [
+	"I made you a card! Humans love small cards.",
+	"Do any 3 things on it and I stamp it. Thunk! Like that.",
+	"5 stamps in a week and you get a prize. A normal one.",
+	"A new card every day. I have so many cards.",
+]
+
+## ONE of these opens every talk at his stamp spot, picked by the real date (`stamp_daily`), so the
+## line changes each day and a week never repeats one.
+const STAMP_DAILY: Array[String] = [
+	"Today I ate breakfast. With my mouth. As humans do.",
+	"I slept eight hours. Lying down. Like a human.",
+	"I have two legs today. Same as every day. Very normal.",
+	"I waved at a rock this morning. It was not a human. Oops.",
+	"I practised my human laugh. Ha. Ha. Ha. Good, yes?",
+	"My tentacle wanted to hold the stamp. I said no.",
+	"I counted my fingers. A normal number. I will not say it.",
+	"Humans drink water. I drank some. It went everywhere.",
+	"I bought a hat for my head. I only have the one head.",
+	"I love the weather. Humans always say that. So do I.",
+	"I blinked both eyes today. At the same time, even.",
+	"My stamp ink is green. Not like a tentacle. Just green.",
+	"I walked here on my feet. Left one, then the other one.",
+	"Humans say 'nice day'. Nice day! I said it. Nailed it.",
+	"I have a pet rock. His name is Rock. A human name.",
+	"I sneezed today. Out of my nose. I checked.",
+	"I read a book about humans. For fun. Not for notes.",
+	"My suit is not ragged. It is human fashion. Vintage.",
+	"I stretched this morning. Only two arms. Count them.",
+	"Do you also have bones? I have so many. Probably.",
+	"I yawned. Humans do it when tired. I was not tired.",
+	"I tried a sandwich. Bread on both sides. Genius.",
+	"Stella wants to measure me. I am a normal size. No thanks.",
+	"Zorp says I am an unusual Earth person. I am a usual one.",
+	"I hummed a human song. I do not know the words. Or tune.",
+	"The crack in my visor? That lets the fresh air in.",
+	"I have a birthday. Every year. Like you. What a thing.",
+	"I shook hands with Pip. Then I let go. That is the rule.",
+	"I am wearing socks. Two of them. One per foot. Correct?",
+	"Good morning! Or evening. Humans say one of them.",
+	"I sat on a chair today. On the top part. Very relaxing.",
+	"Humans collect stamps. So I collect them too now.",
+	"I tied my shoes. I have no laces. I tied them anyway.",
+	"I told Gloop a joke. Humans do jokes. Gloop did not laugh.",
+	"My hobby is breathing. In, then out. I am very good at it.",
+	"I looked at the sky and said 'wow'. That is the custom.",
+	"I have a mum. Everyone does. Mine is also a human.",
+	"I drank hot tea. I said 'ouch'. Like a professional.",
+	"That is not a tentacle. That is my scarf. It wiggles.",
+	"I high-fived myself. It takes two hands. I had spares.",
+	"I said 'bless you' to a sneeze. It was the wind. Still.",
+	"I own a toothbrush. For my teeth. All of them are mine.",
+]
+
+## Today's card has no ticks yet.
+const STAMP_NONE: Array[String] = [
+	"Your card is empty today. Empty is a fine start.",
+	"No ticks yet. Any 3 things. I believe in you, human.",
+	"Nothing ticked yet. The day is long. So I am told.",
+]
+
+## Some ticks, no stamp yet. %d = how many more are needed.
+const STAMP_SOME: Array[String] = [
+	"%d more and I stamp it. My stamp arm is ready.",
+	"Good ticks! %d to go. I am counting. On my fingers.",
+	"Only %d left. I am warming up the stamp.",
+]
+
+## Today's stamp is earned.
+const STAMP_STAMPED: Array[String] = [
+	"Stamp! Today is done. You may now relax. A human hobby.",
+	"Today's stamp is on the card. I pressed it very hard.",
+	"Stamped! I love that sound. Thunk. So human.",
+]
+
+## This week's count. %d = stamps so far this week (1 to 4).
+const STAMP_WEEK: Array[String] = [
+	"That makes %d of 5 stamps this week.",
+	"%d stamps this week. 5 gets you a prize.",
+]
+
+## The week already has its five stamps (and the prize has been handed over).
+const STAMP_WEEK_DONE: Array[String] = [
+	"5 stamps this week! The week is won. Rest your arms.",
+	"This week is full. Extra stamps are just for the joy.",
+]
+
+## He hands over a prize: one of these, the gift, then one of STAMP_PRIZE_AFTER.
+const STAMP_PRIZE: Array[String] = [
+	"5 stamps! Here is your prize. I wrapped it. Badly.",
+	"A whole week of stamps! Take this. It is very normal.",
+	"You earned a prize! I picked it from my own home.",
+	"Prize time! Hold out your hands. Both of your two hands.",
+]
+const STAMP_PRIZE_AFTER: Array[String] = [
+	"Every human home has one. I am almost sure.",
+	"Put it somewhere nice. That is what I would do.",
+	"I have one too. Mine is slightly chewed.",
+	"It is the most normal thing I own. Owned.",
+]
+
+## Every new prize has been given: he offers any stamp decoration again (pills, STAMP_MORE pages on).
+const STAMP_REPEAT_ASK := "I ran out of new prizes. Pick an old favourite!"
+const STAMP_MORE := "More..."
+
+## The last box of every talk at his stamp spot.
+const STAMP_CARD_ASK := "Want to look at your card?"
+const STAMP_CARD_OPTIONS: Array[String] = ["Show me", "Bye, Norm"]
+const STAMP_BYE: Array[String] = [
+	"Goodbye, fellow human. Keep doing things!",
+	"See you tomorrow. New card, same Norm.",
+	"Bye! I will be here. Standing. Normally.",
+]
+
+## Toasts and the Stamps view (not dialogue boxes; still short).
+const STAMP_TOAST_CARD := "You got Norm's stamp card!"
+const STAMP_TOAST_NEW: Array[String] = [
+	"A new stamp card from Norm!",
+	"New day, new stamp card!",
+]
+const STAMP_TOAST_TICK := "Stamp card: %d of 3 done"
+const STAMP_TOAST_STAMP := "Stamp! %d of 5 this week."
+const STAMP_TOAST_PRIZE := "5 stamps! Norm has your prize on the Commons."
+const STAMP_HINT := "Norm is waving a little card at you."
+const STAMP_VIEW_OFF := "Norm has a stamp card for you. Find him on the Commons."
+## Under the card in the Stamps view, picked by the date like STAMP_DAILY.
+const STAMP_VIEW_NOTES: Array[String] = [
+	"Stamps are a normal human hobby. - Norm",
+	"I counted these tasks myself. Twice. - Norm",
+	"Do any 3. I am not picky. - Norm",
+	"This card is hand made. By hands. - Norm",
+	"No rush. Humans love to take it easy. - Norm",
+	"I drew the little circles myself. - Norm",
+	"A stamp a day keeps me happy. - Norm",
+]
+
+
+## The line of the day for real-date day number `day` (StampCard.day_number): a fixed shuffle of
+## STAMP_DAILY walked one a day, so no line comes back until every other one has been said.
+static func stamp_daily(day: int) -> String:
+	return _rotated(STAMP_DAILY, day, "astro_stamp_daily")
+
+
+static func stamp_view_note(day: int) -> String:
+	return _rotated(STAMP_VIEW_NOTES, day, "astro_stamp_note")
+
+
+static func _rotated(lines: Array[String], day: int, salt: String) -> String:
+	if lines.is_empty():
+		return ""
+	var order: Array = range(lines.size())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(salt)
+	for i in range(order.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var t: int = order[i]
+		order[i] = order[j]
+		order[j] = t
+	return lines[order[posmod(day, order.size())]]

@@ -67,6 +67,10 @@ const VISITOR_NODE := "World/VisitorSystem"
 const QUIZ_PATH := "res://src/campaign/norm_quiz.gd"
 const REWARDS_PATH := "res://src/campaign/norm_rewards.gd"
 const LINES_PATH := "res://src/campaign/norm_lines.gd"
+## Norm's stamp card (docs/DAILY_STAMPS_SPEC.md 2, 2026-10-01). Its node rides on this file's attach
+## (world.gd already calls it for every world), and while its Norm stands on the Commons the quiz
+## keeps off the hub (`stamp_booth_on`), so one world never holds two Norms.
+const STAMPS_PATH := "res://src/stamps/stamp_system.gd"
 const NORM_SCENE := "res://src/characters/npcs/norm.tscn"
 const PLANET_DATA_DIR := "res://src/planet/data/"
 const NPC_ID := "norm"
@@ -150,7 +154,14 @@ static func attach(world: Node) -> Node:
 	var host: Node = (load(SCRIPT_PATH) as GDScript).new()
 	host.name = NODE_NAME
 	world.add_child(host)
+	if ResourceLoader.exists(STAMPS_PATH):  # the stamp card: after this node, so its Norm sees the same world
+		load(STAMPS_PATH).attach(world)
 	return host
+
+
+## True while the stamp card's Norm owns the Commons (src/stamps/stamp_system.gd `booth_on`).
+static func stamp_booth_on() -> bool:
+	return ResourceLoader.exists(STAMPS_PATH) and bool(load(STAMPS_PATH).call("booth_on"))
 
 
 ## The world's NormSystem, or null.
@@ -172,6 +183,8 @@ func _stage() -> void:
 	var here := GameState.current_planet_id
 	if planet == null or planet.data == null:
 		return
+	if here == "hub" and stamp_booth_on():
+		return  # the stamp card's Norm stands here (also covers a norm_today locked on the hub by an older build)
 	if here_today() != here:
 		return
 	_bring_in()
@@ -199,9 +212,12 @@ static func is_norm_day(day: int) -> bool:
 ## The worlds he may visit on this save now, in WORLDS order.
 static func candidate_worlds() -> PackedStringArray:
 	var out := PackedStringArray()
+	var booth := stamp_booth_on()
 	for w: String in WORLDS:
 		if not ResourceLoader.exists(PLANET_DATA_DIR + w + ".tres"):
 			continue
+		if w == "hub" and booth:
+			continue  # he is already on the Commons with the stamp card; the quiz roams the other worlds
 		if not CampaignData.planet_in_range(w):
 			continue
 		if not GameState.story_done and not GameState.flag("met_" + str(WORLD_NEIGHBOUR.get(w, w))):

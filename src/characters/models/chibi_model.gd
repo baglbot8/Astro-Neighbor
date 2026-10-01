@@ -1569,6 +1569,13 @@ func _orient_on_head(node: Node3D, yaw_deg: float, pitch_deg: float, inset: floa
 ## `Basis.looking_at(outward, Vector3.UP)`, which warns on colinear vectors as the pitch approaches
 ## 90 deg and whose yaw is meaningless well before that. Every primitive in this file that has a
 ## length — capsule, taper_tube, cylinder — runs along its own +Y, so this is the frame they want.
+## A basis with its y axis along `y_dir`, z (the way a taper_tube curls) toward `z_hint`.
+static func _aim_basis(y_dir: Vector3, z_hint: Vector3) -> Basis:
+	var y := y_dir.normalized()
+	var z := (z_hint - y * z_hint.dot(y)).normalized()
+	return Basis(y.cross(z), y, z)
+
+
 static func _basis_from_up(up: Vector3) -> Basis:
 	var yv := up
 	var xv := Vector3.RIGHT if absf(yv.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD

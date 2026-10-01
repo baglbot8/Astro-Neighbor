@@ -1,0 +1,156 @@
+[
+ {
+  "t": 3.0,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "arrive"
+   ]
+  }
+ },
+ {
+  "t": 3.2,
+  "capture": "a01_hub_arrival"
+ },
+ {
+  "t": 3.5,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_go_to_norm",
+   "args": []
+  }
+ },
+ {
+  "t": 5.5,
+  "capture": "a02_norm_waiting"
+ },
+ {
+  "t": 5.8,
+  "tap": "interact"
+ },
+ {
+  "t": 7.4,
+  "capture": "a03_talk"
+ },
+ {
+  "t": 7.7,
+  "tap": "interact"
+ },
+ {
+  "t": 10.0,
+  "capture": "a04_talk"
+ },
+ {
+  "t": 10.3,
+  "tap": "interact"
+ },
+ {
+  "t": 12.6,
+  "capture": "a05_talk"
+ },
+ {
+  "t": 12.9,
+  "tap": "interact"
+ },
+ {
+  "t": 15.2,
+  "capture": "a06_talk"
+ },
+ {
+  "t": 15.5,
+  "tap": "interact"
+ },
+ {
+  "t": 17.8,
+  "capture": "a07_talk"
+ },
+ {
+  "t": 18.1,
+  "tap": "interact"
+ },
+ {
+  "t": 20.400000000000002,
+  "capture": "a08_talk"
+ },
+ {
+  "t": 20.700000000000003,
+  "tap": "interact"
+ },
+ {
+  "t": 23.000000000000004,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "after_talk"
+   ]
+  }
+ },
+ {
+  "t": 24.200000000000003,
+  "capture": "a09_view_new_card"
+ },
+ {
+  "t": 24.600000000000005,
+  "tap": "ui_cancel"
+ },
+ {
+  "t": 25.800000000000004,
+  "capture": "a10_hud_chip"
+ },
+ {
+  "t": 26.000000000000004,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_tick",
+   "args": [
+    2
+   ]
+  }
+ },
+ {
+  "t": 27.000000000000004,
+  "capture": "a11_two_ticks"
+ },
+ {
+  "t": 27.400000000000006,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_tick",
+   "args": [
+    1
+   ]
+  }
+ },
+ {
+  "t": 28.400000000000006,
+  "capture": "a12_stamp_toast"
+ },
+ {
+  "t": 30.000000000000004,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_tap_chip",
+   "args": []
+  }
+ },
+ {
+  "t": 31.200000000000003,
+  "capture": "a13_view_after_chip_tap"
+ },
+ {
+  "t": 31.400000000000006,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "end"
+   ]
+  }
+ },
+ {
+  "t": 31.800000000000004,
+  "quit": true
+ }
+]

@@ -1,0 +1,185 @@
+[
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/Catalog",
+   "method": "register",
+   "args": [
+    {
+     "id": "TEST_stamp_deco_a",
+     "name": "TEST Stamp Mailbox",
+     "kind": "decoration",
+     "category": "signs",
+     "rarity": "common",
+     "price": 0,
+     "source": "stamps",
+     "desc": "TEST ITEM",
+     "footprint": 0.5,
+     "icon_color": "#c08a5c",
+     "scene": "res://src/decorations/items/rocket_mailbox.tscn"
+    }
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/Catalog",
+   "method": "register",
+   "args": [
+    {
+     "id": "TEST_stamp_deco_b",
+     "name": "TEST Stamp Lamp",
+     "kind": "decoration",
+     "category": "lights",
+     "rarity": "common",
+     "price": 0,
+     "source": "stamps",
+     "desc": "TEST ITEM",
+     "footprint": 0.5,
+     "icon_color": "#ffe27a",
+     "scene": "res://src/decorations/items/moon_lamp.tscn"
+    }
+   ]
+  }
+ },
+ {
+  "t": 1.0,
+  "call": {
+   "node": "/root/GameState",
+   "method": "set_flag",
+   "args": [
+    "norm_met",
+    true
+   ]
+  }
+ },
+ {
+  "t": 2.5,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_fill_week",
+   "args": [
+    5
+   ]
+  }
+ },
+ {
+  "t": 3.0,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "week_filled"
+   ]
+  }
+ },
+ {
+  "t": 3.2,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "open_view",
+   "args": []
+  }
+ },
+ {
+  "t": 4.4,
+  "capture": "b01_view_prize_ready"
+ },
+ {
+  "t": 4.8,
+  "tap": "ui_cancel"
+ },
+ {
+  "t": 5.6,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_go_to_norm",
+   "args": []
+  }
+ },
+ {
+  "t": 7.4,
+  "capture": "b02_norm_has_prize"
+ },
+ {
+  "t": 7.6,
+  "tap": "interact"
+ },
+ {
+  "t": 9.6,
+  "capture": "b03_prize_line"
+ },
+ {
+  "t": 9.9,
+  "tap": "interact"
+ },
+ {
+  "t": 12.2,
+  "capture": "b04_prize_handed"
+ },
+ {
+  "t": 12.299999999999999,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "prize_claimed"
+   ]
+  }
+ },
+ {
+  "t": 12.5,
+  "tap": "interact"
+ },
+ {
+  "t": 14.799999999999999,
+  "capture": "b05_prize_after"
+ },
+ {
+  "t": 15.1,
+  "tap": "interact"
+ },
+ {
+  "t": 17.4,
+  "capture": "b06_daily"
+ },
+ {
+  "t": 17.7,
+  "tap": "interact"
+ },
+ {
+  "t": 20.0,
+  "capture": "b07_status"
+ },
+ {
+  "t": 20.3,
+  "tap": "interact"
+ },
+ {
+  "t": 22.6,
+  "capture": "b08_ask"
+ },
+ {
+  "t": 22.900000000000002,
+  "tap": "interact"
+ },
+ {
+  "t": 25.200000000000003,
+  "capture": "b09_view_after_prize"
+ },
+ {
+  "t": 25.400000000000002,
+  "call": {
+   "node": "/root/World/StampSystem",
+   "method": "debug_report",
+   "args": [
+    "end"
+   ]
+  }
+ },
+ {
+  "t": 25.800000000000004,
+  "quit": true
+ }
+]

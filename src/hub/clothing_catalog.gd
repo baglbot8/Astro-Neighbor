@@ -90,6 +90,26 @@ const JUNGLE_SUITS: Array = [
 ]
 
 
+## Norm's Totally Normal Collection (docs/DAILY_STAMPS_SPEC.md 3): the four stamp-card outfits. Norm
+## hands one out for a week with 5 stamps, never a shop: each def carries "price": 0 (so Suit-Up never
+## stocks it) and "source": "stamps" (the same shape as Moss's "moss"). Same columns as SUITS. The joke
+## is Norm's idea of what a human wears, so the names are clothes and the colours are theirs: office
+## khaki with a red tie, blue jeans, lilac pyjamas, a loud holiday shirt. Only the three SUITS keys
+## are set (no trouser_color / panel_color): the wear code MERGES style keys, so an extra key here
+## would stay on the player after they change into any other suit. Colour
+## blocking as above: every accent differs from its suit in both hue and value.
+const STAMP_SUITS: Array = [
+	["suit_regular_human", "Regular Human Suit", "suit", "rare", 0, "#b9a58a", "#b5483c", "#bfe0f0",
+		"Office khaki with a red tie stripe. Norm sleeps in his."],
+	["suit_casual_human", "Casual Human Suit", "suit", "rare", 0, "#5f7fae", "#d9a55c", "#bfe8ff",
+		"Blue jeans, all over. For a human's day off."],
+	["suit_sleepy_human", "Sleepy Human Suit", "suit", "rare", 0, "#a99ae0", "#e6cf7a", "#d8d8ff",
+		"Soft pyjamas with moon-yellow cuffs. Humans sleep flat!"],
+	["suit_holiday_human", "Holiday Human Suit", "suit", "rare", 0, "#e08f6f", "#2f8f86", "#c8f0e8",
+		"A loud holiday shirt. Norm has read about beaches."],
+]
+
+
 ## Every clothing definition, suits first (cheapest to most expensive), then hats and backpacks.
 func get_items() -> Array:
 	var out: Array = []
@@ -121,6 +141,25 @@ func get_items() -> Array:
 			"price": 0,
 			"stall_price": int(row[4]),
 			"source": "moss",
+			"desc": row[8],
+			"icon_color": row[5],
+			"style": {
+				"suit_color": row[5],
+				"accent_color": row[6],
+				"visor_tint": row[7],
+			},
+		})
+	# NORM'S STAMP CARD (docs/DAILY_STAMPS_SPEC.md 2-3): weekly prizes, given in this order after the
+	# stamp decorations. "price": 0 keeps them out of Suit-Up, "source": "stamps" marks the giver.
+	for row: Array in STAMP_SUITS:
+		out.append({
+			"id": row[0],
+			"name": row[1],
+			"kind": "clothing",
+			"category": row[2],
+			"rarity": row[3],
+			"price": 0,
+			"source": "stamps",
 			"desc": row[8],
 			"icon_color": row[5],
 			"style": {

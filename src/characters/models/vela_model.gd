@@ -103,7 +103,24 @@ const INK := Color("#221d26")          ## the pupil — the darkest thing on her
 ##
 ## It also has to differ from Bolt, the cast's other pale-headed robot, whose head is a warm cream
 ## ball of nearly this size. Cool and darker is that separation.
-const GLASS := Color("#98a5aa")        ## S 0.106 V 0.667 — cool grey-blue, level with TAUPE in value
+##
+## REVERSED 2026-10-01: THE SOFT GLOW. The user picked "Soft glow" from the design sheets ("add the
+## soft glow to Vela"): the bulb is now warm frosted glass that glows low all the time and brighter
+## when he is happy, with a soft halo round it and two rose blush lamps at the ends of the eye hoop.
+## The design review's reason: unlit and cold, the bulb read as a glass ball on a robot. So the
+## "not lit at rest" rule above is history, kept for the measurements. The envelope and the pinch use
+## GLASS_WARM; GLASS is the retired cold value. His line "My bulb just lit up, that means I'm glad"
+## still holds because the rest glow (GLOW_REST) sits well under the happy glow (GLOW_HAPPY).
+const GLASS := Color("#98a5aa")        ## RETIRED 2026-10-01. S 0.106 V 0.667 — cool grey-blue
+const GLASS_WARM := Color("#d8c9a6")   ## S 0.23 V 0.85 — frosted warm glass: a bulb that is on, low
+const BLUSH_LED := Color("#d99aa0")    ## the two rose blush lamps on the eye hoop
+## Envelope emission strength: at rest (a slow 4 s breath of 10 %), and at the top of the happy
+## flicker. `_animate_extras` blends between the two with `_happy_glow`.
+const GLOW_REST := 0.55
+const GLOW_HAPPY := 1.66
+## The halo quad's alpha at rest, and how much the happy emote adds.
+const HALO_REST := 0.22
+const HALO_HAPPY := 0.30
 
 # ---------------------------------------------------------------------------- surface presets
 ## Brushed metal grain through `_toon`, NEVER `MaterialLib.metal()`. That call bypasses
@@ -626,11 +643,12 @@ var _ankle: Array[Node3D] = []
 var _iris: Array[Node3D] = []
 var _lamps: Array[ShaderMaterial] = []
 var _core_mat: ShaderMaterial
-## The glass envelope's own material, duplicated so `_animate_extras` can lift its emission on
-## the happy/greet emotes without touching every other Vela sharing `_toon`'s static cache. Stays
-## at emission_strength 0.0 outside those emotes — see GLASS above for why the envelope must read
-## as unlit at rest.
+## The glass envelope's own material, duplicated so `_animate_extras` can drive its emission
+## without touching every other Vela sharing `_toon`'s static cache: GLOW_REST at rest, up to
+## GLOW_HAPPY on the happy/greet emotes (see GLASS_WARM above).
 var _glass_mat: ShaderMaterial
+## The soft halo round the bulb (2026-10-01); `_animate_extras` raises its alpha with the happy glow.
+var _halo_mat: StandardMaterial3D
 ## Smoothed 0..1 toward `pose(P.EYE_HAPPY)`, so the bulb's glow ramps in/out over ~0.25 s instead
 ## of popping with the emote cut. See `_animate_extras`.
 var _happy_glow: float = 0.0
@@ -682,6 +700,7 @@ func _build_geometry() -> void:
 	_iris.clear()
 	_lamps.clear()
 	_core_mat = null
+	_halo_mat = null
 
 	_build_chassis()
 	_build_arms()
@@ -709,6 +728,33 @@ func _build_geometry() -> void:
 		"eyes": eyes, "mouth": false, "nose": false, "blush": false, "brows": false,
 	})
 	_build_iris()
+	_build_soft_glow()
+
+
+## THE SOFT GLOW's two added parts (2026-10-01): a halo round the bulb and two blush lamps.
+func _build_soft_glow() -> void:
+	# a soft halo round the bulb (additive, so it only shows against the dark)
+	var q := QuadMesh.new()
+	q.size = Vector2(1.05, 1.05)
+	var halo := MeshInstance3D.new()
+	halo.name = "Halo"
+	halo.mesh = q
+	_halo_mat = StandardMaterial3D.new()
+	_halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_halo_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_halo_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_halo_mat.albedo_color = Color(AMBER.r, AMBER.g, AMBER.b, HALO_REST)
+	_halo_mat.albedo_texture = AlienModel.soft_dot_texture()
+	halo.material_override = _halo_mat
+	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	halo.position = Vector3(0.0, BULB_Y - SOCKET_Y, 0.0)
+	_bulb.add_child(halo)
+	# two rose "blush" lamps at the outer ends of the eye hoop: shy, in a robot's own vocabulary
+	var m_blush := lit_material(BLUSH_LED.darkened(0.18), 0.9, BLUSH_LED)
+	for sx: float in [-1.0, 1.0]:
+		var b := _mi(sphere(1.0, 6, 3), m_blush, _hoop, Vector3((HOOP_HALF_W + 0.060) * sx, -0.060, -0.006), "Blush")
+		b.scale = Vector3(0.026, 0.017, 0.012)
 
 
 # ============================================================================= chassis
@@ -918,11 +964,11 @@ func _build_bulb() -> void:
 	# `_toon` cache entry) held at emission_strength 0.0 here — still unlit at rest, still the same
 	# material everywhere else — and only `_animate_extras` ever raises it, gated on the same
 	# P.EYE_HAPPY signal that shows the happy-arc eyes, so the two read as one cue, not two.
-	var m_glass := (_toon(GLASS, _matte({
+	var m_glass := (_toon(GLASS_WARM, _matte({
 		"spec": 0.24, "spec_size": 300.0, "rim": 0.030, "shade": 0.34,
 		"shade_tint": Color(0.64, 0.72, 0.86)})).duplicate() as ShaderMaterial)
 	m_glass.set_shader_parameter("emission_color", AMBER)
-	m_glass.set_shader_parameter("emission_strength", 0.0)
+	m_glass.set_shader_parameter("emission_strength", GLOW_REST)
 	_glass_mat = m_glass
 	# PLUM shank, TAUPE_DARK beads: a 0.11 value step, not the 0.37 an earlier pass had. See CAP_*.
 	# The SOCKET CUP is PLUM too as of this pass, so the shank, the cup and the torso's neck column are
@@ -1198,9 +1244,15 @@ func _animate_extras(delta: float) -> void:
 	# — so a large smooth surface still reads as cute rather than as the "switched on" look GLASS
 	# above spent three drafts avoiding at rest.
 	_happy_glow = move_toward(_happy_glow, clampf(pose(P.EYE_HAPPY), 0.0, 1.0), delta / 0.25)
+	# 2026-10-01 (the soft glow): the envelope never goes dark now. It breathes at GLOW_REST and the
+	# happy cue blends it up to the old flicker at GLOW_HAPPY, about three times brighter, so "my bulb
+	# just lit up" is still a visible change. One blend, so there is no step when the emote starts.
 	if _glass_mat != null:
-		_glass_mat.set_shader_parameter("emission_strength",
-			1.0 * _happy_glow * (0.8 + 0.2 * sin(TAU * _t * 1.6)))
+		var rest_glow := GLOW_REST * (0.90 + 0.10 * sin(TAU * _t / 4.0))
+		var happy_glow := GLOW_HAPPY * (0.8 + 0.2 * sin(TAU * _t * 1.6))
+		_glass_mat.set_shader_parameter("emission_strength", lerpf(rest_glow, happy_glow, _happy_glow))
+	if _halo_mat != null:
+		_halo_mat.albedo_color.a = HALO_REST + HALO_HAPPY * _happy_glow
 
 	# ---- the iris. `_eye_open` is the shared blink clock; here it drives a shutter instead of a
 	# vertical squash. The leaves cross the centre at full close, so the pupil (which `_apply_face` is

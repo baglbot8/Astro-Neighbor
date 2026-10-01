@@ -1,0 +1,10 @@
+[
+ {"t": 1.0, "call": {"node": "/root/World/StampSystem", "method": "dev_start", "args": []}},
+ {"t": 1.2, "call": {"node": "/root/World/StampSystem", "method": "dev_stamp_today", "args": []}},
+ {"t": 1.4, "call": {"node": "/root/World/StampSystem", "method": "debug_report", "args": ["day1"]}},
+ {"t": 1.6, "call": {"node": "/root/World/StampSystem", "method": "dev_next_day", "args": []}},
+ {"t": 2.6, "call": {"node": "/root/World/StampSystem", "method": "debug_report", "args": ["day2_new_card"]}},
+ {"t": 2.8, "call": {"node": "/root/World/StampSystem", "method": "dev_reset", "args": []}},
+ {"t": 3.0, "call": {"node": "/root/World/StampSystem", "method": "debug_report", "args": ["reset"]}},
+ {"t": 3.4, "quit": true}
+]

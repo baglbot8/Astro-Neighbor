@@ -27,6 +27,11 @@ extends ChibiModel
 ## Everything that is Fen stays: the id, the name, the terse elder who has kept a nine-year logbook
 ## of which pools have moved, and the slowest manner in the cast.
 ##
+## 2026-10-01, THE SUNFLOWER SPROUT (the user's pick from the design sheets, where Fen's brief is now
+## "young, sunny plant"): butter-yellow petals, spring-green face, stem and vines, eyes 18 % bigger and
+## a two-leaf seedling sprout on the crown. Shape, rig and manner are unchanged; the manner below
+## (`anim_time_scale` 0.80, `blink_hold` 1.6) is still the elder's and was not part of the pick.
+##
 ## CAST_VARIETY SLOTS HELD (docs/CAST_VARIETY.md):
 ##   * eyestalks: NONE. Two small dark eyes sit flat on the bud face, no sclera (R2.3).
 ##   * wide toothy grin: NONE. No teeth of any kind.
@@ -43,14 +48,17 @@ extends ChibiModel
 ## slight stoop, a shuffle, and petals that open a little when Fen speaks and wide when surprised.
 
 # ---------------------------------------------------------------------------- palette
-## Cool teal-sage stem and pale celadon bud against a warm terracotta pan and an amber sky: the
-## complement of the ground, so the plant separates by HUE at 8 m. Every swatch is authored low in
+## THE SUNFLOWER SPROUT (2026-10-01, the user's pick from the design sheets: Fen is "young, sunny").
+## Spring-green stem, vines and face, and warm butter petals (COLLARS "double"), where the look built
+## for the old elder was a cool teal-sage plant with dusty lilac petals: stem #7a9893, vines #6f8783,
+## bud #9cb3aa, calyx #7a9990, petals #98a0c4 / #9297b5. Every swatch is still authored low in
 ## saturation, because the warm key light lifts chroma on mid-value warm albedos (the first pass
 ## measured an S 0.13 petal rendering at S 0.50).
-const STEM := Color("#7a9893")        ## S 0.20 V 0.60 — torso stem
-const VINE := Color("#6f8783")        ## S 0.18 V 0.53 — the four vines
-const BUD := Color("#9cb3aa")         ## S 0.13 V 0.70 — the face
-const CALYX := Color("#7a9990")       ## S 0.20 V 0.60 — the calyx cup the petals grow from
+const STEM := Color("#86a886")        ## S 0.20 V 0.66 — torso stem
+const VINE := Color("#779a7a")        ## S 0.23 V 0.60 — the four vines
+const BUD := Color("#b3cba0")         ## S 0.21 V 0.80 — the face
+const CALYX := Color("#86a886")       ## S 0.20 V 0.66 — the calyx cup the petals grow from
+const SPROUT := Color("#93b884")      ## S 0.28 V 0.72 — the two seedling leaves on the crown
 const THORN := Color("#95a49d")       ## S 0.09 V 0.64 — reads as a bump, not a spike
 const EYE := Color("#22252d")
 const MOUTH := Color("#34303a")
@@ -132,10 +140,10 @@ const COLLARS := {
 	"double": [
 		{"count": 12, "phase": 0.0, "r0": 0.300, "lift": 0.000, "alpha_back": 26.0, "alpha_front": 96.0,
 			"len_back": 0.50, "len_front": 0.20, "w": 0.180, "w_front": 0.135, "c1": 0.45, "c2": 0.20, "cup": -0.15,
-			"fat": 0.85, "color": "#98a0c4", "nl": 6, "nw": 2},
+			"fat": 0.85, "color": "#e0c68c", "nl": 6, "nw": 2},
 		{"count": 12, "phase": 15.0, "r0": 0.282, "lift": 0.012, "alpha_back": 16.0, "alpha_front": 84.0,
 			"len_back": 0.40, "len_front": 0.16, "w": 0.150, "w_front": 0.115, "c1": 0.30, "c2": 0.15, "cup": -0.15,
-			"fat": 0.85, "color": "#9297b5", "nl": 6, "nw": 2},
+			"fat": 0.85, "color": "#ead9ab", "nl": 6, "nw": 2},
 	],
 	"daisy": [
 		{"count": 16, "phase": 11.25, "r0": 0.295, "lift": 0.000, "alpha_back": 20.0, "alpha_front": 92.0,
@@ -228,8 +236,9 @@ func _init() -> void:
 	anim_time_scale = 0.80
 	hover_height = 0.0
 	blink_hold = 1.6
-	eye_w = 0.034
-	eye_h = 0.040
+	# 2026-10-01 (sunflower sprout): 18 % bigger eyes, a younger face (was 0.034 x 0.040).
+	eye_w = 0.040
+	eye_h = 0.047
 	eye_d = 0.018
 	mouth_w = 0.050
 	mouth_h = 0.044
@@ -254,6 +263,24 @@ func _build_geometry() -> void:
 	})
 	_build_bar_mouth()
 	_build_collar()
+	_build_sprout()
+
+
+## The seedling's first two leaves on the crown: the "young" read (2026-10-01). A short stalk and two
+## unequal leaves that open sideways and up. Rigid on the head, so it rides every head animation.
+const SPROUT_STALK := 0.105
+const SPROUT_LEAF := 0.215
+
+func _build_sprout() -> void:
+	var m_sp := _toon(SPROUT, _matte(SURF_PETAL))
+	var top := _node("Sprout", _head, Vector3(0.0, head_semi.y - 0.012, 0.0))
+	_mi(taper_tube(SPROUT_STALK, 0.017, 0.012, 0.25, 3, 4), m_sp, top, Vector3.ZERO, "Stalk")
+	var tip := taper_tube_end(SPROUT_STALK, 0.25, 3)
+	for sx: float in [-1.0, 1.0]:
+		var leaf := _node("Leaf", top, tip)
+		leaf.basis = _aim_basis(Vector3(sx * 0.80, 0.62, -0.10), Vector3(0.0, -0.45, -1.0))
+		leaf.scale = Vector3.ONE * (1.0 if sx < 0.0 else 0.82)
+		_mi(leaf_mesh(SPROUT_LEAF, 0.135, 0.018, 0.55, 0.20, -0.20, 5, 1, 1.0), m_sp, leaf, Vector3.ZERO, "Blade")
 
 
 ## START IN THE IDLE POSE, not the base class's all-zero pose. At zero roll a vine arm hangs straight
@@ -642,7 +669,9 @@ func marker_clearance() -> float:
 		var ext := _pose_extent()
 		var lo := minf(FLARE_THINK, 0.0) - PETAL_BREATHE - PETAL_DANCE
 		var hi := FLARE_SURPRISED + PETAL_BREATHE + PETAL_DANCE
-		var rise := maxf(_crown_rise(lo, hi, ext.z), head_semi.y)
+		# the sprout's own upper bound: its seat, the stalk and one whole leaf length, as if straight up
+		var rise := maxf(maxf(_crown_rise(lo, hi, ext.z), head_semi.y),
+			head_semi.y - 0.012 + SPROUT_STALK + SPROUT_LEAF)
 		_marker_clear = ext.y * (head_y + ext.x + rise)
 	return _marker_clear
 

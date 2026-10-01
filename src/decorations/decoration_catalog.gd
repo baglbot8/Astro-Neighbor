@@ -14,6 +14,10 @@ extends RefCounted
 ##   showpiece  7+ D        5600-6400    the telescope, the gear fountain, the robot statue
 ## `footprint` must match the item scene's DecoItem.footprint, since DecorationManager reads the scene's
 ## metadata at placement time and the store/inventory read this table.
+##
+## 2026-10-01 (docs/DAILY_STAMPS_SPEC.md 3) added two blocks below the main table, so the counts above
+## are the ORIGINAL set: COZY (12 more shop items for Pip & Pop, priced by the same tiers) and STAMPS
+## (the 8 prizes of Norm's stamp card, price 0, "source": "stamps", never sold and never a favour gift).
 
 const SCENE_DIR := "res://src/decorations/items/"
 
@@ -108,7 +112,7 @@ func get_items() -> Array:
 			"It fell, you caught it, and now it never stops turning."],
 	]
 	var out: Array = []
-	for r in raw:
+	for r in raw + COZY:
 		out.append({
 			"id": "deco_" + str(r[0]),
 			"name": str(r[1]),
@@ -139,7 +143,86 @@ func get_items() -> Array:
 			"desc": str(r[7]),
 			"scene": SCENE_DIR + str(r[0]) + ".tscn",
 		})
+	# NORM'S STAMP CARD (docs/DAILY_STAMPS_SPEC.md 2-3): the weekly prizes. Column 4 is unused (0): the
+	# def carries "price": 0 (Catalog.store_items skips it, so no shop stocks it) and "source": "stamps"
+	# (Catalog.random_reward_decoration skips any def with a source, so no favour hands one out) - the
+	# same two keys Norm's trophies and Moss's stall goods already use. Norm gives them in THIS order.
+	for r in STAMPS:
+		out.append({
+			"id": "deco_" + str(r[0]),
+			"name": str(r[1]),
+			"kind": "decoration",
+			"category": str(r[2]),
+			"rarity": str(r[3]),
+			"price": 0,
+			"source": "stamps",
+			"footprint": float(r[5]),
+			"icon_color": str(r[6]),
+			"desc": str(r[7]),
+			"scene": SCENE_DIR + str(r[0]) + ".tscn",
+		})
 	return out
+
+
+## THE COZY HOME SET (builder FURNSHOP, 2026-10-01, docs/DAILY_STAMPS_SPEC.md 3: "12 new shop decorations
+## for Pip & Pop, spread over the economy tiers"). Ordinary shop stock: same columns and same handling as
+## the main table (a real price, no source), kept apart only so the set reads as a set. By tier:
+##   everyday   290 / 330 / 380             fence, pots, rug   (all above the 3 always-stocked cheapest:
+##                                          240 / 260 / 280, so that shelf does not change)
+##   most       880 / 980 / 1100 / 1280 / 1480   chime, tea table, armchair, lamp, bookshelf
+##   rare       2500 / 2900 / 3300          star mobile, hammock, campfire ring
+##   showpiece  5800                        the hot tub
+## `footprint` matches each scene's DecoItem.footprint.
+const COZY: Array = [
+	["picket_fence", "Picket Fence", "furniture", "common", 290, 0.8, "#e3d7bc",
+		"Keeps nothing in and nothing out. Looks lovely."],
+	["potted_trio", "Potted Plant Trio", "plants", "common", 330, 0.6, "#7fb07a",
+		"Three little pots. They like to be kept together."],
+	["patchwork_rug", "Patchwork Rug", "furniture", "common", 380, 1.0, "#cf8f86",
+		"Six soft squares sewn into one. Boots off, please."],
+	["wind_chime", "Wind Chime", "fun", "common", 880, 0.5, "#8fa3bf",
+		"Five little pipes that sing when a breeze comes by."],
+	["tea_table", "Tea Table", "furniture", "common", 980, 1.0, "#7fb5ad",
+		"A pot, two cups and a cushion each. Tea for two."],
+	["cozy_armchair", "Cozy Armchair", "furniture", "uncommon", 1100, 0.75, "#cf8f86",
+		"Sink in. Getting back out is tomorrow's problem."],
+	["reading_lamp", "Reading Lamp", "lights", "uncommon", 1280, 0.55, "#e6d6a8",
+		"A warm shade, a tray, a mug. One more chapter."],
+	["leaning_bookshelf", "Leaning Bookshelf", "furniture", "uncommon", 1480, 0.75, "#b89a74",
+		"Every shelf is full. It still found room for a plant."],
+	["star_mobile", "Star Mobile", "fun", "rare", 2500, 0.7, "#e3c877",
+		"A slow parade of stars, a moon and one small planet."],
+	["hammock", "Hammock", "furniture", "rare", 2900, 1.3, "#c9805e",
+		"Two posts and a long nap, swaying between them."],
+	["campfire_ring", "Campfire Ring", "lights", "rare", 3300, 1.15, "#dd9a5c",
+		"A real warm fire. At last, a place for marshmallows."],
+	["hot_tub", "Stargazer Hot Tub", "fun", "rare", 5800, 1.3, "#7fc4c9",
+		"Warm water, cold stars and a duck doing laps."],
+]
+
+
+## NORM'S TOTALLY NORMAL COLLECTION (docs/DAILY_STAMPS_SPEC.md 3): the 8 stamp-only decorations, in the
+## order Norm hands them out. Builder FURNSTAMP owns the eight scenes (items/normal_*.tscn); this block
+## only registers them. Column 4 (price) is ignored. FOOTPRINTS HERE ARE PLACEHOLDERS until they are
+## matched to each scene's DecoItem.footprint (the rule at the top of this file).
+const STAMPS: Array = [
+	["normal_sofa", "Totally Normal Sofa", "furniture", "rare", 0, 1.0, "#cf8f86",
+		"For sitting, as humans do. I sit on it all the time."],
+	["normal_tv", "Totally Normal TV", "tech", "rare", 0, 0.7, "#6f819c",
+		"It shows pictures. I watch it with both of my eyes."],
+	["normal_houseplant", "Totally Normal Houseplant", "plants", "rare", 0, 0.6, "#7fb07a",
+		"A normal plant. I water it with water, like a human."],
+	["normal_fridge", "Totally Normal Fridge", "tech", "rare", 0, 0.7, "#cfd9e4",
+		"It keeps food cold. I put all of my human food in it."],
+	["normal_lamp", "Totally Normal Lamp", "lights", "rare", 0, 0.55, "#e6d6a8",
+		"It makes light when it is dark. Humans love seeing."],
+	["normal_bookshelf", "Totally Normal Bookshelf", "furniture", "rare", 0, 0.8, "#b89a74",
+		"Full of books. I have read every one with my eyes."],
+	["normal_rug", "Totally Normal Rug", "furniture", "rare", 0, 1.0, "#a595cf",
+		"A blanket for the floor. Humans stand on these."],
+	["normal_clock", "Totally Normal Clock", "fun", "rare", 0, 0.55, "#d9c27a",
+		"It tells the time. It is always a very normal time."],
+]
 
 
 ## Moss's jungle-only decorations (builder J3). Stall prices by the tiers above: everyday 320 / 380,
