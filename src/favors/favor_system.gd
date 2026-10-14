@@ -70,6 +70,24 @@ extends Node
 ##      * hand-in is the ordinary favour talk: `is_ready_to_turn_in` is true once `progress >= count`,
 ##        `complete()` pays like any other favour.
 ## Every other favour type, reward, marker and gift behaves exactly as it did before this section.
+##
+## ============================================================================= ONLY REACHABLE WORLDS
+## (added 2026-10-13, user report: "the first quest from the professor ... sends me to Fern but Ferns
+## planet is unavailable", and the parcel then sits in the hands until the planet unlocks.)
+## A favour never sends the player to a world the rocket cannot fly to right now. `planet_reachable`
+## is the rocket pad's own rule, not a copy of its numbers: CampaignData.planet_in_range (home always,
+## tiers by rocket parts, everything when the gates are off) plus the destination card's
+## PadDestinationPicker.LOCKED_UNTIL story flags (The Tangle only once `jungle_open` is set).
+##   * deliver - `_delivery_target` only picks a neighbour whose world is reachable; none reachable
+##     means no "deliver" template that day (`_templates_for`), so the offer is fetch/bring instead.
+##   * bring   - `_foreign_material` only asks for a material that grows on a reachable world.
+##   * fetch   - always the giver's own world, where the player is standing.
+##   * OLD SAVES - `_retarget_unreachable_deliveries` (first thing in `_restore`) moves an active
+##     delivery whose recipient's world is out of range to a reachable neighbour, with a toast; if
+##     there is none the favour ends quietly and the gift stays in the bag.
+## The carried parcel can be hidden (pause menu > Settings > "Show package", GameState.settings
+## ["show_carry_item"], default on) - Player.set_carry_item reads it; the gift is still in the bag and
+## the delivery still completes by talking to the recipient.
 
 ## "stardust_shard" was removed from this list on 2026-09-11 (lead, end of Phase 1). Phase 1 builder D
 ## took the shards off home, hub and grig - the only worlds that grew them - and they have no shop
@@ -571,6 +589,8 @@ func _on_planet_loaded(_planet_id: String) -> void:
 ## Re-registers runtime gift items, re-spawns fetch targets, and resumes a "play" favour's mini-game
 ## (if its world is the one just loaded) after a planet load / save load.
 func _restore() -> void:
+	_retarget_unreachable_deliveries()
+	_register_loose_gifts()
 	for key: String in GameState.favors:
 		var f: Dictionary = GameState.favors[key]
 		if str(f.get("state", "")) != "active":
@@ -846,7 +866,7 @@ func _foreign_material(npc_id: String) -> String:
 	var local := _local_collectible(npc_id)
 	var pool: Array = []
 	for m: String in MATERIALS:
-		if m != local:
+		if m != local and _material_reachable(m):
 			pool.append(m)
 	if pool.is_empty():
 		# Unreachable with three MATERIALS. Never fall back to stardust_shard: no world grows it now.
@@ -855,6 +875,8 @@ func _foreign_material(npc_id: String) -> String:
 
 
 ## Another known neighbour, preferring one on a different planet (that is the point of a delivery).
+## Only neighbours whose world the rocket can reach right now (`planet_reachable`, header "ONLY
+## REACHABLE WORLDS"); "" when there is none, which drops "deliver" from `_templates_for`.
 func _delivery_target(npc_id: String) -> String:
 	var home := str(NpcData.get_data(npc_id).get("planet", ""))
 	var far: Array = []
@@ -863,6 +885,8 @@ func _delivery_target(npc_id: String) -> String:
 		if other == npc_id:
 			continue
 		var p := str(NpcData.get_data(other).get("planet", ""))
+		if not planet_reachable(p):
+			continue
 		if p == home:
 			near.append(other)
 		else:
@@ -872,6 +896,81 @@ func _delivery_target(npc_id: String) -> String:
 	if not near.is_empty():
 		return str(near[_rng.randi_range(0, near.size() - 1)])
 	return ""
+
+
+## True when the rocket can fly to `planet_id` right now - the pad's own rule (header "ONLY REACHABLE
+## WORLDS"): a story-locked world (The Tangle) only once its flag is set, then never range-gated,
+## exactly as PadDestinationPicker._recompute_locks treats it; every other world by
+## CampaignData.planet_in_range (home always; tiers by rocket parts; everything when gates are off).
+static func planet_reachable(planet_id: String) -> bool:
+	if planet_id == "":
+		return false
+	if PadDestinationPicker.LOCKED_UNTIL.has(planet_id):
+		return GameState.flag(str(PadDestinationPicker.LOCKED_UNTIL[planet_id]))
+	return CampaignData.planet_in_range(planet_id)
+
+
+## True when this neighbour lives on a world the rocket can reach right now.
+static func npc_reachable(npc_id: String) -> bool:
+	return planet_reachable(str(NpcData.get_data(npc_id).get("planet", "")))
+
+
+## True when `material` grows on at least one world the rocket can reach (a "bring" must be doable).
+func _material_reachable(material: String) -> bool:
+	for pid: String in PadDestinationPicker.ORDER:
+		if not planet_reachable(pid):
+			continue
+		var data := _planet_data(pid)
+		if data != null and data.collectible_kind.contains(material):
+			return true
+	return false
+
+
+## OLD SAVES (header "ONLY REACHABLE WORLDS"): an active delivery addressed to a neighbour whose world
+## is out of range is handed to a reachable neighbour instead, with a toast; with nobody reachable the
+## favour ends and the gift stays in the bag. Runs on every `_restore` (save load, planet load), so a
+## delivery made before this rule existed is fixed the first time the save is played.
+func _retarget_unreachable_deliveries() -> void:
+	var ended: Array[String] = []
+	for key: String in GameState.favors:
+		var f: Dictionary = GameState.favors[key]
+		if str(f.get("state", "")) != "active" or str(f.get("type", "")) != "deliver":
+			continue
+		var to_id := str(f.get("deliver_to", ""))
+		if npc_reachable(to_id):
+			continue
+		var giver := str(f.get("npc", ""))
+		var target := _delivery_target(giver)
+		if target != "":
+			f["deliver_to"] = target
+			print("FAVORS retarget %s: %s -> %s (unreachable world)" % [key, to_id, target])
+			_toast_later("Change of plan: take %s's gift to %s" % [_npc_name(giver), _npc_name(target)],
+				str(f.get("target_item", "")))
+		else:
+			ended.append(key)
+			print("FAVORS ended %s: %s unreachable, nobody else reachable" % [key, to_id])
+			_toast_later("%s says: no rush - keep the gift for now" % _npc_name(giver),
+				str(f.get("target_item", "")))
+	for key in ended:
+		GameState.favors.erase(key)
+		var player := _player() if is_inside_tree() else null
+		if player != null and player.has_method("set_carry_item"):
+			player.call("set_carry_item", "")
+
+
+## A gift left in the bag by an ended delivery has no favour to register it at load any more; its
+## Catalog entry is runtime-only, so register every "gift_<npc>" in the bag.
+func _register_loose_gifts() -> void:
+	for item_id: String in GameState.inventory:
+		if item_id.begins_with("gift_"):
+			var npc_id := item_id.trim_prefix("gift_")
+			if not NpcData.get_data(npc_id).is_empty():
+				_register_gift_item(npc_id)
+
+
+## Toasts on the next frame: `_restore` runs inside the world's _ready, before the HUD listens.
+func _toast_later(text: String, icon: String) -> void:
+	(func() -> void: EventBus.toast_requested.emit(text, icon)).call_deferred()
 
 
 ## Registers "gift_<npc>" in the Catalog at runtime and puts it in the player's hands.

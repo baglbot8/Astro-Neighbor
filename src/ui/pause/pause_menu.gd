@@ -29,6 +29,11 @@ const DEV_GESTURE_TAPS := 5
 const DEV_GESTURE_WINDOW := 2.0
 ## The desktop's own door to the dev menu (spec 15.6); see `_on_dev_key`.
 const DEV_KEY := KEY_F1
+## Gap between settings rows. MOBILE is tighter since the "Show package" row (2026-10-13) made it
+## eight rows: at 14 px the settings panel is ~730 px tall, past a 720 px phone frame; at 6 it is 677
+## (measured at 1560x720 --ui=mobile).
+const SETTINGS_GAP := 14
+const SETTINGS_GAP_MOBILE := 6
 
 var is_open := false
 
@@ -48,6 +53,7 @@ var _music: PillSlider
 var _sfx: PillSlider
 var _invert: ToggleSwitch
 var _invert_y: ToggleSwitch
+var _show_carry: ToggleSwitch
 var _look: PillSlider
 var _ui_mode: SegmentedControl
 ## The keyboard hint strip at the foot of the menu - desktop only (R2.10), and it has to follow a
@@ -92,7 +98,7 @@ func _build() -> void:
 	_main_box.add_theme_constant_override("separation", 10)
 	box.add_child(_main_box)
 	_settings_box = VBoxContainer.new()
-	_settings_box.add_theme_constant_override("separation", 14)
+	_settings_box.add_theme_constant_override("separation", MobileUI.pick(SETTINGS_GAP, SETTINGS_GAP_MOBILE))
 	_settings_box.visible = false
 	box.add_child(_settings_box)
 	# main buttons
@@ -140,6 +146,14 @@ func _build() -> void:
 	_invert_y.on = bool(GameState.settings.get("camera_invert_y", false))
 	_invert_y.toggled.connect(func(on: bool) -> void: GameState.settings["camera_invert_y"] = on)
 	_settings_items.append(_add_setting_row("Invert vertical", _invert_y))
+	# SHOW PACKAGE (2026-10-13, user request: "an option to hide the package holding"). A delivery
+	# gift is held in both hands until it is handed over; Off hides it (Player.carry_shown) - the gift
+	# is still in the bag and the delivery still completes by talking to the recipient. Saved with
+	# the rest of GameState.settings.
+	_show_carry = ToggleSwitch.new()
+	_show_carry.on = bool(GameState.settings.get("show_carry_item", true))
+	_show_carry.toggled.connect(_set_show_carry)
+	_settings_items.append(_add_setting_row("Show package", _show_carry))
 	# ADDED BY THE MOBILE UI BUILDER for R2.10. The game ships two front ends and the layout nobody
 	# is sitting in front of never gets checked, so the player (and any reviewer on any machine)
 	# can force either. Writes GameState.settings["ui_mode"] through `Platform.set_ui_mode`, which
@@ -243,13 +257,14 @@ func _on_platform_mode_changed(_mobile: bool) -> void:
 	if theme == null and not MobileUI.is_mobile():
 		theme = UIStyle.theme()
 	_panel.custom_minimum_size = Vector2(MobileUI.pick(PANEL_WIDTH, PANEL_WIDTH_MOBILE), 0.0)
+	_settings_box.add_theme_constant_override("separation", MobileUI.pick(SETTINGS_GAP, SETTINGS_GAP_MOBILE))
 	var touch_h: float = MobileUI.MIN_TOUCH if MobileUI.is_mobile() else 0.0
 	for b in _main_items:
 		b.custom_minimum_size = Vector2(0.0, touch_h)
 	for c in _settings_items:
 		if c is Button:
 			c.custom_minimum_size = Vector2(0.0, touch_h)
-	for c in [_music, _sfx, _look, _invert, _invert_y, _ui_mode]:
+	for c in [_music, _sfx, _look, _invert, _invert_y, _show_carry, _ui_mode]:
 		if c != null and c.has_method("refresh_platform"):
 			c.call("refresh_platform")
 	if _hints_row != null:
@@ -274,6 +289,20 @@ func debug_report(tag: String = "") -> void:
 	print("PAUSE %s open=%s in_settings=%s ui_mode=%s live=%s panel_w=%.0f" % [
 		tag, str(is_open), str(_in_settings), Platform.ui_mode_setting(), Platform.mode_name(),
 		_panel.size.x])
+
+
+func _set_show_carry(on: bool) -> void:
+	GameState.settings["show_carry_item"] = on
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and player.has_method("refresh_carry_visibility"):
+		player.call("refresh_carry_visibility")
+
+
+## Test hook: flips the "Show package" switch the way a tap does (through ToggleSwitch's own signal).
+func debug_set_show_carry(on: bool) -> void:
+	if _show_carry != null:
+		_show_carry.on = on
+		_set_show_carry(on)
 
 
 static func _slider_to_sens(v: float) -> float:

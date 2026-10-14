@@ -352,9 +352,13 @@ func play_emote(emote_name: String) -> void:
 
 
 ## Shows an item held above the head (favor deliveries). "" clears.
+## SHOW PACKAGE SETTING (2026-10-13, user request): with GameState.settings["show_carry_item"] false
+## the item is still carried (`get_carry_item`, and the gift stays in the bag) but nothing is drawn in
+## the hands and the astronaut walks, idles and flies in the ordinary poses. The pause menu toggles it
+## and calls `refresh_carry_visibility`.
 func set_carry_item(item_id: String) -> void:
 	_carry_id = item_id
-	if item_id == "":
+	if item_id == "" or not carry_shown():
 		_model.set_carry_item(null)
 		return
 	var def := Catalog.get_item(item_id)
@@ -364,6 +368,16 @@ func set_carry_item(item_id: String) -> void:
 
 func get_carry_item() -> String:
 	return _carry_id
+
+
+## True unless the player turned "Show package" off (pause menu > Settings). Default on.
+static func carry_shown() -> bool:
+	return bool(GameState.settings.get("show_carry_item", true))
+
+
+## Re-applies the current carry item after the "Show package" setting changed.
+func refresh_carry_visibility() -> void:
+	set_carry_item(_carry_id)
 
 
 ## While true the astronaut plays the talk animation instead of idle (dialogue systems toggle this).
@@ -1076,7 +1090,7 @@ func _select_state(on_floor: bool, speed: float) -> void:
 		return
 	if _jump_anticipation >= 0.0:
 		return
-	var carrying := _carry_id != ""
+	var carrying := _carry_id != "" and carry_shown()
 	if _boosting:
 		# The boost pose outranks jump and fall: while the thruster is lit the astronaut is not
 		# rising or falling, it is flying, and R2.8 wants that readable in silhouette.
