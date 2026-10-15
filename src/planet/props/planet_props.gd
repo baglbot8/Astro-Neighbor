@@ -1633,10 +1633,8 @@ func _steam(parent: Node3D, pos: Vector3) -> void:
 	p.process_material = pm
 	var q := QuadMesh.new()
 	q.size = Vector2(0.55, 0.55)
-	var qm := PlanetPropMeshes.puff_material(Color.WHITE).duplicate() as StandardMaterial3D
-	qm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	qm.albedo_texture = PlanetPropMeshes.soft_dot_texture()
-	q.material = qm
+	# CROCHET: the same unshaded billboard soft-dot puff, now a wool pom-pom when crochet is on.
+	q.material = PlanetPropMeshes.pompom_material(Color.WHITE)
 	p.draw_pass_1 = q
 	parent.add_child(p)
 

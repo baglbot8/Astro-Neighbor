@@ -14,6 +14,8 @@
 // life can be shaped exactly and they can be spawned deterministically for captures.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+// YARNLITE wool pom-pom puffs, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform vec4 lit_color : source_color = vec4(0.93, 0.91, 0.86, 1.0);
 uniform vec4 shade_color : source_color = vec4(0.53, 0.52, 0.60, 1.0);
@@ -50,4 +52,10 @@ void fragment() {
 	// Fade in over the first 12 % of life so a puff never pops into existence at full strength.
 	float life = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.45, 1.0, age));
 	ALPHA = clamp(a * life * opacity, 0.0, 1.0);
+	if (astro_yarn > 0.5) {
+		// YARNLITE: wool does not thin out like smoke - the pom-pom stays solid and pops away at the end.
+		vec2 pp = yl_pompom(p);
+		ALBEDO *= pp.y;
+		ALPHA = clamp(pp.x * smoothstep(0.0, 0.06, age) * (1.0 - smoothstep(0.80, 1.0, age)) * opacity, 0.0, 1.0);
+	}
 }

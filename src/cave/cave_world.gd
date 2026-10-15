@@ -161,7 +161,8 @@ const MOTH_S := 8.0
 const OUTFIT_ID := "suit_prism"
 
 var cave: Node3D
-var _mat: StandardMaterial3D
+const CAVE_SHADER := preload("res://src/cave/cave_yarn.gdshader")
+var _mat: ShaderMaterial
 var _noise: FastNoiseLite
 ## U1CAVE: the rock's smaller relief (bumps ~1 m) and the waver of its ledge bands (`_wall_off`).
 var _noise_b: FastNoiseLite
@@ -179,8 +180,8 @@ var _tints: Array = []          # [{p: local, c: Color, r: metres, k: strength}]
 ## The tints by 4 m cell (Vector3i -> [tint]), so baking a facet reads only the lights near it.
 var _tint_grid: Dictionary = {}
 const TINT_CELL := 4.0
-var _wall_mat: StandardMaterial3D
-var _floor_mat: StandardMaterial3D
+var _wall_mat: ShaderMaterial
+var _floor_mat: ShaderMaterial
 var _start_xf := Transform3D()
 
 # live things
@@ -423,12 +424,9 @@ func build(s: PlanetSafari) -> void:
 	_noise_s.seed = 9033
 	_noise_s.frequency = 0.16
 	_noise_s.fractal_octaves = 1
-	_mat = StandardMaterial3D.new()
-	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat.vertex_color_use_as_albedo = true
-	_mat.vertex_color_is_srgb = true
-	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_mat.disable_fog = true
+	_mat = ShaderMaterial.new()
+	_mat.shader = CAVE_SHADER
+	_mat.set_shader_parameter("mode", 1)
 	_wall_mat = _stone_mat(CaveRockTex.wall())
 	_floor_mat = _stone_mat(CaveRockTex.floor_tex())
 	_make_tubes()
@@ -627,19 +625,19 @@ func _tint(p: Vector3, c: Color, r: float, k: float, haze: float = 1.0) -> void:
 
 ## The stone's material: unshaded, the baked vertex colour times the rock texture laid on triplanar in
 ## the cave's own (warped, local) space - one tile every 1 / 0.3 = 3.3 m, strata horizontal on the walls.
-func _stone_mat(tex: Texture2D) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.vertex_color_use_as_albedo = true
-	m.vertex_color_is_srgb = true
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.disable_fog = true
-	m.albedo_texture = tex
-	m.uv1_triplanar = true
-	m.uv1_world_triplanar = false
-	m.uv1_triplanar_sharpness = 3.0
-	m.uv1_scale = Vector3(0.3, 0.3, 0.3)
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+## CROCHET (2026-10-15): a ShaderMaterial now (src/cave/cave_yarn.gdshader): with the astro_yarn global at 0
+## it draws exactly what the unshaded StandardMaterial3D drew (same texture, same triplanar); with it at 1 the
+## rock texture gives way to chunky yarn stitches that keep the rock's mean brightness (`rock_mean`).
+func _stone_mat(tex: Texture2D) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = CAVE_SHADER
+	m.set_shader_parameter("mode", 0)
+	m.set_shader_parameter("use_rock", true)
+	m.set_shader_parameter("rock_tex", CaveRockTex.linear_half(tex))
+	m.set_shader_parameter("rock_scale", Vector3(0.3, 0.3, 0.3))
+	m.set_shader_parameter("triplanar_sharpness", 3.0)
+	m.set_shader_parameter("rock_mean", CaveRockTex.mean_linear(tex))
+	m.set_shader_parameter("rock_mean_enc", CaveRockTex.mean_encoded(tex))
 	return m
 
 
@@ -899,6 +897,9 @@ class Kit:
 	var c := PackedColorArray()
 	## each vertex's glow (CAVE4): how much of its colour is its own light, kept when the cave lights it
 	var g := PackedFloat32Array()
+	## CROCHET: 1 on the facets of a small smooth part (an eye, a glint, a bead), 0 elsewhere
+	var bd := PackedFloat32Array()
+	var _bead := false
 	## set while `gem` draws a glowing crystal: every facet of it is its own light (g = 1)
 	var _lamp := false
 	## set while `_shadow` draws: g = -darkness, and `_cave_lit` darkens the lit floor under it by that
@@ -923,6 +924,10 @@ class Kit:
 		c.append_array([cc, cc, cc])
 		var gg := -shade if shade > 0.0 else (1.0 if _lamp else clampf(glow, 0.0, 1.0))
 		g.append_array([gg, gg, gg])
+		# a facet under ~5.5 cm (a stitch) cannot carry one: faces, spots and glints stay smooth like safety eyes
+		var small := maxf((b - a).length(), maxf((d - b).length(), (a - d).length())) < 0.055
+		var bb := 1.0 if (_bead or small) else 0.0
+		bd.append_array([bb, bb, bb])
 
 	func quad(a: Vector3, b: Vector3, d: Vector3, e: Vector3, col: Color, glow: float = 0.0) -> void:
 		tri(a, b, d, col, glow)
@@ -949,6 +954,8 @@ class Kit:
 	## at the equator (a jelly's bell, a beetle's shell).
 	func blob(centre: Vector3, radii: Vector3, col: Color, glow: float = 0.0, lat: int = 4, lon: int = 7,
 			basis: Basis = Basis(), shade_under: float = 0.2, top_only: bool = false) -> void:
+		# CROCHET: parts under 7 cm across are smooth glossy beads (eyes, glints), like safety eyes
+		_bead = maxf(radii.x, maxf(radii.y, radii.z)) < 0.035
 		var i0 := lat / 2 if top_only else 0
 		for i in range(i0, lat):
 			var t0 := PI * float(i) / float(lat) - PI * 0.5
@@ -970,6 +977,7 @@ class Kit:
 					tri(a, b, e, cc, glow)
 				else:
 					quad(a, b, d, e, cc, glow)
+		_bead = false
 
 	## An axis-aligned box (centre, size) in the kit's space.
 	func box(ce: Vector3, sz: Vector3, col: Color, glow: float = 0.0) -> void:
@@ -989,6 +997,20 @@ class Kit:
 		arr[Mesh.ARRAY_VERTEX] = v
 		arr[Mesh.ARRAY_NORMAL] = n
 		arr[Mesh.ARRAY_COLOR] = cols if cols.size() == v.size() else c
+		# CROCHET: UV.x says what the cave shader makes of each facet: 0 soft part (yarn), 1 glossy bead (a
+		# crystal, an eye, a glint), 2 contact shadow (left as it was)
+		if g.size() == v.size():
+			var cls := PackedVector2Array()
+			cls.resize(v.size())
+			var has_bd := bd.size() == v.size()
+			for i in v.size():
+				var x := 0.0
+				if g[i] < 0.0:
+					x = 2.0
+				elif g[i] >= 0.999 or (has_bd and bd[i] > 0.5):
+					x = 1.0
+				cls[i] = Vector2(x, 0.0)
+			arr[Mesh.ARRAY_TEX_UV] = cls
 		var m := ArrayMesh.new()
 		if v.size() > 0:
 			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
@@ -1366,6 +1388,7 @@ func _merge(dst: Kit, src: Kit, xf: Transform3D) -> void:
 		dst.n.append((xf.basis * src.n[i]).normalized())
 		dst.c.append(src.c[i])
 		dst.g.append(src.g[i] if i < src.g.size() else 0.0)
+		dst.bd.append(src.bd[i] if i < src.bd.size() else 0.0)
 
 
 func _build_wall_crystals() -> void:
@@ -2587,9 +2610,9 @@ func _roof(t: Tube, s: float) -> Vector3:
 
 
 ## A plain vertex-colour material whose albedo_color the tick pulses (it only darkens: authored bright).
-func _pulse_mat() -> StandardMaterial3D:
-	var m := _mat.duplicate() as StandardMaterial3D
-	m.albedo_color = Color(0.8, 0.8, 0.8)
+func _pulse_mat() -> ShaderMaterial:
+	var m := _mat.duplicate() as ShaderMaterial
+	m.set_shader_parameter("albedo_color", Color(0.8, 0.8, 0.8))
 	return m
 
 
@@ -2683,7 +2706,7 @@ func _build_pulse(id: String, t: Tube, s: float, side: float) -> Node3D:
 	_new_ticks.append(func(tt: float) -> void:
 		var g: float = glow.call(tt)
 		var v := lerpf(0.66, 1.0, g)
-		mat.albedo_color = Color(v, v, v))
+		mat.set_shader_parameter("albedo_color", Color(v, v, v)))
 	safari.add_subject({"id": id, "name": NEW_NAMES["pulse_crystals"], "tier": "sight", "kind": "sight", "node": node,
 		"offset": Vector3(0, 0.7, 0), "radius": 0.8, "band": Vector2(0.25, 0.8),
 		"moment": func(tt: float) -> Dictionary:
@@ -2881,7 +2904,7 @@ func _build_worms(id: String, t: Tube, s: float) -> Node3D:
 		return exp(-pow((c - 2.0) / 0.8, 2.0))
 	_new_ticks.append(func(tt: float) -> void:
 		var v := lerpf(0.72, 1.0, float(shimmer.call(tt)))
-		mat.albedo_color = Color(v, v, v)
+		mat.set_shader_parameter("albedo_color", Color(v, v, v))
 		for g in groups.size():
 			groups[g].rotation = Vector3(0.025 * sin(tt * 0.7 + float(g) * 1.9), 0, 0.03 * sin(tt * 0.55 + float(g) * 2.7)))
 	safari.add_subject({"id": id, "name": NEW_NAMES["lantern_worms"], "tier": "sight", "kind": "sight", "node": node,

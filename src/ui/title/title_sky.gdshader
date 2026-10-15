@@ -18,6 +18,9 @@ shader_type sky;
 render_mode use_debanding;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
+// YARNLITE knitted backdrop, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 
 // ---- gradient (near-black at the zenith, a hair warmer low down) -------------------------------
 uniform vec3 zenith_color : source_color = vec3(0.031, 0.043, 0.121);
@@ -245,13 +248,22 @@ void sky() {
 		// scaling the result. The curve is steep down here, so the darks recover while the stars —
 		// added afterwards, in HDR — are untouched.
 		col = aces_inverse(cap_display(col + vec3(compat_sky_lift * astro_compat), display_cap), tonemap_white);
-		float t = TIME;
-		float dense = mix(0.955, 0.872, star_density);
-		vec3 stars = star_layer(d, 54.0, dense, 0.120, 1.00, t);
-		stars += star_layer(d, 98.0, dense + 0.030, 0.088, 0.70, t + 3.1);
-		stars += star_layer(d, 176.0, dense + 0.052, 0.072, 0.44, t + 6.4);
-		stars += star_layer(d, 254.0, 0.966 - 0.03 * band, 0.056, 0.28, t + 9.2);
-		col += min(stars * star_brightness, vec3(STAR_HDR_CAP));
+		if (astro_yarn > 0.5) {
+			// YARNLITE: the planet sky's knit and embroidered stars (2 reads) in place of the four
+			// point-star layers - the first screen says "crochet". Pre-encoded under Compatibility
+			// (yd_enc) like the space sky, since this sky also writes COLOR raw.
+			YlSky ys = yl_sky(d);
+			col *= yd_enc(vec3(ys.ao), astro_compat);
+			col = mix(col, yd_enc(yd_star_col(ys), astro_compat), ys.star);
+		} else {
+			float t = TIME;
+			float dense = mix(0.955, 0.872, star_density);
+			vec3 stars = star_layer(d, 54.0, dense, 0.120, 1.00, t);
+			stars += star_layer(d, 98.0, dense + 0.030, 0.088, 0.70, t + 3.1);
+			stars += star_layer(d, 176.0, dense + 0.052, 0.072, 0.44, t + 6.4);
+			stars += star_layer(d, 254.0, 0.966 - 0.03 * band, 0.056, 0.28, t + 9.2);
+			col += min(stars * star_brightness, vec3(STAR_HDR_CAP));
+		}
 	}
 
 	COLOR = col;

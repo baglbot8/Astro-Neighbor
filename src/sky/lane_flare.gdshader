@@ -1,5 +1,8 @@
 shader_type spatial;
 render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 // SPIKE (2026-09-21, scratch only). A LANTERN ON THE LANE.
 //
 // The route is already called "the Lantern Lane" in safari_cast.gd and nothing in the scene had
@@ -36,6 +39,10 @@ void fragment() {
 		+ exp(-(q.x * q.x) / 0.0022) * exp(-(q.y * q.y) / 0.62);
 	vec3 col = tint * (halo + c) + mix(tint, vec3(1.0), 0.45) * bar * glint * 0.55;
 	col *= smoothstep(1.0, 0.72, r);
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a felt lantern - fibre grain and a blanket-stitched rim, mean ~1 (ALU only).
+		col *= yd_felt(q);
+	}
 	ALBEDO = col * gain;
 	ALPHA = 1.0;
 }

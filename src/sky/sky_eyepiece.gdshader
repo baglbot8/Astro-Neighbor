@@ -1,5 +1,8 @@
 shader_type canvas_item;
 render_mode blend_mix, unshaded;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 // SPIKE ROUND 2 (2026-09-20, scratch only). What you see through the telescope.
 //
 // Everything here is procedural - no texture is sampled. One shader draws all three kinds of sight
@@ -43,6 +46,8 @@ float h21(vec2 p) {
 void fragment() {
 	vec2 p = (UV - 0.5) * 2.0;
 	float r = length(p);
+	// YARNLITE: field units per pixel, taken here in uniform control flow for the knit's mip level.
+	float yd_px = fwidth(p.y);
 	// Round hole when you are looking through it; the whole square when it is a print.
 	if (mode == 0 && r > 1.0) {
 		// TRANSPARENT, not black. The 3D world behind this ColorRect is the point.
@@ -160,6 +165,13 @@ void fragment() {
 		// An exponential roll-off, so dim detail stays linear and nothing can reach pure white.
 		sight = (vec3(1.0) - exp(-sight * 1.20)) * 0.90;
 
+		if (astro_yarn > 0.5) {
+			// YARNLITE: the night behind the sight is knitted (1 read, ~12 stitches across the
+			// field). The stars stay points: their defocus is the focus mini-game's cue.
+			float yst = 12.0;
+			vec4 yk = yd_tap(p * vec2(yst, yst * YL_W / YL_H), log2(max(yd_px * yst * YL_TEXELS, 1e-4)) + YL_LOD_BIAS);
+			sky *= mix(1.0, yk.x, 1.0 - YL_SKY_FLAT);
+		}
 		vec3 col = (sky + stars) * (1.0 - occlude) + sight;
 
 		if (mode == 0) {

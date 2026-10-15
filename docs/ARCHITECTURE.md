@@ -44,6 +44,7 @@ Below are the tells: shipped systems that mirror that game closely enough to rea
 * **Aliens and robots, not animals.** The cast differs in shape — eye stalks, screens, plates, a lander-pad foot — not in species (CAST_VARIETY.md).
 * **The astronaut in the helmet.** A big bubble helmet on a neck ring, an opaque navy visor with no face behind it, personality carried by body language, and a jetpack (R2.2, R2.7, R2.8).
 * **The space sky.** Stars in daylight, a thin dusty limb, and the neighbouring worlds always overhead, correctly lit, as scenery and as navigation (R2.1).
+* **The crochet look (decided 2026-10-15).** The user: *"Make crochet the whole game's look: all planets, the Commons, props, space travel, safari and caves."* Everything in the world reads as crocheted yarn (amigurumi cast, blanket grounds, knitted sky with embroidered stars); eyes, visors, glass and crystals stay glossy plastic. It replaced a plain toon look after a phone heat test showed no extra heat. Rules: STYLE_GUIDE "Crochet look".
 
 Sound rules for all new audio work live in STYLE_GUIDE "Sound identity".
 

@@ -788,6 +788,7 @@ const MIST_SHADER_CODE := """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 global uniform float astro_night;
+global uniform float astro_yarn;
 uniform vec4 day_color : source_color = vec4(0.86, 0.82, 0.88, 1.0);
 uniform vec4 night_color : source_color = vec4(0.36, 0.50, 0.58, 1.0);
 uniform float strength = 0.075;
@@ -799,7 +800,17 @@ void vertex() {
 }
 void fragment() {
 	float d = length(UV - vec2(0.5)) * 2.0;
+	if (astro_yarn > 0.5) {
+		// CROCHET: a wisp of carded wool roving - a soft, wavy edge and fine fibres drawn out along it.
+		vec2 c = UV - vec2(0.5);
+		d *= 1.0 + 0.10 * sin(atan(c.y, c.x) * 7.0 + UV.x * 5.0);
+	}
 	float a = 1.0 - smoothstep(0.15, 1.0, d);
+	if (astro_yarn > 0.5) {
+		float fib = 0.5 + 0.5 * sin(UV.y * 64.0 + sin(UV.x * 7.0) * 3.0);
+		fib = fib * fib;
+		a *= 0.62 + 0.76 * fib;
+	}
 	a = a * a * COLOR.a * strength * mix(1.0, 0.65, astro_night);
 	ALBEDO = mix(day_color.rgb, night_color.rgb, astro_night);
 	ALPHA = a;

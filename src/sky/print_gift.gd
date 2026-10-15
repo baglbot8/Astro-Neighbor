@@ -47,6 +47,9 @@ extends CanvasLayer
 ## Owned and instantiated by sky_journal.gd (`gift = PrintGift.new(); add_child(gift)`), so it needs
 ## no manual wiring — but it can be added anywhere the same way and driven directly for testing.
 
+## YARNLITE: the crochet stand-in for this file's plain StandardMaterial3D (see _mat).
+const YARN_STD := preload("res://src/sky/yarn_std.gdshader")
+
 const EYE_SHADER := preload("res://src/sky/sky_eyepiece.gdshader")
 
 const NPC_IDS := ["fen", "bolt", "grig"]
@@ -422,11 +425,15 @@ func _build_hang_node(npc_id: String, rec: Dictionary) -> Node3D:
 	return root
 
 
-func _mat(c: Color, rough: float) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = c
-	m.roughness = rough
-	m.metallic = 0.0
+func _mat(c: Color, rough: float) -> ShaderMaterial:
+	# YARNLITE: src/sky/yarn_std.gdshader is this StandardMaterial3D (albedo, roughness, metallic 0)
+	# with the crochet hook on the astro_yarn switch; a near-mirror finish (the lens) stays glossy.
+	var m := ShaderMaterial.new()
+	m.shader = YARN_STD
+	m.set_shader_parameter("albedo", c)
+	m.set_shader_parameter("roughness", rough)
+	m.set_shader_parameter("metallic", 0.0)
+	m.set_shader_parameter("yarn_skip", rough < 0.1)
 	return m
 
 
@@ -443,6 +450,9 @@ func _render_hang_image(rec: Dictionary) -> Image:
 	var mat := ShaderMaterial.new()
 	mat.shader = EYE_SHADER
 	rect.material = mat
+	# YARNLITE: the print's knit samples the stitch tile with an explicit mip; a canvas item's
+	# samplers have no mipmaps unless asked. One-time, per print.
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	vp.add_child(rect)
 	var id := str(rec.get("event_id", "x"))
 	var day_n := int(rec.get("day", 0))

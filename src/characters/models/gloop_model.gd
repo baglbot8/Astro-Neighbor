@@ -121,8 +121,9 @@ func _build_geometry() -> void:
 	# Gloss is the slime tell, so this is one of the few genuinely shiny surfaces in the game (the
 	# visor and water are the others). One tight highlight (spec_size 150) rather than a broad sheen,
 	# which is what R2.6 actually objects to.
+	# Crochet look: the jelly keeps its highlight (glazed yarn) - it is the slime tell.
 	var m_gel := _toon(GEL, {"spec": 0.34, "spec_size": 150.0, "rim": 0.12, "roughness": 0.26, "shade": 0.30,
-		"shade_tint": Color(0.74, 0.71, 0.84)})
+		"shade_tint": Color(0.74, 0.71, 0.84), "yarn_keep_spec": 1.0})
 	var m_deep := _toon(GEL_DEEP, {"spec": 0.20, "spec_size": 130.0, "rim": 0.08, "roughness": 0.32, "shade": 0.30,
 		"shade_tint": Color(0.74, 0.71, 0.84)})
 	var m_light := _toon(GEL_LIGHT, {"spec": 0.30, "spec_size": 150.0, "rim": 0.10, "roughness": 0.28, "shade": 0.26,

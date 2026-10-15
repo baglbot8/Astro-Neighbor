@@ -1326,7 +1326,8 @@ func _make_dust(n: String, one_shot: bool, amount: int, life: float, size: float
 	mesh.rings = 5
 	var mat := MaterialLib.flat_unlit(Color(0.96, 0.92, 0.80, 0.8)).duplicate() as StandardMaterial3D
 	mat.vertex_color_use_as_albedo = true
-	mesh.material = mat
+	# The same dust as a YarnLite sprite: identical with crochet off, wool pom-poms with it on.
+	mesh.material = YarnLite.sprite_material(mat, YarnLite.Sprite.POMPOM)
 	gp.draw_pass_1 = mesh
 	return gp
 

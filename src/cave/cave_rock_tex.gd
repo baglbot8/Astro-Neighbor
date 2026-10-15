@@ -143,3 +143,51 @@ static func _make(is_floor: bool) -> ImageTexture:
 	var img := Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RGB8, out)
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
+
+
+## CROCHET: the mean colour of a rock texture in LINEAR light, read once off its image (every 4th pixel).
+## The cave shader multiplies it in when the stitches replace the rock, so the yarn cave is as bright as
+## the rock cave was.
+static func mean_linear(tex: Texture2D) -> Vector3:
+	var img := tex.get_image().duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	var sum := Vector3.ZERO
+	var n := 0
+	for y in range(0, img.get_height(), 4):
+		for x in range(0, img.get_width(), 4):
+			var c := img.get_pixel(x, y).srgb_to_linear()
+			sum += Vector3(c.r, c.g, c.b)
+			n += 1
+	return sum / float(maxi(n, 1))
+
+
+## CROCHET: the same texture decoded to LINEAR once and stored as half floats with its own mipmaps, so a
+## shader filters decoded texels (what the plain StandardMaterial3D's sRGB sampler did) on both renderers.
+static func linear_half(tex: Texture2D) -> ImageTexture:
+	var img := tex.get_image().duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	# the plain material's mip chain was averaged in ENCODED bytes (distant rock brighter than a linear
+	# average): keep that chain and decode every level, so OFF matches it
+	if not img.has_mipmaps():
+		img.generate_mipmaps()
+	img.convert(Image.FORMAT_RGBA8)
+	img.srgb_to_linear()
+	img.convert(Image.FORMAT_RGBAH)
+	return ImageTexture.create_from_image(img)
+
+
+## The mean of the sRGB-ENCODED texture (every 4th pixel): what Compatibility multiplies (see cave_yarn.gdshader).
+static func mean_encoded(tex: Texture2D) -> Vector3:
+	var img := tex.get_image().duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	var sum := Vector3.ZERO
+	var n := 0
+	for y in range(0, img.get_height(), 4):
+		for x in range(0, img.get_width(), 4):
+			var c := img.get_pixel(x, y)
+			sum += Vector3(c.r, c.g, c.b)
+			n += 1
+	return sum / float(maxi(n, 1))

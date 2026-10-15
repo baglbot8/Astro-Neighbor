@@ -52,6 +52,12 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx,
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/cam_fade.gdshaderinc"
 global uniform float astro_compat;
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on a glowing surface is a lamp of yarn - the stitches
+// (1-3 reads, as toon_soft) show in its ALBEDO and its lit side; the EMISSION, which is the gameplay cue, is not
+// touched, so it is as bright and the same colour as before. YarnLite gives tiny parts a yarn_skip copy of this
+// material. With the global at 0 this shader is exactly what it was.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+uniform bool yarn_skip = false;
 
 global uniform float astro_night;
 
@@ -83,9 +89,14 @@ instance uniform float pulse_mode = 0.0;
 instance uniform float phase = 0.0;
 
 varying vec3 v_col;
+varying vec3 v_op;
+varying vec3 v_on;
+varying vec3 v_flat;
 
 void vertex() {
 	v_col = COLOR.rgb;
+	v_op = VERTEX;
+	v_on = NORMAL;
 }
 
 void fragment() {
@@ -97,7 +108,16 @@ void fragment() {
 	}
 	float night = clamp(astro_night, 0.0, 1.0);
 	float lvl = mix(day_floor, 1.0, night) * p;
-	ALBEDO = pc_out(mix(v_col, vec3(1.0), albedo_lift * lvl) * mix(1.0, night_albedo, night));
+	vec3 alb = mix(v_col, vec3(1.0), albedo_lift * lvl) * mix(1.0, night_albedo, night);
+	v_flat = NORMAL;
+	if (astro_yarn > 0.5 && !yarn_skip) {
+		vec3 ys = yl_scale(MODEL_MATRIX);
+		vec3 yp = v_op * ys;
+		YlObj yo = yl_object(yp, normalize(v_on / ys), yl_obj_lod(yp));
+		alb *= yo.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), yo.fibre));
+		NORMAL = normalize(NORMAL * yo.nz + (VIEW_MATRIX * (MODEL_MATRIX * vec4(yo.tilt / ys, 0.0))).xyz);
+	}
+	ALBEDO = pc_out(alb);
 	// The colour we want on screen, then the HDR value that survives the tonemapper as that colour.
 	vec3 target = cap_display(v_col * glow_strength * emission_scale, core_cap) * lvl;
 	// aces_inverse deliberately returns an HDR value - the point of this shader is to pick the
@@ -117,5 +137,6 @@ void light() {
 	float lit = smoothstep(-0.4, 0.4, ndl) * ATTENUATION;
 	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), 0.18);
 	float k = mix(1.0, night_lit, clamp(astro_night, 0.0, 1.0));
-	DIFFUSE_LIGHT += mix(shadow_col * 0.7, ALBEDO, lit) * LIGHT_COLOR * k / PI;
+	float relief = (astro_yarn > 0.5 && !yarn_skip) ? yl_relief_light(NORMAL, v_flat, LIGHT) : 1.0;
+	DIFFUSE_LIGHT += mix(shadow_col * 0.7, ALBEDO, lit) * relief * LIGHT_COLOR * k / PI;
 }

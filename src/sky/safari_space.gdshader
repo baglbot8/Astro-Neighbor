@@ -1,6 +1,10 @@
 shader_type sky;
 render_mode use_debanding;
 #include "res://src/sky/lane_sky.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
+global uniform float astro_compat;
 // SPIKE (2026-09-21, scratch only). The NAKED-EYE sky on a flight: what is outside the window.
 //
 // ROUND 2 CHANGE (space builder). It used to carry its own private copy of the star grid and its
@@ -30,6 +34,14 @@ uniform float star_size = 1.55;
 void sky() {
 	vec3 d = normalize(EYEDIR);
 	vec3 col = lane_space_base(d) + lane_space_clouds(d) * band_gain;
-	col += lane_star_field(d, TIME, star_size) * star_gain;
+	if (astro_yarn > 0.5) {
+		// YARNLITE: the knit and the embroidered stars (2 reads), on the world ray like the glass,
+		// replacing the point stars. Pre-encoded under Compatibility like the planet sky's pc_out.
+		YlSky ys = yl_sky(d);
+		col *= yd_enc(vec3(ys.ao), astro_compat);
+		col = mix(col, yd_enc(yd_star_col(ys) * star_gain, astro_compat), ys.star);
+	} else {
+		col += lane_star_field(d, TIME, star_size) * star_gain;
+	}
 	COLOR = col;
 }

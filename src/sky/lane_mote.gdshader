@@ -1,5 +1,8 @@
 shader_type spatial;
 render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 // SPIKE (2026-09-21, scratch only). THE STUFF THE SHIP IS FLYING THROUGH.
 //
 // The user's fifth note: "the movement direction also help you figure out where you're facing".
@@ -48,6 +51,13 @@ void fragment() {
 	across = across * across * (3.0 - 2.0 * across);
 	// along it: bright at the head (+Z, the way it is going), trailing off behind
 	float along = mix(1.0 - head_bias, 1.0, pow(clamp(1.0 - UV.y, 0.0, 1.0), 1.6));
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a loose strand of yarn - a crisper round strand with its ply twisting down it,
+		// the same head-bright taper, and a gain that puts back what the narrower strand takes out.
+		float ax = abs(UV.x - 0.5) * 2.0;
+		vec2 sd = yd_strand(UV.y, ax / 0.75, 6.0, 0.0);
+		across = (1.0 - smoothstep(0.62, 0.75, ax)) * sd.y * 0.80;
+	}
 	ALBEDO = COLOR.rgb * across * along * v_fade * COLOR.a * gain;
 	ALPHA = 1.0;
 }

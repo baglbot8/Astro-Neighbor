@@ -1227,6 +1227,10 @@ shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 global uniform float astro_compat;
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on the spring is a crocheted panel with its sheen kept:
+// stitches laid flat on the pool's own plane (one read), lit by the game's light. With the global at 0 this shader
+// is exactly what it was.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 // hunt_game.gd "WHY THE SPRING LOOKS LIKE THIS". Opaque and lit in the house recipe: pc_in on each
 // source_color at first use, pc_out on the write, the shared toon ramp in light() with pc_light_term so
@@ -1252,9 +1256,12 @@ uniform float shade_floor = 0.6;
 uniform float glint = 0.9;
 
 varying float v_r;
+varying vec2 v_pxz;
+varying vec3 v_flat;
 
 void vertex() {
 	v_r = length(VERTEX.xz);
+	v_pxz = VERTEX.xz;
 	float u = clamp(v_r / pool_radius, 0.0, 1.0);
 	// The bubble breathes: the mesh's own mound rises and falls a few millimetres.
 	float mound = 1.0 - smoothstep(0.0, 0.5, u);
@@ -1273,6 +1280,15 @@ void fragment() {
 		float fade = smoothstep(0.08, 0.3, u) * (1.0 - smoothstep(0.75, 1.0, u)) * (1.0 - 0.45 * u);
 		col = mix(col, pc_in(ripple_color.rgb), crest * fade * ripple_strength);
 	}
+	v_flat = NORMAL;
+	if (astro_yarn > 0.5) {
+		vec3 sc = max(vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz)), vec3(1e-5));
+		vec2 q = v_pxz * sc.xz / vec2(YL_W, YL_H);
+		float fq = max(length(dFdx(q)), length(dFdy(q)));
+		vec4 t = yl_tap(q, log2(max(fq * YL_TEXELS, 1e-4)) + YL_LOD_BIAS);
+		col *= t.x;
+		NORMAL = normalize(NORMAL + (VIEW_MATRIX * (MODEL_MATRIX * vec4(t.y, 0.0, t.z, 0.0))).xyz);
+	}
 	ALBEDO = pc_out(pc_albedo_floor(col));
 	ROUGHNESS = 0.35;
 	METALLIC = 0.0;
@@ -1282,7 +1298,8 @@ void fragment() {
 void light() {
 	float lit;
 	vec3 diffuse = pc_toon_diffuse(ALBEDO, dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, shade_strength, pc_in(shade_tint.rgb), shade_floor, LIGHT_IS_DIRECTIONAL, lit);
-	DIFFUSE_LIGHT += pc_light_term(diffuse * LIGHT_COLOR / PI, ALBEDO);
+	float relief = astro_yarn > 0.5 ? yl_relief_light(NORMAL, v_flat, LIGHT) : 1.0;
+	DIFFUSE_LIGHT += pc_light_term(diffuse * relief * LIGHT_COLOR / PI, ALBEDO);
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	SPECULAR_LIGHT += smoothstep(0.4, 0.55, pow(ndh, 160.0)) * glint * lit * LIGHT_COLOR / PI;

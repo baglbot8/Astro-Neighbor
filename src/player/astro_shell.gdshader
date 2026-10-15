@@ -46,6 +46,14 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 global uniform float astro_night;
 
 #include "res://src/shaders/surface_detail.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+// true on face features and tiny parts: YarnLite gives those meshes a copy of their material with
+// this set, so they stay smooth like safety eyes. A per-MATERIAL uniform on purpose: an instance
+// uniform takes a global-buffer slot for EVERY instance of the shader and overflowed it on the hub.
+uniform bool yarn_skip = false;
+// Fragment-to-light only (not interpolated): the normal before the stitch relief.
+varying vec3 v_yarn_flat;
 
 // --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS, INLINED -----------------------------------------
 // THE CANONICAL COPY AND THE FULL WRITE-UP LIVE AT THE TOP OF src/shaders/planet_common.gdshaderinc.
@@ -191,7 +199,7 @@ void fragment() {
 	// ---- R2.9 fine material character, from the shared library. VERTEX is view-space here, so its
 	// length is the distance to the camera, which is what sd_lod() wants.
 	v_sheen = 0.0;
-	if (surface_kind > 0) {
+	if (surface_kind > 0 && astro_yarn < 0.5) {
 		float lod = sd_lod(VERTEX, surface_lod_near, surface_lod_far);
 		SdSurface sd = sd_none();
 		vec3 onorm = normalize(v_objnorm);
@@ -211,7 +219,7 @@ void fragment() {
 	}
 
 	// ---- R2.9 seams and topstitch, in the part's own model space.
-	if (seam_strength > 0.001 && (seam_rings > 0.001 || seam_gores > 0.001)) {
+	if (astro_yarn < 0.5 && seam_strength > 0.001 && (seam_rings > 0.001 || seam_gores > 0.001)) {
 		float slod = sd_lod(VERTEX, surface_lod_near, seam_far) * seam_strength;
 		// Ring seams around the limb, `seam_rings` per metre of the part's own long axis.
 		float ring_u = v_objpos.y * seam_rings;
@@ -240,6 +248,17 @@ void fragment() {
 			- v_axis_tan * gore_g * clamp(gore_s * 5.0, -1.0, 1.0) * 0.09 * slod);
 	}
 
+	v_yarn_flat = NORMAL;
+	if (astro_yarn > 0.5 && !yarn_skip) {
+		// YARNLITE: stitches glued to the part (object space times its scale), 1-3 texture reads.
+		vec3 ys = yl_scale(MODEL_MATRIX);
+		vec3 yp = v_objpos * ys;
+		YlObj yo = yl_object(yp, normalize(v_objnorm / ys), yl_obj_lod(yp));
+		ALBEDO *= yo.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), yo.fibre));
+		NORMAL = normalize(NORMAL * yo.nz + (VIEW_MATRIX * (MODEL_MATRIX * vec4(yo.tilt / ys, 0.0))).xyz);
+		ROUGHNESS = 1.0;
+		METALLIC = 0.0;
+	}
 	vec3 em = pc_in(emission_color.rgb) * emission_strength * mix(emission_day_scale, 1.0, astro_night);
 	float peak = max(em.r, max(em.g, em.b));
 	EMISSION = pc_out((peak > emission_cap) ? em * (emission_cap / peak) : em);
@@ -256,11 +275,13 @@ void light() {
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
 	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
-	DIFFUSE_LIGHT += mix(shadow_col * floor_level, ALBEDO, lit) * LIGHT_COLOR / PI;
+	bool yarn_on = astro_yarn > 0.5 && !yarn_skip;
+	float yarn_rl = yarn_on ? yl_relief_light(NORMAL, v_yarn_flat, LIGHT) : 1.0;
+	DIFFUSE_LIGHT += mix(shadow_col * floor_level, ALBEDO, lit) * LIGHT_COLOR / PI * yarn_rl;
 
 	vec3 h = normalize(VIEW + LIGHT);
 	float spec = smoothstep(0.5, 0.78, pow(max(dot(NORMAL, h), 0.0), spec_size)) * spec_strength * lit;
-	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI * (yarn_on ? 0.0 : 1.0);
 
 	float rim = smoothstep(0.6, 0.9, 1.0 - max(dot(NORMAL, VIEW), 0.0)) * rim_strength * lit;
 	SPECULAR_LIGHT += rim * pc_in(rim_color.rgb) * LIGHT_COLOR / PI;

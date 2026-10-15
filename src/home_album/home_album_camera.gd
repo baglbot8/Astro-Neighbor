@@ -493,15 +493,29 @@ func _spawn_tripod() -> void:
 	world.add_child(t)
 	_tripod = t
 
-	var leg_mat := StandardMaterial3D.new()
-	leg_mat.albedo_color = Color("#3a3f55")
-	leg_mat.roughness = 0.75
-	var body_mat := StandardMaterial3D.new()
-	body_mat.albedo_color = Color("#2c2f42")
-	body_mat.roughness = 0.6
-	var trim_mat := StandardMaterial3D.new()
-	trim_mat.albedo_color = Color("#e9eaf1")
-	trim_mat.roughness = 0.5
+	# CROCHET (2026-10-15): with the crochet look on, the tripod is yarn like everything else (the game's toon
+	# material, which carries the stitches). Chosen when it is built, never swapped; with the look off it is
+	# the plain StandardMaterial3D it always was.
+	var leg_mat: Material
+	var body_mat: Material
+	var trim_mat: Material
+	if YarnLite.is_on():
+		leg_mat = MaterialLib.toon(Color("#3a3f55"))
+		body_mat = MaterialLib.toon(Color("#2c2f42"))
+		trim_mat = MaterialLib.toon(Color("#e9eaf1"))
+	else:
+		var lm_ := StandardMaterial3D.new()
+		lm_.albedo_color = Color("#3a3f55")
+		lm_.roughness = 0.75
+		leg_mat = lm_
+		var bm_ := StandardMaterial3D.new()
+		bm_.albedo_color = Color("#2c2f42")
+		bm_.roughness = 0.6
+		body_mat = bm_
+		var tm_ := StandardMaterial3D.new()
+		tm_.albedo_color = Color("#e9eaf1")
+		tm_.roughness = 0.5
+		trim_mat = tm_
 
 	const SPREAD := 0.32
 	for i in 3:

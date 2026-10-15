@@ -1,5 +1,8 @@
 shader_type spatial;
 render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 // SPIKE (2026-09-21, scratch only). The ring on the far chrome world.
 //
 // A flat annulus on one quad: no geometry, all in the alpha. It is here as the FAR anchor of the
@@ -30,6 +33,11 @@ void fragment() {
 	band *= clamp(1.0 - g * 0.85, 0.0, 1.0);
 	// grain around the ring, so it is dust and not paint
 	float grain = 0.72 + 0.44 * h11(floor(atan(q.y, q.x) * 26.0) + floor(r * 40.0) * 0.31);
+	if (astro_yarn > 0.5) {
+		// YARNLITE: the ring is a crochet chain band - two rows of oval links round it (ALU only).
+		// The gaps stay: they are what make it read as a ring.
+		grain = yd_chain(atan(q.y, q.x) + 3.1415927, clamp((r - r_in) / (r_out - r_in), 0.0, 1.0), 120.0);
+	}
 	ALBEDO = tint * grain;
 	ALPHA = band * gain;
 }

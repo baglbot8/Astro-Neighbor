@@ -6,6 +6,9 @@
 // the particle system to know where the camera is.
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 
 uniform vec4 tint : source_color = vec4(0.82, 0.90, 1.0, 1.0);
 uniform float intensity : hint_range(0.0, 8.0) = 2.6;
@@ -43,6 +46,15 @@ void fragment() {
 	float across = smoothstep(1.0, core_width, abs(uv.x));
 	float along = smoothstep(1.0, 0.0, abs(uv.y));
 	float a = across * across * along * pcolor.a;
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a strand of yarn sewn in a running stitch - a crisper round strand (not a soft
+		// glow line), four plied dashes down its length with gaps where the thread goes under. The
+		// gain puts back the light the gaps and the narrower strand take out (ALU only).
+		float w = max(core_width * 2.0, 0.45);
+		vec2 sd = yd_strand(UV.y, uv.x / w, 5.0, 4.0);
+		float strand = 1.0 - smoothstep(w * 0.85, w, abs(uv.x));
+		a = strand * sd.x * along * pcolor.a * sd.y * 1.45;
+	}
 	ALBEDO = tint.rgb * pcolor.rgb * intensity * a;
 	ALPHA = clamp(a, 0.0, 1.0);
 }

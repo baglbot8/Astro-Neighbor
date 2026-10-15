@@ -174,8 +174,10 @@ static func run(tree: SceneTree) -> void:
 	var extras: Array = _sky_copies(world.get_node_or_null("Environment"))
 	var sky_count := extras.size()
 	var mats := _minigame_materials(pid)
+	mats.append_array(_jet_puff_materials(world))
 	extras.append_array(_material_quads(mats))
 	var particle_copies := _particle_copies(world.get_node_or_null("Environment"))
+	particle_copies.append_array(_yarn_sprite_copies(world))
 
 	# Build everything under one holder, synchronously, so nothing can be half-attached at an await.
 	var holder := Node.new()
@@ -252,6 +254,71 @@ static func _particle_copies(env: Node) -> Array:
 		c.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -COPY_DIST_M))
 		c.visible = true
 		c.emitting = true
+		out.append(c)
+	return out
+
+
+## The jetpack puffs' material (src/player/jet_puffs.gd). Every puff in the pool is HIDDEN until the
+## first boost, so the far views never draw one and jet_puff.gdshader compiled on the first jump:
+## first-landing run (title -> home, walk, jump), worst frame 83-107 ms at the first jump in this
+## copy and 98 ms in the base copy before this. One material per JetPuffs node (they share a shader).
+static func _jet_puff_materials(world: Node) -> Array:
+	var out: Array = []
+	if world == null:
+		return out
+	for jp in world.find_children("JetPuffs", "", true, false):
+		for c in jp.get_children():
+			var mi := c as MeshInstance3D
+			if mi != null and mi.material_override != null:
+				out.append(mi.material_override)
+				break
+	return out
+
+
+## CROCHET (2026-10-15): an emitting copy of each not-yet-emitting particle node whose draw pass uses a
+## YarnLite sprite shader (src/style/yarn/yarn_sprite_add / _mix: the footstep and landing dust, the
+## astronaut's happy sparkles, Bolt's vent puff), so its draw shader - and, for GPUParticles3D, its
+## process shader - compile behind the fade instead of on the first jump. One copy per
+## (node class, draw shader, process material), so a world full of neighbours still adds a handful.
+## Same `duplicate(0)` recipe as `_particle_copies`. Unparented until run() hangs them on its camera.
+static func _yarn_sprite_copies(world: Node) -> Array:
+	var out: Array = []
+	if world == null:
+		return out
+	var seen := {}
+	for n in world.find_children("*", "GeometryInstance3D", true, false):
+		var mesh: Mesh = null
+		var pm: Material = null
+		if n is GPUParticles3D:
+			mesh = (n as GPUParticles3D).draw_pass_1
+			pm = (n as GPUParticles3D).process_material
+		elif n is CPUParticles3D:
+			mesh = (n as CPUParticles3D).mesh
+		else:
+			continue
+		if mesh == null or mesh.get_surface_count() == 0:
+			continue
+		var sm := mesh.surface_get_material(0) as ShaderMaterial
+		if sm == null or sm.shader == null or not String(sm.shader.resource_path).begins_with("res://src/style/yarn/yarn_sprite"):
+			continue
+		var key := "%s|%s|%s" % [n.get_class(), sm.shader.resource_path, str(pm.get_instance_id()) if pm != null else ""]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		var c := (n as Node).duplicate(0) as GeometryInstance3D
+		if c == null:
+			continue
+		c.name = "WarmYarnSprite"
+		c.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -COPY_DIST_M))
+		c.visible = true
+		if c is GPUParticles3D:
+			(c as GPUParticles3D).one_shot = false
+			(c as GPUParticles3D).emitting = true
+		else:
+			# Deferred: a CPUParticles3D reads its global transform when it starts emitting, and the
+			# copy is not in the tree until run() hangs it on the camera.
+			(c as CPUParticles3D).one_shot = false
+			c.set_deferred("emitting", true)
 		out.append(c)
 	return out
 

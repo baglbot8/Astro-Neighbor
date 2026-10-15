@@ -1091,6 +1091,11 @@ func _build_ui() -> void:
 	_eye_mat = ShaderMaterial.new()
 	_eye_mat.shader = EYE_SHADER
 	_eye.material = _eye_mat
+	# YARNLITE: the glass samples the crochet stitch tile (yarn_space.gdshaderinc). A canvas item's
+	# samplers default to no mipmaps and no repeat; the mipmaps are the stitches' anti-shimmer, so
+	# this one item gets them. One-time, at build.
+	_eye.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_eye.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	_eye_root.add_child(_eye)
 
 	# SYNTHETIC, `--heat-copies=N`, MEASUREMENT ONLY. N extra copies of the SAME ColorRect with the
@@ -1106,6 +1111,11 @@ func _build_ui() -> void:
 		cp.name = "HeatCopy%d" % i
 		cp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cp.material = _eye_mat
+		# YARNLITE: the glass samples the crochet stitch tile (yarn_space.gdshaderinc). A canvas item's
+		# samplers default to no mipmaps and no repeat; the mipmaps are the stitches' anti-shimmer, so
+		# this one item gets them. One-time, at build.
+		cp.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		cp.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 		_eye_root.add_child(cp)
 		_heat_rects.append(cp)
 

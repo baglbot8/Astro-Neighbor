@@ -215,7 +215,8 @@ var _beard_params := PackedFloat32Array()
 ## every frame, so the chin keeps the torso's orientation (see THE CHIN). Rebuilt with the beard.
 var _chin_pivot: Node3D
 var _glow_ring: MeshInstance3D
-var _ring_mat: StandardMaterial3D
+## A YarnLite sprite (felt halo in the crochet look); animated through its "albedo" parameter.
+var _ring_mat: ShaderMaterial
 var _bob: float = 0.0
 ## A SEPARATE clock from `_bob`, and this is not tidiness — see `_animate_extras`.
 var _sway: float = 0.0
@@ -518,7 +519,9 @@ func _build_tentacles() -> void:
 	# without the clear a second rebuild leaves freed nodes that `_animate_extras` touches next tick.
 	_tentacles.clear()
 	_beard_params = PackedFloat32Array()
-	var m_tent := _toon(BEARD_TINT, _matte(SURF_BEARD))
+	# Crochet look: the moustache is an APPLIQUE - finer yarn and a dark groove round each strand, so
+	# the four tentacles stay separate from the same-violet head (round-2 critic: they merged).
+	var m_tent := _toon(BEARD_TINT, _matte(SURF_BEARD).merged({"yarn_applique": 1.0, "yarn_scale": 0.5}))
 	var strand := 0
 	for t: Array in BEARD:
 		for sx: float in [-1.0, 1.0]:
@@ -763,7 +766,7 @@ func _animate_extras(delta: float) -> void:
 		_tentacles[i].rotation = Vector3(rx, 0.0, rz)
 	if _ring_mat:
 		var a := 0.24 + 0.10 * sin(TAU * _bob / 2.6 + 1.2)
-		_ring_mat.albedo_color = Color(BULB.r, BULB.g, BULB.b, a)
+		_ring_mat.set_shader_parameter("albedo", Color(BULB.r, BULB.g, BULB.b, a))
 
 
 ## THE FRAME A STRAND HANGS IN, built in head-local space so it owes nothing to the shell's normal
@@ -812,13 +815,15 @@ func _build_glow_ring() -> void:
 	_glow_ring = MeshInstance3D.new()
 	_glow_ring.name = "HoverGlow"
 	_glow_ring.mesh = q
-	_ring_mat = StandardMaterial3D.new()
-	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_ring_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	_ring_mat.albedo_color = Color(BULB.r, BULB.g, BULB.b, 0.30)
-	_ring_mat.albedo_texture = soft_dot_texture()
-	_ring_mat.disable_receive_shadows = true
+	var std := StandardMaterial3D.new()
+	std.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	std.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	std.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	std.albedo_color = Color(BULB.r, BULB.g, BULB.b, 0.30)
+	std.albedo_texture = soft_dot_texture()
+	std.disable_receive_shadows = true
+	# The same glow as a YarnLite sprite: identical with crochet off, a felt halo with it on.
+	_ring_mat = YarnLite.sprite_material(std, YarnLite.Sprite.FELT)
 	_glow_ring.material_override = _ring_mat
 	_glow_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_glow_ring.position = Vector3(0.0, 0.012, 0.0)

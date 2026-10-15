@@ -744,9 +744,10 @@ func _build_visor(s: Dictionary) -> void:
 	var visor := _node("Visor", _helmet_tilt, Vector3.ZERO)
 	_place_on_shell(visor, 0.0, VISOR_PITCH, s["visor_inset"])
 	# Local axes here: +X right across the pane, +Y up it, -Z straight out of the face.
-	_mi(superellipsoid(s["visor_semi"], 2.2, 16, 9),
+	# Crochet look: the visor pane stays glossy plastic.
+	YarnLite.keep_glossy(_mi(superellipsoid(s["visor_semi"], 2.2, 16, 9),
 		_toon(VISOR, _matte({"spec": 0.10, "spec_size": 60.0, "rim": 0.05})),
-		visor, Vector3.ZERO, "Pane")
+		visor, Vector3.ZERO, "Pane"))
 	# Rim ring over the pane/shell seam. Without it the intersection of two coarse superellipsoids
 	# rendered as a jagged, torn edge (round 1 close-up), which read as damage in the wrong place.
 	var vs: Vector3 = s["visor_semi"]

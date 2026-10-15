@@ -37,6 +37,12 @@ render_mode cull_disabled, depth_draw_opaque, diffuse_lambert, specular_schlick_
 //   * The rim term in light() is not involved - forcing rim_strength to 0 leaves MAE at 2.74.
 #include "res://src/shaders/planet_common.gdshaderinc"
 global uniform float astro_compat;
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on the pennant is crocheted cloth - single-crochet
+// stitches glued to the cloth (its rest position, so they ride the wave), 1-3 stitch reads, the relief lit by the
+// game's own light. The wave, the vertex colour and the toon ramp are untouched; with the global at 0 this shader is
+// exactly what it was.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/cave/yarn_cave.gdshaderinc"
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float wave_amp = 0.12;
@@ -49,8 +55,13 @@ uniform vec4 shade_tint : source_color = vec4(0.62, 0.55, 0.85, 1.0);
 uniform float rim_strength : hint_range(0.0, 2.0) = 0.2;
 
 varying vec3 v_col;
+varying vec3 v_op;
+varying vec3 v_on;
+varying vec3 v_flat;
 
 void vertex() {
+	v_op = VERTEX;
+	v_on = NORMAL;
 	float grip = UV.x * UV.x;
 	float t = TIME * wave_speed;
 	float w = sin(UV.x * wave_freq - t) * wave_amp * grip;
@@ -63,7 +74,17 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = pc_out(pc_in(albedo.rgb) * v_col);
+	vec3 flag_col = pc_in(albedo.rgb) * v_col;
+	v_flat = NORMAL;
+	if (astro_yarn > 0.5) {
+		vec3 sc = yl_scale(MODEL_MATRIX);
+		vec3 yp = v_op * sc;
+		float fp = max(length(dFdx(yp)), length(dFdy(yp)));
+		YcStone ys = yc_stone_sz(yp, normalize(v_on / sc), yl_lod(fp, YL_H), vec2(YL_W, YL_H));
+		flag_col *= ys.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), ys.fibre));
+		NORMAL = normalize(NORMAL + (VIEW_MATRIX * (MODEL_MATRIX * vec4(ys.tilt / sc, 0.0))).xyz);
+	}
+	ALBEDO = pc_out(flag_col);
 	ROUGHNESS = 0.9;
 	METALLIC = 0.0;
 }
@@ -72,7 +93,8 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
 	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
-	DIFFUSE_LIGHT += mix(shadow_col * 0.55, ALBEDO, lit) * LIGHT_COLOR / PI;
+	float relief = astro_yarn > 0.5 ? yl_relief_light(NORMAL, v_flat, LIGHT) : 1.0;
+	DIFFUSE_LIGHT += mix(shadow_col * 0.55, ALBEDO, lit) * relief * LIGHT_COLOR / PI;
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;
 	SPECULAR_LIGHT += rim * LIGHT_COLOR / PI;

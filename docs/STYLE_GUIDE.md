@@ -294,8 +294,35 @@ Saturated pastels with warm light. Never grey defaults. Palette anchors:
 
 Lighting: warm sun (`#fff4d6`), cool tinted shadows (toon shader shade_tint lavender). Soft shadows on. Subtle bloom (glow strength ~0.6, threshold ~1.0) so emissives glow, ACES tonemap, slight vignette, SSAO light. Depth of field: mild, far only.
 
+## Crochet look (decided 2026-10-15 — binding on all new visual work)
+
+The user, 2026-10-15: *"Make crochet the whole game's look."* Everything in the world reads as crocheted yarn. Every
+other rule in this guide still holds: the Moonstone palette, the cute chibi cast, the thin-atmosphere space look and the
+measured palette gates. Crochet changes the surface, not the colour: each look is mean-preserving, so a region keeps its
+game hue (measured within 3-9 degrees) and lightness (within ~10%).
+
+* **How it works.** `src/style/yarn/yarn_lite.gd` bakes one 128x128 stitch texture and one 64x64 star texture at boot
+  (~25 ms native, ~29 ms in the browser) and publishes them as shader globals `yarn_stitch_tex`, `yarn_star_tex`. The
+  switch is the global `astro_yarn` (`YarnLite.set_on()`; `DEFAULT_ON = true`; dev menu Perf tab "Crochet look"). Every
+  hooked shader keeps its original code in the OFF branch and adds a crochet branch; the shared functions live in
+  `src/style/yarn/yarn_lite.gdshaderinc` (only add functions; never change an existing one).
+* **By surface.** Solid things (cast, props, buildings, rocks, rocket): amigurumi single-crochet stitches in OBJECT space.
+  Grounds: a blanket of joined squares, each world its own yarn (plaza = granny squares, Bolt = grey yarn with a metallic
+  thread, Vela = pale mohair, Grig = chunky cream). Eyes, visors, screens, glass, crystals, gems: glossy plastic (like
+  amigurumi safety eyes and beads) — `YarnLite.keep_glossy()`; face parts and parts under 4.5 cm stay smooth. Sewn-on
+  parts of the same colour as the body (Zorp's moustache) use `yarn_applique` so they read as separate pieces. Glows keep
+  their brightness (they are cues); halos become soft felt. Sparkles = embroidered stars; smoke/dust/steam = wool
+  pom-poms; flames = glowing yarn tassels; streaks = a running stitch; skies = a knitted backdrop with embroidered stars;
+  sky planets = crocheted balls; rings = chain bands. UI, 2D overlays, eyepiece frames, Label3D, blob shadows and the
+  placement ghost stay as they are.
+* **Cues beat yarn.** Collectibles, safari sights, targets and beacons must be as easy to spot as without crochet. In the
+  safari glass, stars stay dimmer than the sights.
+* **Phone budget.** At most 4 added texture reads per pixel, `textureLod` with a mip level from the pixel footprint (the
+  pattern fades to plain colour with distance, so no shimmer), no loops, no screen/depth reads, no new full-screen pass,
+  no new meshes or particles, WebGL2's 15 varyings. Never swap materials or shader variants on toggle.
+
 ## Materials
-Use `MaterialLib.toon(color)` for nearly everything. Emissive via `MaterialLib.glow`. Visors/windows: `MaterialLib.glass`. Metal: `MaterialLib.metal`. Ground uses dedicated shaders (grass triangle pattern — small triangles in two greens, triplanar on the sphere, with subtle noise variation and a lighter ring near paths/water). Water: animated, two-tone with foam ring at the shoreline and sparkle highlights.
+Use `MaterialLib.toon(color)` for nearly everything (it carries the crochet look, "Crochet look" above). Emissive via `MaterialLib.glow`. Visors/windows: `MaterialLib.glass`. Metal: `MaterialLib.metal`. Ground uses dedicated shaders (grass triangle pattern — small triangles in two greens, triplanar on the sphere, with subtle noise variation and a lighter ring near paths/water). Water: animated, two-tone with foam ring at the shoreline and sparkle highlights.
 
 ## Motion & feel (this is where "AAA" lives)
 * Every interaction has **anticipation + follow-through**: jump squashes before takeoff and stretches in the air; landing squashes + dust puff; picking up an item does a little hop + sparkle + "pop" sound + toast.

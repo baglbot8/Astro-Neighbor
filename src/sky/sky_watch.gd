@@ -337,6 +337,11 @@ func _build_ui() -> void:
 	_eye_mat.shader = EYE_SHADER
 	_tube_uniforms(_eye_mat, 1.0)
 	_eye.material = _eye_mat
+	# YARNLITE: the glass samples the crochet stitch tile (yarn_space.gdshaderinc). A canvas item's
+	# samplers default to no mipmaps and no repeat; the mipmaps are the stitches' anti-shimmer, so
+	# this one item gets them. One-time, at build.
+	_eye.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_eye.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	_eye_root.add_child(_eye)
 
 	_overlay = Overlay.new()
@@ -422,6 +427,11 @@ func _build_preview_viewport() -> void:
 	# filled from the ground and a page filled from the ship hold the same shape of photograph.
 	_tube_uniforms(m, 0.22)
 	_prev_rect.material = m
+	# YARNLITE: the glass samples the crochet stitch tile (yarn_space.gdshaderinc). A canvas item's
+	# samplers default to no mipmaps and no repeat; the mipmaps are the stitches' anti-shimmer, so
+	# this one item gets them. One-time, at build.
+	_prev_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_prev_rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	_prev_vp.add_child(_prev_rect)
 
 

@@ -56,6 +56,11 @@ render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 // Two independent capture pairs both gave MAE 1.745. Forward+ did not move at all: the same mask
 // scored between the pre- and post-conversion Forward+ frames is MAE 0.000, max 0 codes.
 global uniform float astro_compat;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+// The instance's scale (mean of its axes), from vertex(): MultiMesh instances carry their scale only
+// in vertex()'s MODEL_MATRIX. One float, packed beside v_wood by the GLSL varying packer.
+varying float v_yscale;
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float sway_amount = 0.05;
@@ -189,6 +194,7 @@ void vertex() {
 	v_objnrm = NORMAL;
 	v_wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_wnrm = normalize(mat3(MODEL_MATRIX) * NORMAL);
+	v_yscale = (length(MODEL_MATRIX[0].xyz) + length(MODEL_MATRIX[1].xyz) + length(MODEL_MATRIX[2].xyz)) / 3.0;
 }
 
 void fragment() {
@@ -198,7 +204,7 @@ void fragment() {
 	float rough = 0.97;
 	v_flat_nrm = NORMAL;
 	// --- R2.9 SURFACE TEXTURE ----------------------------------------------------------------------
-	if (surface_strength > 0.001) {
+	if (surface_strength > 0.001 && astro_yarn < 0.5) {
 		float lod = sd_lod(VERTEX, surface_near, surface_far);
 		// sd_fbm is not normalised, so an sd_* tint has a mean below 1.0 and would darken the canopy
 		// as well as texture it. `mean` divides that out. See planet_common.gdshaderinc.
@@ -225,6 +231,39 @@ void fragment() {
 		vec3 sgrad = pc_surface_grad(v_wpos, normalize(v_wnrm), tint.r - 1.0);
 		NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * surface_bump);
 	}
+	if (astro_yarn > 0.5) {
+		// YARNLITE: stitches glued to the plant, 1-3 texture reads. Grass tufts (the only foliage
+		// material with instance tint and a 0.2 m sway height, planet_props.gd) become plied yarn ends
+		// instead, ALU only.
+		vec3 yp = v_objpos * v_yscale;
+		if (use_instance_tint && abs(sway_height - 0.2) < 0.001) {
+			// POLISH 2026-10-15: yl_tuft's plies are sub-pixel at the gameplay camera, so the tufts read
+			// as plain blades; the chunky version twists once per 5.5 cm and frays at the tip.
+			vec2 tf = yl_tuft_chunky(length(yp.xz) * atan(yp.x, yp.z), yp.y);
+			if (tf.y > 0.5) {
+				discard;
+			}
+			base *= tf.x;
+		} else {
+			// POLISH 2026-10-15 (critic: "streaky contour rings" on canopies at mid distance). Two
+			// causes, both measured on the home meadow frame: a 3 m canopy at 15 m carries ~70 rows
+			// of the 4.2 cm character stitch, so a row was ~3 px and only its dark gap survived the
+			// mips, as stripes round the sides and as rings round the cap. So: (1) big plants are
+			// worked in CHUNKY yarn - the stitch scales with the plant's sway height (the plant kit's
+			// own size: flowers 0.2-0.5, bushes 0.7-1.6, trees 3.0-3.4), up to 2x on the trees;
+			// (2) once a stitch is under ~3 px it fades to the plain colour instead of leaving its row
+			// gap behind (lod 2 = a 4 px stitch, 3.2 = under 2 px).
+			float y_chunk = clamp(sway_height / 1.6, 1.0, 2.0);
+			vec3 ypc = yp / y_chunk;
+			float ylod = yl_obj_lod(ypc);
+			YlObj yo = yl_object(ypc, normalize(v_objnrm), ylod);
+			float yk = 1.0 - smoothstep(2.0, 3.2, ylod);
+			base *= mix(1.0, yo.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), yo.fibre)), yk);
+			NORMAL = normalize(NORMAL * mix(1.0, yo.nz, yk)
+				+ (VIEW_MATRIX * vec4(mat3(MODEL_MATRIX) * (yo.tilt * yk) / v_yscale, 0.0)).xyz);
+		}
+		rough = 1.0;
+	}
 	ALBEDO = pc_out(pc_albedo_floor(pc_pastel(base, pastel_max, pastel_dark)));
 	ROUGHNESS = rough;
 	METALLIC = 0.0;
@@ -244,7 +283,8 @@ void light() {
 		float shade = mix(shade_floor, 1.0, lit) * mix(cast_floor, 1.0, mix(1.0, ATTENUATION, cast_shadow_recv));
 		// R2.9: the ramp above saturates, so the detail bump alone would be invisible on the sunlit
 		// crown. Clamped hard, so it can never blow the crown out or punch a dark hole in it.
-		shade *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * surface_light, 0.82, 1.14);
+		shade *= astro_yarn > 0.5 ? yl_relief_light(NORMAL, v_flat_nrm, LIGHT)
+			: clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * surface_light, 0.82, 1.14);
 		vec3 shaded = pc_pastel(ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength), shade_s_max, shade_desat);
 		vec3 col = mix(shaded, ALBEDO, lit) * shade;
 		vec3 composed = pc_pastel(col * LIGHT_COLOR / PI, light_s_max, 0.0) * light_gain;
@@ -262,7 +302,7 @@ void light() {
 	vec3 hv = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	float spec = smoothstep(0.45, 0.6, pow(ndh, 60.0)) * spec_strength * lit;
-	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI * (astro_yarn > 0.5 ? 0.0 : 1.0);
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;
 	SPECULAR_LIGHT += rim * vec3(1.0, 0.97, 0.9) * LIGHT_COLOR / PI;

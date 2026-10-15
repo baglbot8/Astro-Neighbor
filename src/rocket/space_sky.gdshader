@@ -25,6 +25,9 @@ shader_type sky;
 render_mode use_debanding;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
+// YARNLITE knitted backdrop, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 
 // ---- gradient ---------------------------------------------------------------------------------
 uniform vec3 zenith_color : source_color = vec3(0.055, 0.062, 0.152);
@@ -312,17 +315,21 @@ void sky() {
 		// ---- stars in HDR so only they bloom -------------------------------------------------
 		// Cell scales, thresholds and sizes are src/shaders/sky.gdshader's, so the same view
 		// direction gives the same stars in both scenes - the whole point of the seam.
-		float t = TIME;
-		float dense = mix(0.955, 0.872, star_density);
-		vec3 stars = star_layer(d, 54.0, dense, 0.120, 1.00, t);
-		stars += star_layer(d, 98.0, dense + 0.030, 0.088, 0.70, t + 3.1);
-		stars += star_layer(d, 176.0, dense + 0.052, 0.072, 0.44, t + 6.4);
-		// The band is dusted with extra faint stars, like the reference.
-		stars += star_layer(d, 254.0, 0.966 - 0.03 * mw_band_g, 0.056, 0.28, t + 9.2);
-		// The ground sky clamps each channel; this one does not. Cross-fade the two treatments so
-		// the star POSITIONS never move - only their brightness relaxes after the cut.
-		col += mix(stars * star_brightness, min(stars * g_star_brightness, vec3(STAR_HDR_CAP)),
-				ground_match);
+		// YARNLITE: the four point-star layers are skipped; embroidered stars replace them below,
+		// exactly as src/shaders/sky.gdshader does, so the seam still lines up star for star.
+		if (astro_yarn < 0.5) {
+			float t = TIME;
+			float dense = mix(0.955, 0.872, star_density);
+			vec3 stars = star_layer(d, 54.0, dense, 0.120, 1.00, t);
+			stars += star_layer(d, 98.0, dense + 0.030, 0.088, 0.70, t + 3.1);
+			stars += star_layer(d, 176.0, dense + 0.052, 0.072, 0.44, t + 6.4);
+			// The band is dusted with extra faint stars, like the reference.
+			stars += star_layer(d, 254.0, 0.966 - 0.03 * mw_band_g, 0.056, 0.28, t + 9.2);
+			// The ground sky clamps each channel; this one does not. Cross-fade the two treatments so
+			// the star POSITIONS never move - only their brightness relaxes after the cut.
+			col += mix(stars * star_brightness, min(stars * g_star_brightness, vec3(STAR_HDR_CAP)),
+					ground_match);
+		}
 
 		if (ground_match > 0.001) {
 			// ---- the ground sky's moons and sun ----------------------------------------------
@@ -338,6 +345,16 @@ void sky() {
 			col += (disc * 3.4 + halo) * g_sun_color * g_sun_vis * ground_match;
 		}
 
+		if (astro_yarn > 0.5) {
+			// YARNLITE: the knit (1 read) and one embroidered star candidate (1 read) - the planet
+			// sky's own yl_sky() on the same WORLD direction, so the stars sit where the planet
+			// sky stitches them and the seam frame still matches. This sky writes COLOR raw (no
+			// pc_out), so under Compatibility the multiply and the thread colour are pre-encoded
+			// (yd_enc) to land where sky.gdshader's pc_out() lands them.
+			YlSky ys = yl_sky(d);
+			col *= yd_enc(vec3(ys.ao), astro_compat);
+			col = mix(col, yd_enc(yd_star_col(ys), astro_compat), ys.star);
+		}
 		COLOR = col;
 	}
 }

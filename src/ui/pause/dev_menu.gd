@@ -1654,6 +1654,18 @@ func _build_perf_tab(list: VBoxContainer) -> void:
 	warmup_row.add_child(warmup_btn)
 	_add_note(toggles, "Kept across reloads (its own dev-settings file) — the only Perf toggle that is.")
 
+	# YARNLITE heat test: the crochet look is a shader global (astro_yarn), so flipping it changes no
+	# material and compiles nothing. Default: YarnLite.DEFAULT_ON. Not saved.
+	var yarn_row := _row(toggles, "Crochet look")
+	var yarn_toggle := ToggleSwitch.new()
+	yarn_toggle.set_block_signals(true)
+	yarn_toggle.on = YarnLite.is_on()
+	yarn_toggle.set_block_signals(false)
+	yarn_toggle.toggled.connect(func(on: bool) -> void:
+		YarnLite.set_on(on)
+		_finish_action("Crochet look: %s" % ("on" if on else "off")))
+	yarn_row.add_child(yarn_toggle)
+
 	var burn_row := _row(toggles, "Burn 8 ms/frame (control)")
 	_perf_burn_toggle = ToggleSwitch.new()
 	_perf_burn_toggle.toggled.connect(func(on: bool) -> void:

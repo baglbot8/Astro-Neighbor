@@ -28,6 +28,15 @@ shader_type spatial;
 render_mode diffuse_lambert_wrap, specular_disabled;
 
 #include "res://src/shaders/planet_common.gdshaderinc"
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on, the crust is a chunky dark-yarn blanket - the
+// plate and grain layers (2, 3, 4) give way to stitches (yarn_cave.gdshaderinc, 1-3 reads of the shared stitch
+// tile, so it costs less than the cellular noise it replaces); the lava seams keep their glow and become
+// orange / red yarn. With the global at 0 this shader is exactly what it was.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/cave/yarn_cave.gdshaderinc"
+
+global uniform float astro_compat;
+const vec2 CRUST_STITCH = vec2(0.30, 0.225);   // metres: chunky
 
 uniform vec3 crust_dark : source_color = vec3(0.215, 0.195, 0.275);
 uniform vec3 crust_light : source_color = vec3(0.430, 0.395, 0.505);
@@ -129,7 +138,7 @@ void fragment() {
 	float plate_id = 0.5;
 	float plate_k = 0.0;
 	// 2. PLATES and 3. GRAIN, near only.
-	if (dist < PLATE_FAR_M) {
+	if (dist < PLATE_FAR_M && astro_yarn < 0.5) {
 		float near_k = 1.0 - smoothstep(PLATE_FAR_M * 0.6, PLATE_FAR_M, dist);
 		// Warped, so the plates are irregular flakes rather than paving; and the crack network is broken
 		// (some edges are sealed) so it reads as fractured crust, not tiles.
@@ -266,4 +275,14 @@ void fragment() {
 	vec3 sgrad = pc_surface_grad(p, nw, height * 0.12);
 	NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * bump * 6.0);
 	ROUGHNESS = 0.96;
+	if (astro_yarn > 0.5) {
+		// the yarn: stitches on the object-space triplanar charts (the rock sits at the origin, unrotated)
+		float fp = max(length(dFdx(p)), length(dFdy(p)));
+		YcStone ys = yc_stone_sz(p, nw, yl_lod(fp, CRUST_STITCH.y), CRUST_STITCH);
+		float ao = ys.ao;   // no silhouette fuzz: on ground seen at a grazing angle it only lightens
+		ALBEDO = pc_out(pc_in(ALBEDO) * ao);
+		// glowing yarn: the molten seams keep their light but show the stitches in it
+		EMISSION *= mix(1.0, ys.ao, 0.55);
+		NORMAL = normalize(NORMAL + (VIEW_MATRIX * vec4(ys.tilt, 0.0)).xyz * 1.3);
+	}
 }

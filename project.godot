@@ -281,3 +281,15 @@ astro_compat={
 "type": "float",
 "value": 0.0
 }
+astro_yarn={
+"type": "float",
+"value": 0.0
+}
+yarn_stitch_tex={
+"type": "sampler2D",
+"value": ""
+}
+yarn_star_tex={
+"type": "sampler2D",
+"value": ""
+}

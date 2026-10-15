@@ -10,6 +10,9 @@ extends Node3D
 ## the thing in the eyepiece are the same thing. `eye_point()` and `tube_forward()` let SkyWatch put
 ## the camera behind the eyepiece instead of blanking the world.
 
+## YARNLITE: the crochet stand-in for this file's plain StandardMaterial3D (see _mat).
+const YARN_STD := preload("res://src/sky/yarn_std.gdshader")
+
 const BODY := Color("#e2e5ef")
 const TRIM := Color("#2b3049")
 const BAND := Color("#ef7f52")
@@ -78,9 +81,8 @@ func _build() -> void:
 	bc.height = 0.86
 	bc.radial_segments = 18
 	var tmat := _mat(BODY, 0.30)
-	tmat.emission_enabled = true
-	tmat.emission = BODY
-	tmat.emission_energy_multiplier = 0.10
+	tmat.set_shader_parameter("emission", BODY)
+	tmat.set_shader_parameter("emission_energy", 0.10)
 	bc.material = tmat
 	body.mesh = bc
 	body.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
@@ -97,9 +99,8 @@ func _build() -> void:
 	# AT NIGHT THE WHOLE SCOPE IS A SILHOUETTE. A faint warm glow on the band and the eye cup is
 	# what makes it read as a telescope from the eyepiece camera, and it is the one warm thing in
 	# the Moonstone night, so it also says "this is yours".
-	bmat.emission_enabled = true
-	bmat.emission = BAND
-	bmat.emission_energy_multiplier = 0.55
+	bmat.set_shader_parameter("emission", BAND)
+	bmat.set_shader_parameter("emission_energy", 0.55)
 	bn.material = bmat
 	band.mesh = bn
 	band.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
@@ -126,9 +127,8 @@ func _build() -> void:
 	gm.height = 0.02
 	gm.radial_segments = 18
 	var gmat := _mat(GLASS, 0.06)
-	gmat.emission_enabled = true
-	gmat.emission = GLASS
-	gmat.emission_energy_multiplier = 0.45
+	gmat.set_shader_parameter("emission", GLASS)
+	gmat.set_shader_parameter("emission_energy", 0.45)
 	gm.material = gmat
 	glass.mesh = gm
 	glass.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
@@ -162,9 +162,8 @@ func _build() -> void:
 	cc.height = 0.05
 	cc.radial_segments = 14
 	var cmat := _mat(BODY, 0.42)
-	cmat.emission_enabled = true
-	cmat.emission = BODY
-	cmat.emission_energy_multiplier = 0.22
+	cmat.set_shader_parameter("emission", BODY)
+	cmat.set_shader_parameter("emission_energy", 0.22)
 	cc.material = cmat
 	cup.mesh = cc
 	cup.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
@@ -186,11 +185,15 @@ func _build() -> void:
 	aim_local(45.0)
 
 
-static func _mat(c: Color, rough: float) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = c
-	m.roughness = rough
-	m.metallic = 0.0
+static func _mat(c: Color, rough: float) -> ShaderMaterial:
+	# YARNLITE: src/sky/yarn_std.gdshader is this StandardMaterial3D (albedo, roughness, metallic 0)
+	# with the crochet hook on the astro_yarn switch; a near-mirror finish (the lens) stays glossy.
+	var m := ShaderMaterial.new()
+	m.shader = YARN_STD
+	m.set_shader_parameter("albedo", c)
+	m.set_shader_parameter("roughness", rough)
+	m.set_shader_parameter("metallic", 0.0)
+	m.set_shader_parameter("yarn_skip", rough < 0.1)
 	return m
 
 

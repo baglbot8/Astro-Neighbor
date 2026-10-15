@@ -5,6 +5,8 @@
 // of them overlap into one soft mass with a defined silhouette and no visible ball edges.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform vec4 lit_color : source_color = vec4(0.80, 0.78, 0.75, 1.0);
 uniform vec4 shade_color : source_color = vec4(0.40, 0.38, 0.45, 1.0);
@@ -34,4 +36,15 @@ void fragment() {
 	float up = clamp(0.58 - p.y * 0.42, 0.0, 1.0);
 	ALBEDO = mix(shade_color.rgb, lit_color.rgb, up) * pcolor.rgb;
 	ALPHA = clamp(a * pcolor.a * opacity, 0.0, 1.0);
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a wool pom-pom (src/player/jet_puff.gdshader's yl_pompom, ALU only): the fibre
+		// silhouette and the combed shading. Unlike a jet puff it KEEPS the particle's own alpha
+		// profile, multiplied by the pom-pom's cover (<= 1), so a cloud of them is never heavier
+		// than the plain smoke: the pad's dust ring is dozens of overlapping puffs, and both solid
+		// wool (round 1) and a half-raised alpha (critic round 1: touchdown grey mean 66 vs 85 OFF)
+		// darkened the whole frame. The shading is lifted to average 1 over the puff (alpha-weighted mean of pp.y is 0.91).
+		vec2 pp = yl_pompom(p);
+		ALBEDO *= pp.y * 1.10;
+		ALPHA = clamp(pp.x * a * pcolor.a * opacity, 0.0, 1.0);
+	}
 }

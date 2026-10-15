@@ -205,6 +205,11 @@ func _build_preview_rig() -> void:
 	_mat = ShaderMaterial.new()
 	_mat.shader = EYE_SHADER
 	_rect.material = _mat
+	# YARNLITE: the glass samples the crochet stitch tile (yarn_space.gdshaderinc). A canvas item's
+	# samplers default to no mipmaps and no repeat; the mipmaps are the stitches' anti-shimmer, so
+	# this one item gets them. One-time, at build.
+	_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	_vp.add_child(_rect)
 
 

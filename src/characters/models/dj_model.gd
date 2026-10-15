@@ -119,7 +119,8 @@ func _build_geometry() -> void:
 
 	# ---- head: fused to the body, no neck
 	_mi(superellipsoid(HEAD_SEMI_A, HEAD_N_A, 52, 26), m_head, _head, Vector3.ZERO, "HeadShell")
-	_mi(superellipsoid(VISOR_SEMI, VISOR_N, 48, 24), m_visor, _head, VISOR_C, "Visor")
+	# Crochet look: the visor stays glossy plastic (a screen), the contrast that makes the yarn read.
+	YarnLite.keep_glossy(_mi(superellipsoid(VISOR_SEMI, VISOR_N, 48, 24), m_visor, _head, VISOR_C, "Visor"))
 	_build_headphones(m_cup, m_dark, m_body)
 
 	var z_of := func(x: float, y: float) -> float:

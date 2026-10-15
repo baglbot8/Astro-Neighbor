@@ -24,6 +24,9 @@ shader_type spatial;
 // constant in this file. THE IRON RULE STILL HOLDS: if it needs a gain to pass, it has failed.
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 #include "res://src/shaders/cam_fade.gdshaderinc"
+// YARNLITE: an embroidered star stitch on a felt halo when the astro_yarn global is set
+// (src/style/yarn/yarn_lite.gdshaderinc). Plain game below otherwise, line for line.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform vec4 tint : source_color = vec4(1.0, 0.95, 0.6, 1.0);
 uniform float intensity : hint_range(0.0, 10.0) = 2.0;
@@ -62,6 +65,24 @@ void fragment() {
 		float ay = abs(p.y);
 		star = (exp(-ax * 9.0) * exp(-ay * 2.2) + exp(-ay * 9.0) * exp(-ax * 2.2)) * smoothstep(1.0, 0.2, d);
 		star *= points;
+	}
+	if (astro_yarn > 0.5) {
+		// YARNLITE (1 read). The soft glow becomes a felt halo with the same profile; the hard core
+		// and the four rays become ONE embroidered star stitch. Its gain is the exact ratio of the
+		// plain core + rays' mean over the quad to the star's (0.2356 core^2 is the smoothstep core's
+		// mean, 0.0697 the rays'), floored so its brightest stitch is at least the plain core's 1.0:
+		// the sprite keeps its brightness and its peak, so it stays as easy to spot.
+		glow = yl_felt(p, d, softness);
+		float rs = mix(max(core * 1.25, 0.4), 0.8, clamp(points, 0.0, 1.0));
+		float ang = phase * 0.8;
+		vec2 sp = mat2(vec2(cos(ang), sin(ang)), vec2(-sin(ang), cos(ang))) * p / rs;
+		float gain = max((0.2356 * core * core + 0.0697 * points) / (YL_STAR_MEAN * rs * rs), 0.87);
+		// A star stitch only reads once the sprite is ~16-32 px across; below that it was a bigger,
+		// whiter blob than the plain core (fireflies at the gameplay camera), so a small sprite keeps
+		// the plain core and rays and only its halo turns to felt (whose fibres fade out too).
+		float sk = 1.0 - smoothstep(0.06, 0.12, fwidth(d));
+		c = mix(c, yl_star_stitch(sp) * gain, sk);
+		star *= 1.0 - sk;
 	}
 	float blink = 1.0 - blink_amount * 0.5 * (1.0 + sin(TIME * blink_speed + phase * 6.2831853));
 	float a = (glow * 0.6 + c + star) * blink * pcolor.a * fade;

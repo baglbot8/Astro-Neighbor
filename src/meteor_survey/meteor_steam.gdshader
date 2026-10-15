@@ -9,6 +9,11 @@ shader_type spatial;
 //            plumes still add on top of it.
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on a steam mote is a wool pom-pom (as the jet puffs
+// are: yl_pompom, ALU only); the horizon haze stays a soft haze. With the global at 0 this shader is exactly
+// what it was.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+
 uniform int mode = 0;
 uniform vec3 steam : source_color = vec3(0.70, 0.62, 0.64);
 uniform float amount = 0.5;
@@ -27,6 +32,11 @@ void fragment() {
 		float r = length(UV - vec2(0.5)) * 2.0;
 		ALBEDO = vec3(0.96, 0.95, 0.97);
 		ALPHA = COLOR.a * (1.0 - smoothstep(0.25, 1.0, r));
+		if (astro_yarn > 0.5) {
+			vec2 pm = yl_pompom((UV - vec2(0.5)) * 2.0);
+			ALBEDO = vec3(0.96, 0.95, 0.97) * mix(0.86, 1.0, pm.y);
+			ALPHA = COLOR.a * pm.x * 0.85;
+		}
 	} else {
 		float elev = dot(normalize(local_dir), normalize(up_dir));
 		float a = 1.0 - smoothstep(band_low, band_high, elev);

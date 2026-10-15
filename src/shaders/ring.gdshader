@@ -5,6 +5,9 @@ render_mode cull_disabled, unshaded, depth_draw_opaque, blend_mix, fog_disabled;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 #include "res://src/shaders/planet_common.gdshaderinc"
+// YARNLITE: a crocheted band (concentric rounds of stitches) when the astro_yarn global is set
+// (src/style/yarn/yarn_lite.gdshaderinc). Plain game otherwise, line for line.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform vec3 ring_color : source_color = vec3(1.0, 0.81, 0.54);
 uniform vec3 ring_shade : source_color = vec3(0.65, 0.5, 0.55);
@@ -29,6 +32,11 @@ uniform float display_cap : hint_range(0.3, 1.0) = 0.85;
 global uniform float astro_compat;
 
 varying vec3 world_normal;
+
+// YARNLITE ring: rounds across the band, and the inner radius in band widths (28 m / (39 - 28) m,
+// planet_ring.gd's authored ring; the sky bodies' rings are close) for the stitch count per round.
+const float YL_RING_ROWS = 14.0;
+const float YL_RING_INNER = 2.55;
 
 float hash11(float p) {
 	p = fract(p * 0.1031);
@@ -55,6 +63,22 @@ void fragment() {
 	base = mix(base, vec3(1.0, 0.97, 0.9), a_ring * 0.3);
 	vec3 col = mix(pc_in(ring_shade), base, 0.55 + 0.45 * facing);
 	col = mix(col, pc_in(night_tint) * 0.85, night * 0.8);
+	if (astro_yarn > 0.5) {
+		// YARNLITE (1 read). Row q.y = the round; q.x = stitches round it. Each round's count is a
+		// whole number of 8-stitch tiles so the 0/1 seam of UV.y lands on a tile edge, and the jump in
+		// count between rounds falls in the row gap of the stitch. The mip level comes from the
+		// CONTINUOUS count, so that jump does not pull a line of the blurriest mip.
+		float circ = 6.2831853 * (YL_RING_INNER + r) * YL_RING_ROWS * (YL_H / YL_W);
+		float row = floor(r * YL_RING_ROWS);
+		float n_row = max(round(6.2831853 * (YL_RING_INNER + (row + 0.5) / YL_RING_ROWS) * YL_RING_ROWS
+			* (YL_H / YL_W) / YL_TILE), 1.0) * YL_TILE;
+		vec2 qc = vec2(UV.y * circ, r * YL_RING_ROWS);
+		float lod = log2(max(max(length(dFdx(qc)), length(dFdy(qc))) * YL_TEXELS, 1e-4)) + YL_LOD_BIAS;
+		vec4 t = yl_tap(vec2(UV.y * n_row, qc.y), lod);
+		// Occlusion, and a fixed soft light from the outer edge on the stitch relief (the ring is
+		// unshaded; the tilt averages to zero, so the band keeps its brightness at a distance).
+		col *= t.x * (1.0 + 0.22 * t.z);
+	}
 	ALBEDO = pc_out(aces_inverse(cap_display(col, display_cap), tonemap_white));
 	ALPHA = clamp(a, 0.0, 1.0);
 }

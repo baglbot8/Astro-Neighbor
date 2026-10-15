@@ -111,7 +111,7 @@ func _build() -> void:
 ## The materials this rock will ever draw, for a warm-up quad (§7). The chunk material differs from
 ## the rock's only in uniforms, but is listed so a caller can draw exactly what the break draws.
 static func warm_materials() -> Array[Material]:
-	return [PlanetPropMeshes.rock_material(), _make_warm_material(), _make_core_material()]
+	return [PlanetPropMeshes.far_rock_material(), _make_warm_material(), _make_core_material()]
 
 
 ## Hangs the rock over the Commons. `crowd_centre` is a world point; `axis` is the meeting axis (a
@@ -173,7 +173,7 @@ func break_at(t: float) -> void:
 	if t < 0.0:
 		_break_t = -1.0
 		_write_positions(_rest_pos)
-		_rock.material_override = PlanetPropMeshes.rock_material()
+		_rock.material_override = PlanetPropMeshes.far_rock_material()
 		_core.visible = false
 		_broken = false
 		return
@@ -354,7 +354,7 @@ func _build_rock() -> void:
 	_rock = MeshInstance3D.new()
 	_rock.name = "Rock"
 	_rock.mesh = _mesh
-	_rock.material_override = PlanetPropMeshes.rock_material()
+	_rock.material_override = PlanetPropMeshes.far_rock_material()
 	_rock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# Positions change in place, so the mesh's own AABB goes stale: a fixed box that holds any pose.
 	var b := RADIUS * 1.6
@@ -421,7 +421,8 @@ func _build_fill() -> void:
 
 
 static func _make_warm_material() -> ShaderMaterial:
-	var m := PlanetPropMeshes.rock_material().duplicate() as ShaderMaterial
+	# CROCHET: the far-rock duplicate (chunky stitches that survive 130 m), same Shader as rock_material().
+	var m := PlanetPropMeshes.far_rock_material().duplicate() as ShaderMaterial
 	m.set_shader_parameter("emission_color", WARM)
 	m.set_shader_parameter("emission_strength", 0.0)
 	m.set_shader_parameter("emission_day_scale", 1.0)

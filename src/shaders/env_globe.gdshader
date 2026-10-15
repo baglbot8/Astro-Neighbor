@@ -22,6 +22,8 @@ render_mode unshaded, cull_back, depth_draw_opaque, shadows_disabled, fog_disabl
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 #include "res://src/shaders/planet_common.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 /// 0 meadow (green + seas), 1 violet (glowing rivers), 2 chrome (plate grid + seams), 3 plaza,
 /// 4 flats (pale salt rings round dark pools), 5 chalk (quantised contour terraces),
@@ -235,6 +237,14 @@ void fragment() {
 
 	// ---- analytic sun lighting: a soft toon terminator with a readable night side --------------
 	vec3 n_w = normalize(world_normal);
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a crocheted ball, 18 stitches round its equator (1-3 reads; usually a far mip).
+		vec3 yd = normalize(obj_dir);
+		vec3 yp = yd * (18.0 * YL_W / 6.2831853);
+		YlObj yo = yl_object(yp, yd, yl_obj_lod(yp));
+		col *= yo.ao;
+		n_w = normalize(n_w * yo.nz + mat3(MODEL_MATRIX) * yo.tilt / max(length(MODEL_MATRIX[0].xyz), 1e-5));
+	}
 	float ndl = dot(n_w, normalize(sun_dir));
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl);
 	vec3 shadow_col = col * mix(vec3(1.0), pc_in(shade_tint), shade_strength);

@@ -7,6 +7,13 @@ shader_type spatial;
 // downhill, so a flow reads as moving liquid, not a painted stick.
 render_mode unshaded, cull_disabled, shadows_disabled;
 
+// CROCHET (2026-10-15, builder C): with the astro_yarn global on the flow is a ribbon of orange / red yarn that
+// keeps its glow (it is unshaded: the stitch relief is a fixed lamp on the stitch normal, slope term only). One
+// stitch read. With the global at 0 this shader is exactly what it was.
+#include "res://src/shaders/planet_common.gdshaderinc"
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+global uniform float astro_compat;
+
 uniform vec3 core : source_color = vec3(1.0, 0.72, 0.28);
 uniform vec3 hot : source_color = vec3(1.0, 0.36, 0.14);
 uniform vec3 edge : source_color = vec3(0.45, 0.07, 0.06);
@@ -38,5 +45,13 @@ void fragment() {
 	float plates = smoothstep(0.62 - 0.22 * (1.0 - heat), 0.78 - 0.22 * (1.0 - heat), n);
 	col = mix(col, crust, plates * 0.8);
 	col = mix(col, crust, smoothstep(0.8, 1.0, across));
+	if (astro_yarn > 0.5) {
+		// rows run across the ribbon (about 7 stitches wide), advancing down the flow
+		vec2 q = vec2(UV.x * 7.0, UV.y / 0.17);
+		float fq = max(length(dFdx(q)), length(dFdy(q)));
+		vec4 t = yl_tap(q, log2(max(fq * YL_TEXELS, 1e-4)) + YL_LOD_BIAS);
+		float relief = 1.0 + 0.55 * dot(vec2(t.y, t.z), vec2(-0.6, 0.8));
+		col = pc_out(pc_in(col) * mix(1.0, t.x, 0.75) * clamp(relief, 0.6, 1.4) * mix(1.0, 1.0 + 0.5 * (1.0 - t.x), channel));
+	}
 	ALBEDO = col;
 }

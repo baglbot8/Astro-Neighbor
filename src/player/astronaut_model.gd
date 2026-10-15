@@ -464,7 +464,7 @@ var _puffs: JetPuffs
 
 static var _star_tex: ImageTexture
 ## The sparkles' draw material, ONE for every astronaut model in the process (`_sparkle_material`).
-static var _sparkle_mat: StandardMaterial3D
+static var _sparkle_mat: ShaderMaterial
 
 
 func _init() -> void:
@@ -1807,7 +1807,7 @@ func _make_sparkles() -> CPUParticles3D:
 	return gp
 
 
-static func _sparkle_material() -> StandardMaterial3D:
+static func _sparkle_material() -> ShaderMaterial:
 	if _sparkle_mat != null:
 		return _sparkle_mat
 	var mat := MaterialLib.flat_unlit(Color.WHITE, true).duplicate() as StandardMaterial3D
@@ -1816,8 +1816,9 @@ static func _sparkle_material() -> StandardMaterial3D:
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_texture = _get_star_texture()
 	mat.billboard_keep_scale = true
-	_sparkle_mat = mat
-	return mat
+	# The same sparkle as a YarnLite sprite: identical with crochet off, an embroidered star with it on.
+	_sparkle_mat = YarnLite.sprite_material(mat, YarnLite.Sprite.STAR)
+	return _sparkle_mat
 
 
 ## Small 4-point sparkle texture generated in code (shared).

@@ -24,6 +24,9 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 #include "res://src/shaders/cam_fade.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 
 // Ramp stops, throat -> tip.
 uniform vec4 core_color : source_color = vec4(0.78, 0.90, 1.00, 1.0);
@@ -93,6 +96,16 @@ void fragment() {
 	c = mix(c, edge_color.rgb, rim * edge_strength);
 	float gain = mix(gain_tip, gain_hot, 1.0 - t) * mix(1.0 - face_gain, 1.0, face) * intensity;
 	vec3 em = c * gain;
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a tassel of glowing yarn ends - 16 plied strands round the plume, each cut to
+		// its own length at the tip. Same ramp, same gain: the shading averages ~1, so it keeps
+		// its glow (ALU only).
+		vec2 ts = yd_tassel(fract(UV.x), axial, 16.0);
+		if (ts.x > 0.5) {
+			discard;
+		}
+		em *= ts.y;
+	}
 	float m = max(max(em.r, em.g), em.b);
 	if (m > emission_cap) {
 		em *= emission_cap / m;

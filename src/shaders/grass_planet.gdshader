@@ -11,6 +11,8 @@ shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
+// YARNLITE crocheted blanket, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 // --- R2.9 FREQUENCY BANDS -------------------------------------------------------------------------
 // The gameplay camera sits 6.5 m back at 28 deg, so its eye is ~3.0 m above a 13-26 m planet and the
@@ -188,9 +190,12 @@ void fragment() {
 	// 0.40 m triangle grid beats against the pixel grid past ~8 m and paints concentric moire rings.
 	vec2 uv_m = pc_cube_uv(dir, planet_radius);
 	vec2 uv = uv_m / cell_size;
-	float lod = pc_detail_lod(uv);
+	bool yarn = astro_yarn > 0.5;
+	// YARNLITE: the painted triangles give way to the blanket squares (lod 1 = their average colour)
+	// and are not even evaluated.
+	float lod = yarn ? 1.0 : pc_detail_lod(uv);
 	float fine = 1.0 - lod;
-	vec2 tri = pc_tri_pattern(uv, tri_radius, tri_density);
+	vec2 tri = yarn ? vec2(0.0) : pc_tri_pattern(uv, tri_radius, tri_density);
 	vec3 tri_col = mix(pc_in(color_b.rgb), pc_in(color_c.rgb), mix(step(0.62, tri.y), 0.38, lod));
 	vec3 grass = mix(pc_in(color_a.rgb), tri_col, mix(tri.x, pc_tri_avg(tri_radius, tri_density), lod));
 	float patch = v_macro.x;
@@ -292,35 +297,50 @@ void fragment() {
 	// gated by pc_band_lod, so a band is faded to nothing BEFORE its wavelength approaches a pixel —
 	// which is the whole reason the ground's earlier contour-ring moire happened.
 	float mineral = clamp(max(max(sand_t, path_t), bank_t) + v_color.b * 0.55, 0.0, 1.0);
-	float soft = 1.0 - mineral;
-	float lod_c = pc_band_lod(uv_m, SD_CLUMP_HZ) * soft;
-	float lod_t = pc_band_lod(uv_m, SD_TUFT_HZ) * soft;
-	float lod_rc = pc_band_lod(uv_m, SD_ROCKC_HZ) * mineral;
-	float lod_rf = pc_band_lod(uv_m, SD_ROCKF_HZ) * mineral;
-	SdSurface sd_clump = sd_foliage(wp, dir, lod_c, detail_grass, SD_CLUMP_K);
-	SdSurface sd_tuft = sd_foliage(wp, dir, lod_t, detail_grass * 0.85, SD_TUFT_K);
-	SdSurface sd_rc = sd_none();
-	SdSurface sd_rf = sd_none();
-	if (mineral > 0.004) {
-		sd_rc = sd_rock(wp, dir, lod_rc, detail_rock, SD_ROCKC_K);
-		sd_rf = sd_rock(wp, dir, lod_rf, detail_rock * 0.85, SD_ROCKF_K);
+	if (!yarn) {
+		float soft = 1.0 - mineral;
+		float lod_c = pc_band_lod(uv_m, SD_CLUMP_HZ) * soft;
+		float lod_t = pc_band_lod(uv_m, SD_TUFT_HZ) * soft;
+		float lod_rc = pc_band_lod(uv_m, SD_ROCKC_HZ) * mineral;
+		float lod_rf = pc_band_lod(uv_m, SD_ROCKF_HZ) * mineral;
+		SdSurface sd_clump = sd_foliage(wp, dir, lod_c, detail_grass, SD_CLUMP_K);
+		SdSurface sd_tuft = sd_foliage(wp, dir, lod_t, detail_grass * 0.85, SD_TUFT_K);
+		SdSurface sd_rc = sd_none();
+		SdSurface sd_rf = sd_none();
+		if (mineral > 0.004) {
+			sd_rc = sd_rock(wp, dir, lod_rc, detail_rock, SD_ROCKC_K);
+			sd_rf = sd_rock(wp, dir, lod_rf, detail_rock * 0.85, SD_ROCKF_K);
+		}
+		// Divided by each band's own mean (pc_sd_mean_*): sd_fbm is not normalised, so an undivided band
+		// darkens the whole meadow instead of texturing it — that alone moved the ground's value mean out
+		// of the R2.6 gate. See the note in planet_common.gdshaderinc.
+		vec3 tint_c = sd_clump.tint / pc_sd_mean_foliage(detail_grass * lod_c);
+		vec3 tint_t = sd_tuft.tint / pc_sd_mean_foliage(detail_grass * 0.85 * lod_t);
+		vec3 tint_rc = sd_rc.tint / pc_sd_mean_rock(detail_rock * lod_rc);
+		vec3 tint_rf = sd_rf.tint / pc_sd_mean_rock(detail_rock * 0.85 * lod_rf);
+		col *= tint_c * tint_t * tint_rc * tint_rf * detail_gain;
+		// The bump is driven mostly by the COARSE bands. Slope scales with frequency, so a normal built
+		// from the finest band would tilt by tens of degrees for the same amplitude and read as
+		// sandpaper; the fine bands earn their keep in the albedo instead.
+		float detail_h = (tint_c.r - 1.0) + (tint_t.r - 1.0) * 0.22
+			+ (tint_rc.r - 1.0) * 0.9 + (tint_rf.r - 1.0) * 0.25;
+		v_flat_nrm = NORMAL;
+		vec3 sgrad = pc_surface_grad(wp, dir, detail_h);
+		NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * detail_bump);
+	} else {
+		// YARNLITE blanket: 1 texture read. Each square takes one of the game's own three grass tones,
+		// divided by their mean so the blanket as a whole keeps the meadow's colour.
+		v_flat_nrm = NORMAL;
+		YlGround yg = yl_ground(dir, uv_m, planet_radius, wp);
+		vec3 a_lin = max(pc_in(color_a.rgb), vec3(1e-4));
+		vec3 tb = pc_in(color_b.rgb) / a_lin;
+		vec3 tc = pc_in(color_c.rgb) / a_lin;
+		vec3 tone = yg.tone < 0.5 ? tb : (yg.tone < 1.5 ? vec3(1.0) : tc);
+		tone /= (tb + vec3(1.0) + tc) / 3.0;
+		col *= mix(vec3(1.0), tone, (1.0 - mineral) * yg.tone_amt);
+		col *= yg.ao * (1.0 + (yg.fibre - 0.5) * 0.10);
+		NORMAL = normalize(NORMAL * yg.nz + (VIEW_MATRIX * vec4(yg.tilt_w, 0.0)).xyz);
 	}
-	// Divided by each band's own mean (pc_sd_mean_*): sd_fbm is not normalised, so an undivided band
-	// darkens the whole meadow instead of texturing it — that alone moved the ground's value mean out
-	// of the R2.6 gate. See the note in planet_common.gdshaderinc.
-	vec3 tint_c = sd_clump.tint / pc_sd_mean_foliage(detail_grass * lod_c);
-	vec3 tint_t = sd_tuft.tint / pc_sd_mean_foliage(detail_grass * 0.85 * lod_t);
-	vec3 tint_rc = sd_rc.tint / pc_sd_mean_rock(detail_rock * lod_rc);
-	vec3 tint_rf = sd_rf.tint / pc_sd_mean_rock(detail_rock * 0.85 * lod_rf);
-	col *= tint_c * tint_t * tint_rc * tint_rf * detail_gain;
-	// The bump is driven mostly by the COARSE bands. Slope scales with frequency, so a normal built
-	// from the finest band would tilt by tens of degrees for the same amplitude and read as
-	// sandpaper; the fine bands earn their keep in the albedo instead.
-	float detail_h = (tint_c.r - 1.0) + (tint_t.r - 1.0) * 0.22
-		+ (tint_rc.r - 1.0) * 0.9 + (tint_rf.r - 1.0) * 0.25;
-	v_flat_nrm = NORMAL;
-	vec3 sgrad = pc_surface_grad(wp, dir, detail_h);
-	NORMAL = normalize(NORMAL - (VIEW_MATRIX * vec4(sgrad, 0.0)).xyz * detail_bump);
 
 	// --- limb shading: distant / edge-on ground reads darker and cooler --------------------------
 	// Driven by the GEOMETRIC radial direction against the camera, never by the interpolated NORMAL.
@@ -352,7 +372,8 @@ void light() {
 	vec3 diffuse = pc_toon_diffuse(ALBEDO, ndl, ATTENUATION, ramp_softness, shade_strength, pc_in(shade_tint.rgb), shade_floor, LIGHT_IS_DIRECTIONAL, lit);
 	// R2.9: carry the surface detail's slope into the saturated part of the toon ramp (see the
 	// `detail_light` uniform). Clamped hard on both sides so it can never blow out or punch a hole.
-	diffuse *= clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.80, 1.22);
+	diffuse *= astro_yarn > 0.5 ? yl_relief_light(NORMAL, v_flat_nrm, LIGHT)
+		: clamp(1.0 + (ndl - dot(v_flat_nrm, LIGHT)) * detail_light, 0.80, 1.22);
 	vec3 lit_rgb = pc_pastel(diffuse * LIGHT_COLOR, PC_LIGHT_S_MAX, 0.0) * mix(1.0, v_color.a, ao_direct) / PI;
 	DIFFUSE_LIGHT += lit_rgb;
 	DIFFUSE_LIGHT += pc_shadow_fill(dot(NORMAL, LIGHT), ATTENUATION, ramp_softness, pc_in(shadow_fill_color.rgb), shadow_fill) * LIGHT_COLOR / PI;

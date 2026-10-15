@@ -40,6 +40,9 @@ static func spot_dc(radius: float) -> float:
 	return 1.0 - exp(-(0.74343 * r3 + 0.52963 * r3 * r - 0.33228 * r3 * r * r))
 
 static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
+	# YARNLITE heat test: the first toon material bakes the crochet stitch textures and applies
+	# YarnLite.DEFAULT_ON (src/style/yarn/yarn_lite.gd). A no-op after the first call.
+	YarnLite.ensure()
 	var key := "toon|%s|%s" % [color.to_html(), str(opts)]
 	if _cache.has(key):
 		return _cache[key]
@@ -98,6 +101,13 @@ static func toon(color: Color, opts: Dictionary = {}) -> ShaderMaterial:
 		m.set_shader_parameter("surface_scale_amount", opts.get("surface_scales", 1.0))
 		m.set_shader_parameter("surface_spot_radius", spot_r)
 		m.set_shader_parameter("surface_spot_dc", opts.get("surface_spot_dc", spot_dc(spot_r)))
+	# Crochet look (toon_soft APPLIQUE): {"yarn_applique": 0..1, "yarn_scale": stitch size multiplier}.
+	if opts.has("yarn_applique"):
+		m.set_shader_parameter("yarn_applique", opts["yarn_applique"])
+	if opts.has("yarn_scale"):
+		m.set_shader_parameter("yarn_scale", opts["yarn_scale"])
+	if opts.has("yarn_keep_spec"):
+		m.set_shader_parameter("yarn_keep_spec", opts["yarn_keep_spec"])
 	if opts.has("texture"):
 		m.set_shader_parameter("albedo_texture", opts["texture"])
 		m.set_shader_parameter("use_texture", true)

@@ -76,6 +76,8 @@ shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_lambert, specular_schlick_ggx;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/cam_fade.gdshaderinc"
+// YARNLITE crocheted water, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 global uniform float astro_compat;
 
 uniform vec4 shallow_color : source_color = vec4(0.31, 0.76, 0.97, 1.0);
@@ -187,6 +189,13 @@ void fragment() {
 		alpha = clamp(alpha + 0.05, 0.0, 1.0);
 	}
 
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a blue crocheted panel, the blanket stitch in the water's own colour (1 read).
+		float wr = length(wp);
+		YlGround yg = yl_ground(dir, pc_cube_uv(dir, wr), wr, wp);
+		col *= yg.ao;
+		alpha = 1.0;
+	}
 	ALBEDO = pc_out(col);
 	ALPHA = alpha;
 	ROUGHNESS = 0.08;
@@ -203,5 +212,5 @@ void light() {
 	float ndh = max(dot(NORMAL, hv), 0.0);
 	float spec = smoothstep(0.3, 0.55, pow(ndh, 220.0)) * 1.4 * lit;
 	spec += smoothstep(0.5, 0.7, pow(ndh, 24.0)) * 0.12 * lit;
-	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI * (astro_yarn > 0.5 ? 0.0 : 1.0);
 }

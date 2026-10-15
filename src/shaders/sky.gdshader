@@ -24,6 +24,8 @@ render_mode use_debanding;
 
 #include "res://src/shaders/aces_inverse.gdshaderinc"
 #include "res://src/shaders/planet_common.gdshaderinc"
+// YARNLITE knitted backdrop, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 // ---- local frame & bodies -------------------------------------------------------------------
 uniform vec3 sky_up = vec3(0.0, 1.0, 0.0);
@@ -376,7 +378,8 @@ void sky() {
 		// scatter them out) and hidden below the ground silhouette.
 		float star_vis = mix(mix(star_day, 1.0, night), 1.0, space_blend);
 		star_vis *= (1.0 - clamp(haze * 1.15, 0.0, 1.0)) * (1.0 - cov) * above_ground;
-		if (star_vis > 0.002) {
+		// YARNLITE: the four point-star layers are skipped; embroidered stars replace them below.
+		if (star_vis > 0.002 && astro_yarn < 0.5) {
 			float t = TIME;
 			float dense = mix(0.955, 0.872, star_density);
 			vec3 stars = star_layer(d, 54.0, dense, 0.120, 1.00, t);
@@ -400,6 +403,19 @@ void sky() {
 		float disc = 1.0 - smoothstep(sun_disc_size * 0.82, sun_disc_size, ang);
 		float halo = pow(max(sc, 0.0), 620.0) * 0.75 + pow(max(sc, 0.0), 90.0) * 0.16;
 		col += (disc * 3.4 + halo * (1.0 - cov * 0.6)) * pc_in(sun_color) * sun_vis;
+		if (astro_yarn > 0.5) {
+			// YARNLITE: knit (1 read) and one embroidered star candidate (1 read).
+			YlSky ys = yl_sky(d);
+			col *= ys.ao;
+			vec3 st = mix(vec3(0.80, 0.88, 1.0), vec3(1.0, 0.90, 0.76), ys.star_h) * 0.9 * ys.star_v;
+			// Day/night: the plain stars run at star_day by day but are pin-points, so by day they all
+			// but vanish; an embroidered star at the same 0.55 weight was a big cream asterisk at noon.
+			// By day only a third of the stitches show (picked by each star's own random, so the same
+			// ones), at under half strength; the rest fade in one by one through dusk.
+			float yl_dn = mix(night, 1.0, space_blend);
+			float yl_keep = 1.0 - smoothstep(-0.06, 0.0, ys.star_h - mix(0.34, 1.07, yl_dn));
+			col = mix(col, st, ys.star * clamp(star_vis, 0.0, 1.0) * mix(0.45, 1.0, yl_dn) * yl_keep);
+		}
 	}
 
 	// The write transfer, once, on the way out — and NOT on the cubemap pass. That branch feeds the

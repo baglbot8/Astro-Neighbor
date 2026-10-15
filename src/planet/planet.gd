@@ -93,8 +93,12 @@ const VALLEY_AO := 0.22
 const AO_MIN := 0.24
 
 const GRASS_SHADER := preload("res://src/shaders/grass_planet.gdshader")
-const PLAZA_SHADER := preload("res://src/shaders/plaza_tiles.gdshader")
-const METAL_SHADER := preload("res://src/shaders/metal_plates.gdshader")
+# CROCHET (2026-10-15): the plaza and Bolt's deck load builder B's crochet copies (src/planet/yarn/), and
+# Vela's frost and Grig's chalk load a copy of grass_planet with their own yarn (mohair / chunky). With
+# the astro_yarn global at 0 each copy runs its original's code unchanged.
+const PLAZA_SHADER := preload("res://src/planet/yarn/plaza_tiles_yarn.gdshader")
+const METAL_SHADER := preload("res://src/planet/yarn/metal_plates_yarn.gdshader")
+const GRASS_YARN_SHADER := preload("res://src/planet/yarn/grass_yarn_worlds.gdshader")
 const WATER_SHADER := preload("res://src/shaders/water.gdshader")
 
 @export var data: PlanetData
@@ -911,7 +915,9 @@ func _make_ground_material() -> ShaderMaterial:
 			# for a new biome: the base colours, the path arcs, `planet_radius` and `water_radius` are
 			# all set here, so a sibling arm would render the world on GRASS_SHADER's defaults —
 			# #5cb45f meadow green with the sand band and the limb term sized for a 16 m planet.
-			m.shader = GRASS_SHADER
+			# CROCHET: frost and chalk run builder B's copy of the grass shader, which adds their own yarn
+			# (identical to GRASS_SHADER with crochet off). Every other grass world keeps GRASS_SHADER.
+			m.shader = GRASS_YARN_SHADER if data.biome in ["frost", "chalk"] else GRASS_SHADER
 			m.set_shader_parameter("color_a", data.ground_color_a)
 			m.set_shader_parameter("color_b", data.ground_color_b)
 			# Violet needs luma RANGE more than it needs brightness, so its light triangles reach
@@ -1041,6 +1047,8 @@ func _make_ground_material() -> ShaderMaterial:
 				# Any value above 0.12 restores it; 0.30 matches the "frost" arm below, where this
 				# trap was originally found and written up.
 				m.set_shader_parameter("sand_band", 0.30)
+				# CROCHET: Grig's chalk is a CHUNKY cream yarn - stitches and squares 1.8x the blanket's.
+				m.set_shader_parameter("yarn_scale", 0.55)
 				# A raking dapple is what turns flat chalk into a lit staircase — every riser picks up
 				# a shadow line. sun_patch_lo is low so the lit patches are narrow and bright.
 				m.set_shader_parameter("sun_patch", 2.10)
@@ -1087,6 +1095,9 @@ func _make_ground_material() -> ShaderMaterial:
 				#    ground_color_b because sky_bodies / space_globe sample it for the orbital view, which
 				#    is the only place that colour is ever seen.
 				m.set_shader_parameter("tri_density", 0.0)
+				# CROCHET: Vela's frost is a fluffy pale MOHAIR blanket.
+				m.set_shader_parameter("yarn_fluff", 1.0)
+				m.set_shader_parameter("yarn_scale", 0.85)
 				# 2. NO BEACH — AND `sand_band` MUST NOT BE 0 TO SAY SO. This one is a trap and it cost four
 				#    tuning passes to find. On a dry world `_make_ground_material` sets `wr = radius - 50`,
 				#    so the shader's `wl` is -50 and its sand test is

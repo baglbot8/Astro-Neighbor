@@ -17,6 +17,8 @@
 // Accent emission is boosted on the night side, which is where a planet's lights should show.
 shader_type spatial;
 render_mode cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform int mode : hint_range(0, 6) = 0;
 uniform vec4 land_a : source_color = vec4(0.30, 0.55, 0.26, 1.0);
@@ -43,6 +45,11 @@ uniform vec3 sun_dir = vec3(0.0, 0.0, 1.0);
 
 varying vec3 obj_dir;
 varying vec3 world_normal;
+// YARNLITE: the unperturbed view normal, fragment -> light only (not interpolated).
+varying vec3 v_flat_n;
+// YARNLITE: stitches round the equator. A map globe is seen 60-300 px across, bigger than a sky
+// globe (env_globe uses 18), so it gets more rounds; a whole number keeps the round's seam clean.
+const float YD_GLOBE_ROUND = 26.0;
 
 float hash13(vec3 p3) {
 	p3 = fract(p3 * 0.1031);
@@ -194,6 +201,18 @@ void fragment() {
 		col = mix(col, land_b.rgb, smoothstep(0.64, 0.84, n) * 0.65);
 	}
 
+	v_flat_n = NORMAL;
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a crocheted ball worked in rounds round its own axis (1-3 reads, as env_globe).
+		// The pattern above is the yarn's dye; the glowing seams / rivers / lights (`em`) stay lit.
+		vec3 yd = normalize(obj_dir);
+		vec3 yp = yd * (YD_GLOBE_ROUND * YL_W / 6.2831853);
+		YlObj yo = yl_object(yp, yd, yl_obj_lod(yp));
+		col *= yo.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), yo.fibre));
+		vec3 tw = mat3(MODEL_MATRIX) * yo.tilt / max(length(MODEL_MATRIX[0].xyz), 1e-5);
+		NORMAL = normalize(NORMAL * yo.nz + (VIEW_MATRIX * vec4(tw, 0.0)).xyz);
+		rough = 1.0;
+	}
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	METALLIC = 0.0;
@@ -207,7 +226,9 @@ void light() {
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl) * ATTENUATION;
 	vec3 shadow_col = ALBEDO * mix(vec3(1.0), shade_tint.rgb, shade_strength);
 	vec3 diffuse = mix(shadow_col * shade_floor, ALBEDO, lit);
-	DIFFUSE_LIGHT += diffuse * LIGHT_COLOR / PI;
+	// YARNLITE: the stitch relief's slope, centred on 1 (the ramp is flat on the lit side).
+	float relief = astro_yarn > 0.5 ? yl_relief_light(NORMAL, v_flat_n, LIGHT) : 1.0;
+	DIFFUSE_LIGHT += diffuse * relief * LIGHT_COLOR / PI;
 
 	// Thin atmosphere rim on the lit limb.
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);

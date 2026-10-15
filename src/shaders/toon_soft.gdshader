@@ -14,6 +14,21 @@ global uniform float astro_night;
 
 #include "res://src/shaders/surface_detail.gdshaderinc"
 #include "res://src/shaders/cam_fade.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+// true on face features and tiny parts: YarnLite gives those meshes a copy of their material with
+// this set, so they stay smooth like safety eyes. A per-MATERIAL uniform on purpose: an instance
+// uniform takes a global-buffer slot for EVERY instance of the shader and overflowed it on the hub.
+uniform bool yarn_skip = false;
+// APPLIQUE (crochet round 2): a piece crocheted separately and sewn on (Zorp's tentacle moustache,
+// ears or arms in the body's own colour). It gets a darker groove round its outline instead of the
+// light fuzz rim, so it separates from the part behind it, and its own stitch size (yarn_scale < 1 is
+// finer yarn, so its rows run at a different pitch from the head's). 0 / 1 = an ordinary part.
+uniform float yarn_applique : hint_range(0.0, 1.0) = 0.0;
+uniform float yarn_scale : hint_range(0.25, 4.0) = 1.0;
+// How much of the specular highlight a crocheted part keeps (0 = matte yarn, the default). For a part
+// whose gloss IS its identity (Gloop's jelly: the highlight is the slime tell), like a glazed yarn.
+uniform float yarn_keep_spec : hint_range(0.0, 1.0) = 0.0;
 
 // --- WEB PARITY: THE COMPATIBILITY sRGB HELPERS, INLINED -----------------------------------------
 // THE CANONICAL COPY AND THE FULL WRITE-UP LIVE AT THE TOP OF src/shaders/planet_common.gdshaderinc:
@@ -207,7 +222,12 @@ void fragment() {
 	// the detail bump below. Same thing now.
 	v_flat_nrm = NORMAL;
 	v_sheen = 0.0;
-	if (surface_kind > 0) {
+	// Crochet look: the detail is skipped (the yarn replaces it), EXCEPT a skin's spots, which are the
+	// character's markings (Zorp's pale blotches): those stay as colourwork in the yarn - their tint
+	// only, no bump, sheen or roughness (round-2 critic: without them the same-violet moustache merged
+	// into a now uniform head).
+	// An appliqué piece takes no spots: a plain strand reads apart from the spotted part behind it.
+	if (surface_kind > 0 && (astro_yarn < 0.5 || (surface_kind == 7 && yarn_applique < 0.5))) {
 		float lod = sd_lod(VERTEX, surface_lod_near, surface_lod_far);
 		vec3 wpos = v_objpos;
 		SdSurface sd = sd_none();
@@ -223,6 +243,11 @@ void fragment() {
 		// 5, and anything unrecognised, lands here on FOLIAGE - not on "no detail". A new kind
 		// without its own branch above renders as grass. Add the branch.
 		else { sd = sd_foliage(wpos, onrm, lod, surface_strength, surface_scale); }
+		if (astro_yarn > 0.5) {
+			// The plain look lifts the spots through light() (`v_detail * 0.6`, clamped 0.80-1.22);
+			// here the same lift goes into the colour, so they are dyed into the yarn.
+			ALBEDO *= sd.tint * clamp(1.0 + sd.height * 0.6, 0.80, 1.22);
+		} else {
 		// The macro band uses its own generous fade: it is the term that must survive the distance.
 		v_detail = sd.height;
 		ALBEDO *= sd.tint * sd_macro(wpos, surface_macro_cycles, surface_macro,
@@ -230,6 +255,27 @@ void fragment() {
 		ROUGHNESS = clamp(ROUGHNESS + sd.rough, 0.0, 1.0);
 		NORMAL = normalize(NORMAL + sd.bump);
 		v_sheen = sd.aniso;
+		}
+	}
+	if (astro_yarn > 0.5 && !yarn_skip) {
+		// YARNLITE: stitches glued to the part (object space times its scale), 1-3 texture reads.
+		vec3 ys = yl_scale(MODEL_MATRIX);
+		vec3 yp = v_objpos * ys / yarn_scale;
+		YlObj yo = yl_object(yp, normalize(v_objnorm / ys), yl_obj_lod(yp));
+		float y_ndv = dot(NORMAL, VIEW);
+		// Appliqué: the fuzz rim (which lightens a silhouette) gives way to a groove that darkens the
+		// outline to 0.45 of the yarn colour where the piece turns away, the shadow of a sewn-on piece.
+		// Its stitches are also half as deep (a fine, tight yarn), so the strand reads as one smooth
+		// tube against the deeper-stitched part behind it, as the plain look's smooth tube does.
+		float y_groove = 1.0 - smoothstep(0.08, 0.75, abs(y_ndv));
+		float y_depth = 1.0 - 0.5 * yarn_applique;
+		ALBEDO *= mix(1.0, yo.ao, y_depth) * (1.0 + yl_fuzz(y_ndv, yo.fibre) * (1.0 - yarn_applique))
+			* (1.0 - 0.55 * y_groove * yarn_applique);
+		vec3 y_tilt = yo.tilt * y_depth;
+		NORMAL = normalize(NORMAL * sqrt(max(1.0 - dot(y_tilt, y_tilt), 0.0))
+			+ (VIEW_MATRIX * (MODEL_MATRIX * vec4(y_tilt / ys, 0.0))).xyz);
+		ROUGHNESS = mix(1.0, roughness, yarn_keep_spec);
+		METALLIC = 0.0;
 	}
 	vec3 em = pc_in(emission_color.rgb) * emission_strength * mix(emission_day_scale, 1.0, astro_night);
 	float peak = max(em.r, max(em.g, em.b));
@@ -254,20 +300,26 @@ void light() {
 	// This puts the detail's slope back as a multiplier centred on 1.0 and hard-clamped, so it adds
 	// no energy and cannot make a hotspot - R2.6 holds, nothing here raises specular.
 	float detail_light = 1.0;
-	if (surface_kind > 0) {
+	bool yarn_on = astro_yarn > 0.5 && !yarn_skip;
+	if (yarn_on) {
+		detail_light = yl_relief_light(NORMAL, v_flat_nrm, LIGHT);
+	} else if (surface_kind > 0) {
 		float slope = dot(normalize(NORMAL) - normalize(v_flat_nrm), LIGHT) * 2.4 + v_detail * 0.6;
 		detail_light = clamp(1.0 + slope, 0.80, 1.22);
 	}
 	DIFFUSE_LIGHT += diffuse * detail_light * LIGHT_COLOR / PI;
 
 	vec3 h = normalize(VIEW + LIGHT);
-	float ndh = max(dot(NORMAL, h), 0.0);
+	// A glazed yarn part (yarn_keep_spec) takes its highlight off the smooth normal, so it stays ONE
+	// highlight instead of breaking into specks on the stitch relief.
+	vec3 spec_n = (yarn_on && yarn_keep_spec > 0.0) ? normalize(v_flat_nrm) : NORMAL;
+	float ndh = max(dot(spec_n, h), 0.0);
 	// Widen the toon lobe by ROUGHNESS so the `rough` half of every sd_* result actually does
 	// something. Without this the toon pipeline never reads ROUGHNESS at all (only Godot's ambient
 	// sky reflection does), so a rock's roughness budget was being spent for nothing.
 	float rough_size = spec_size * mix(1.0, 0.35, clamp(ROUGHNESS, 0.0, 1.0));
 	float spec = smoothstep(0.5, 0.78, pow(ndh, rough_size)) * spec_strength * lit;
-	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI * (yarn_on ? yarn_keep_spec : 1.0);
 
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;

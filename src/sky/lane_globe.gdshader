@@ -1,5 +1,7 @@
 shader_type spatial;
 render_mode unshaded, cull_back, depth_draw_opaque, diffuse_burley;
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 // SPIKE (2026-09-21, scratch only). A WORLD YOU CAN SEE FROM THE LANE.
 //
 // The user, on the safari frames: "There's no real clear sense of direction as you're moving
@@ -89,10 +91,21 @@ void fragment() {
 
 	// ---- day and night
 	float lam = dot(nw, normalize(sun_dir));
+	float yrelief = 1.0;
+	if (astro_yarn > 0.5) {
+		// YARNLITE: a crocheted ball worked in rounds round its own axis (1-3 reads). Unshaded, so
+		// the stitch relief is lit by hand: the slope of the tilted normal toward the sun, centred
+		// on 1 and only on the lit side (the yl_relief_light idea).
+		vec3 yp = o * (34.0 * YL_W / 6.2831853);
+		YlObj yo = yl_object(yp, o, yl_obj_lod(yp));
+		vec3 tw = mat3(MODEL_MATRIX) * yo.tilt / max(length(MODEL_MATRIX[0].xyz), 1e-5);
+		ground *= yo.ao;
+		yrelief = 1.0 + clamp(dot(tw, normalize(sun_dir)) * 1.6, -0.35, 0.35) * smoothstep(-0.03, 0.2, lam);
+	}
 	// R11 (wave 3): toon light, as in the glass's world_disc - a crisp terminator and a lavender
 	// shade side instead of a photographic Lambert ramp.
 	float lit = smoothstep(-0.03, 0.09, lam);
-	vec3 col = mix(ground * vec3(0.44, 0.42, 0.62), ground * (0.82 + 0.18 * max(lam, 0.0)), lit);
+	vec3 col = mix(ground * vec3(0.44, 0.42, 0.62), ground * (0.82 + 0.18 * max(lam, 0.0)) * yrelief, lit);
 
 	// the dark side reads: a cool wash, an aurora ring, and embers where the land is
 	col += c_night * (1.0 - lit) * 0.30;

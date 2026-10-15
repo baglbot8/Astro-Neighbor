@@ -7,6 +7,8 @@ extends RefCounted
 const FOLIAGE_SHADER := preload("res://src/shaders/planet_foliage.gdshader")
 const CRYSTAL_SHADER := preload("res://src/shaders/crystal.gdshader")
 const PULSE_SHADER := preload("res://src/shaders/planet_glow_pulse.gdshader")
+const YARN_SPARKLE_SHADER := preload("res://src/planet/yarn/yarn_sparkle.gdshader")
+const YARN_PUFF_SHADER := preload("res://src/planet/yarn/yarn_puff.gdshader")
 
 static var _mesh_cache: Dictionary = {}
 static var _mat_cache: Dictionary = {}
@@ -33,10 +35,29 @@ static func prop_material() -> ShaderMaterial:
 ## rougher stone read with chipped edges and mottling at two scales, so a rock never looks like
 ## smooth plastic. `surface_far` is pushed out to 20 m because a boulder is a landmark you see from
 ## across the planet, not a small decoration.
+## CROCHET (2026-10-15): rock is CHUNKY yarn - toon_soft's stitches at ROCK_YARN_SCALE times the
+## props' size (MaterialLib "yarn_scale", read only when the astro_yarn global is on, so crochet OFF is
+## unchanged). One cached material and one Shader for every rock, as before.
+const ROCK_YARN_SCALE := 1.8
 static func rock_material() -> ShaderMaterial:
 	return MaterialLib.toon_vertex_color({
 		"rim": 0.08, "spec": 0.04, "spec_size": 120.0, "roughness": 0.95,
-		"surface": "rock", "surface_strength": 3.2, "surface_near": 4.0, "surface_far": 22.0})
+		"surface": "rock", "surface_strength": 3.2, "surface_near": 4.0, "surface_far": 22.0,
+		"yarn_scale": ROCK_YARN_SCALE})
+
+## The same rock for something seen from very far (the finale's giant asteroid, 130 m off): a
+## duplicate of rock_material() that shares its Shader (no new compile) with stitches big enough to
+## survive the distance (a toon_soft stitch fades out once it is under ~2 px; at 130 m a pixel is
+## ~0.3 m). `yarn_scale` 26 = ~1.1 m stitches, ~55 rounds round the 20 m rock.
+const FAR_ROCK_YARN_SCALE := 26.0
+static var _far_rock: Dictionary = {}
+static func far_rock_material(yarn_scale: float = FAR_ROCK_YARN_SCALE) -> ShaderMaterial:
+	if _far_rock.has(yarn_scale):
+		return _far_rock[yarn_scale]
+	var m := rock_material().duplicate() as ShaderMaterial
+	m.set_shader_parameter("yarn_scale", yarn_scale)
+	_far_rock[yarn_scale] = m
+	return m
 
 ## Vertex-colored toon with a metallic sheen (robots, gears, pipes). R2.6: this is PAINTED metal, so
 ## it keeps only a small tight highlight; real gloss stays with the genuinely shiny things — the
@@ -114,20 +135,31 @@ static func pulse_material(emission: Color, strength: float, speed: float = 2.0,
 	return m
 
 ## Soft additive sparkle quad material for particles.
-static func sparkle_material(color: Color) -> StandardMaterial3D:
+## CROCHET (2026-10-15): a ShaderMaterial on src/planet/yarn/yarn_sparkle.gdshader - with crochet off it
+## is the old StandardMaterial3D (unshaded, additive, two-sided, billboard-particles, vertex colour,
+## soft dot) line for line; with it on each sparkle is an embroidered star stitch with a felt halo.
+static func sparkle_material(color: Color) -> Material:
 	var key := "sparkle|%s" % color.to_html()
 	if _mat_cache.has(key):
 		return _mat_cache[key]
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	m.albedo_color = color
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	m.vertex_color_use_as_albedo = true
-	m.disable_receive_shadows = true
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.albedo_texture = soft_dot_texture()
+	var m := ShaderMaterial.new()
+	m.shader = YARN_SPARKLE_SHADER
+	m.set_shader_parameter("albedo", color)
+	m.set_shader_parameter("texture_albedo", soft_dot_texture())
+	_mat_cache[key] = m
+	return m
+
+## Billboard steam / dust puff for particles. CROCHET (2026-10-15): src/planet/yarn/yarn_puff.gdshader -
+## with crochet off it is puff_material() with billboard-particles and the soft dot (what the steam
+## built by hand before); with it on each puff is a wool pom-pom.
+static func pompom_material(color: Color) -> Material:
+	var key := "pompom|%s" % color.to_html()
+	if _mat_cache.has(key):
+		return _mat_cache[key]
+	var m := ShaderMaterial.new()
+	m.shader = YARN_PUFF_SHADER
+	m.set_shader_parameter("albedo", color)
+	m.set_shader_parameter("texture_albedo", soft_dot_texture())
 	_mat_cache[key] = m
 	return m
 

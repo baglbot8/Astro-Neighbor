@@ -84,6 +84,11 @@ global uniform float astro_compat;
 #include "res://src/shaders/planet_common.gdshaderinc"
 #include "res://src/shaders/surface_detail.gdshaderinc"
 #include "res://src/shaders/cam_fade.gdshaderinc"
+// YARNLITE crochet panels, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+// ON: the fine material band is skipped (as in toon_soft), the stitches are glued to the part in object
+// space times its scale (1-3 reads), the seam band stays as the joins between crocheted panels, and the
+// light gets the yarn relief term instead of the specular lobe.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 // ------------------------------------------------------------------ band 1: fine surface detail
 // 0 none, 1 cloth, 2 metal, 3 wood, 4 rock, 5 foliage, 6 rubber - same numbering as toon_soft.
@@ -147,6 +152,8 @@ varying float v_sheen;
 /// brush axis from the normal it is handed (docs/OPEN_ISSUES.md item 20.2).
 varying vec3 v_objpos;
 varying vec3 v_objnorm;
+/// View-space normal before the yarn relief (fragment -> light only; not an interpolant).
+varying vec3 v_flat_nrm;
 
 void vertex() {
 	v_objpos = VERTEX;
@@ -162,9 +169,10 @@ void fragment() {
 
 	vec3 opos = v_objpos;
 	vec3 onrm = normalize(v_objnorm);
+	v_flat_nrm = NORMAL;
 
 	// -------------------------------------------------------------- band 1: fine material detail
-	if (surface_kind > 0) {
+	if (surface_kind > 0 && astro_yarn < 0.5) {
 		float lod = sd_lod(VERTEX, surface_lod_near, surface_lod_far);
 		vec3 p = opos * surface_scale;
 		SdSurface sd = sd_none();
@@ -231,6 +239,18 @@ void fragment() {
 		}
 	}
 
+	if (astro_yarn > 0.5) {
+		// YARNLITE: stitches glued to the part (object space times its scale), 1-3 texture reads.
+		vec3 ys = yl_scale(MODEL_MATRIX);
+		vec3 yp = v_objpos * ys;
+		YlObj yo = yl_object(yp, normalize(v_objnorm / ys), yl_obj_lod(yp));
+		ALBEDO *= yo.ao * (1.0 + yl_fuzz(dot(NORMAL, VIEW), yo.fibre));
+		v_flat_nrm = NORMAL;
+		NORMAL = normalize(NORMAL * yo.nz + (VIEW_MATRIX * (MODEL_MATRIX * vec4(yo.tilt / ys, 0.0))).xyz);
+		ROUGHNESS = 1.0;
+		METALLIC = 0.0;
+	}
+
 	// The one encode, after every band has had its say. Identity on Forward+.
 	ALBEDO = pc_out(ALBEDO);
 }
@@ -241,13 +261,14 @@ void light() {
 	vec3 shadow_col = ALBEDO * mix(vec3(1.0), pc_in(shade_tint.rgb), shade_strength);
 	float floor_level = mix(shadow_floor, shade_floor, ATTENUATION);
 	vec3 diffuse = mix(shadow_col * floor_level, ALBEDO, lit);
-	DIFFUSE_LIGHT += diffuse * LIGHT_COLOR / PI;
+	bool yarn_on = astro_yarn > 0.5;
+	DIFFUSE_LIGHT += diffuse * (yarn_on ? yl_relief_light(NORMAL, v_flat_nrm, LIGHT) : 1.0) * LIGHT_COLOR / PI;
 
 	vec3 h = normalize(VIEW + LIGHT);
 	float ndh = max(dot(NORMAL, h), 0.0);
 	float rough_size = spec_size * mix(1.0, 0.35, clamp(ROUGHNESS, 0.0, 1.0));
 	float spec = smoothstep(0.5, 0.78, pow(ndh, rough_size)) * spec_strength * lit;
-	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI;
+	SPECULAR_LIGHT += spec * LIGHT_COLOR / PI * (yarn_on ? 0.0 : 1.0);
 
 	float rim = 1.0 - max(dot(NORMAL, VIEW), 0.0);
 	rim = smoothstep(0.6, 0.9, rim) * rim_strength * lit;

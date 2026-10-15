@@ -648,7 +648,8 @@ var _core_mat: ShaderMaterial
 ## GLOW_HAPPY on the happy/greet emotes (see GLASS_WARM above).
 var _glass_mat: ShaderMaterial
 ## The soft halo round the bulb (2026-10-01); `_animate_extras` raises its alpha with the happy glow.
-var _halo_mat: StandardMaterial3D
+## A YarnLite sprite (felt halo in the crochet look); animated through its "albedo" parameter.
+var _halo_mat: ShaderMaterial
 ## Smoothed 0..1 toward `pose(P.EYE_HAPPY)`, so the bulb's glow ramps in/out over ~0.25 s instead
 ## of popping with the emote cut. See `_animate_extras`.
 var _happy_glow: float = 0.0
@@ -739,13 +740,15 @@ func _build_soft_glow() -> void:
 	var halo := MeshInstance3D.new()
 	halo.name = "Halo"
 	halo.mesh = q
-	_halo_mat = StandardMaterial3D.new()
-	_halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_halo_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	_halo_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_halo_mat.albedo_color = Color(AMBER.r, AMBER.g, AMBER.b, HALO_REST)
-	_halo_mat.albedo_texture = AlienModel.soft_dot_texture()
+	var std := StandardMaterial3D.new()
+	std.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	std.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	std.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	std.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	std.albedo_color = Color(AMBER.r, AMBER.g, AMBER.b, HALO_REST)
+	std.albedo_texture = AlienModel.soft_dot_texture()
+	# The same halo as a YarnLite sprite: identical with crochet off, a felt halo with it on.
+	_halo_mat = YarnLite.sprite_material(std, YarnLite.Sprite.FELT)
 	halo.material_override = _halo_mat
 	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	halo.position = Vector3(0.0, BULB_Y - SOCKET_Y, 0.0)
@@ -1146,7 +1149,8 @@ func _build_hoop() -> void:
 	for i in 2:
 		var sx3 := -1.0 if i == 0 else 1.0
 		var lens := _node("Lens%d" % i, _hoop, Vector3(HOOP_HALF_W * sx3, 0.0, 0.0))
-		_mi(superellipsoid(Vector3(LENS_R, LENS_R, 0.010), 2.4, 12, 7), m_glass, lens, Vector3.ZERO, "Glass")
+		# Crochet look: lens glass stays glossy plastic.
+		YarnLite.keep_glossy(_mi(superellipsoid(Vector3(LENS_R, LENS_R, 0.010), 2.4, 12, 7), m_glass, lens, Vector3.ZERO, "Glass"))
 		_mi(torus(LENS_RIM_IN, LENS_RIM_OUT, 16, 5), m_lens_rim, lens, Vector3(0.0, 0.0, 0.004), "Rim").rotation.x = PI * 0.5
 		_lens.append(lens)
 
@@ -1252,7 +1256,7 @@ func _animate_extras(delta: float) -> void:
 		var happy_glow := GLOW_HAPPY * (0.8 + 0.2 * sin(TAU * _t * 1.6))
 		_glass_mat.set_shader_parameter("emission_strength", lerpf(rest_glow, happy_glow, _happy_glow))
 	if _halo_mat != null:
-		_halo_mat.albedo_color.a = HALO_REST + HALO_HAPPY * _happy_glow
+		_halo_mat.set_shader_parameter("albedo", Color(AMBER.r, AMBER.g, AMBER.b, HALO_REST + HALO_HAPPY * _happy_glow))
 
 	# ---- the iris. `_eye_open` is the shared blink clock; here it drives a shutter instead of a
 	# vertical squash. The leaves cross the centre at full close, so the pupil (which `_apply_face` is

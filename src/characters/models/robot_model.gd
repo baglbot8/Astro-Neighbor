@@ -192,7 +192,8 @@ func _build_screen_face() -> void:
 	# the panel glows very gently, so it is a lit screen at night and still a matte face by day.
 	# 0.55 -> 0.34: at 0.55 the pale panel was the brightest thing in the frame at noon.
 	_screen_mat = lit_material(SCREEN, 0.34, Color("#e6f0ec")).duplicate() as ShaderMaterial
-	_mi(rounded_box(Vector3(0.390, 0.272, 0.125), 0.032, 20), _screen_mat, _head, Vector3(0.0, 0.010, SCREEN_Z), "Screen")
+	# Crochet look: the screen stays glossy plastic, the contrast that makes the yarn read.
+	YarnLite.keep_glossy(_mi(rounded_box(Vector3(0.390, 0.272, 0.125), 0.032, 20), _screen_mat, _head, Vector3(0.0, 0.010, SCREEN_Z), "Screen"))
 
 	_screen = _node("ScreenFace", _face, Vector3(0.0, 0.010, FACE_Z))
 	var m_ink := _toon(INK, {"spec": 0.0, "rim": 0.0, "shade": 0.08})
@@ -252,7 +253,8 @@ func _build_vent_puff(parent: Node3D) -> void:
 	s.rings = 4
 	var mat := MaterialLib.flat_unlit(Color(1, 1, 1, 0.8)).duplicate() as StandardMaterial3D
 	mat.vertex_color_use_as_albedo = true
-	s.material = mat
+	# The same puff as a YarnLite sprite: identical with crochet off, a wool pom-pom with it on.
+	s.material = YarnLite.sprite_material(mat, YarnLite.Sprite.POMPOM)
 	_vent.draw_pass_1 = s
 	_vent.position = Vector3(0.0, 0.02, 0.04)
 	parent.add_child(_vent)

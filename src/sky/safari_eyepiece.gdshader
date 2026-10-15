@@ -1,6 +1,9 @@
 shader_type canvas_item;
 render_mode blend_mix, unshaded;
 #include "res://src/sky/lane_sky.gdshaderinc"
+// YARNLITE crochet look, off unless the astro_yarn global is set (src/style/yarn/yarn_lite.gdshaderinc).
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
+#include "res://src/rocket/yarn_space.gdshaderinc"
 // SPIKE (2026-09-21, scratch only). WHAT YOU SEE THROUGH THE BRASS SPYGLASS WHILE THE SHIP MOVES.
 //
 // This is sky_eyepiece.gdshader's job done for a flight instead of for a tripod. Three differences,
@@ -1356,7 +1359,25 @@ void fragment() {
 		sky = lane_space_base(dw) + lane_space_clouds(dw);
 		// A star keeps its PIXEL size when the glass magnifies: its angular size is scaled by
 		// field_half / 28 deg, the lowered field it is drawn for - an exact inversion, no gain.
-		vec3 stars = lane_star_field(dw, t, field_half / 0.48869219);
+		vec3 stars = vec3(0.0);
+		// YARNLITE: the knit backdrop and embroidered stars of the planet sky (2 reads), keyed on the
+		// same world ray `dw`, replacing the point stars. The stitch scales with the glass exactly as
+		// the stars did (field_half / 28 deg), so a stitch keeps its pixel size when the scope comes up.
+		YlSky ysk;
+		// ROUND 2 (critic): THE SIGHTS COME FIRST. `yclean` is 0 in a calm zone round every sight on
+		// the glass (0.38 glass units, fading out by 0.70) and 1 elsewhere: there the knit flattens
+		// and no star is stitched, so the patch of sky a sight is judged against is as quiet as the
+		// plain glass's. Measured with the critic's contrast.py (local SNR, see the report).
+		float yclean = 1.0;
+		if (astro_yarn > 0.5) {
+			if (n_subj > 0) { yclean *= smoothstep(0.38, 0.70, length(p - s0_pos)); }
+			if (n_subj > 1) { yclean *= smoothstep(0.38, 0.70, length(p - s1_pos)); }
+			if (n_subj > 2) { yclean *= smoothstep(0.38, 0.70, length(p - s2_pos)); }
+			ysk = yd_sky_fp(dw, px_rad, field_half / 0.48869219, YD_GLASS_STAR_K);
+			sky *= mix(1.0, ysk.ao, 0.75 * yclean);
+		} else {
+			stars = lane_star_field(dw, t, field_half / 0.48869219);
+		}
 
 		// ---- R2: WHICH WAY IS LEVEL. The user, after flying it: "I couldn't tell where I was ...
 		// was I looking up or down sideways or backwards", and their own suggestion was "subtle
@@ -1619,9 +1640,25 @@ void fragment() {
 		worlds += world_disc(p - home_pos, home_r, home_col.rgb, home_air.rgb,
 			sun_at - home_pos, 5.1, wo1);
 		wocc = max(wocc, wo1);
+		float wo_home = wo1;
 		worlds += world_disc(p - dest_pos, dest_r, dest_col.rgb, dest_air.rgb,
 			sun_at - dest_pos, 2.3, wo1);
 		wocc = max(wocc, wo1);
+		if (astro_yarn > 0.5 && wocc > 0.0) {
+			// YARNLITE: the world in the glass as a crocheted ball worked in rounds (1 read, on the
+			// one world whose disc covers this pixel most). Stitches are
+			// fixed to the ball, so a world that grows as you close shows bigger stitches.
+			vec2 wq = p - dest_pos;
+			float wr = dest_r;
+			if (wo_home > wo1) {
+				wq = p - home_pos;
+				wr = home_r;
+			}
+			// the raised scope magnifies 4x; the ball gets twice the rounds there (and they are
+			// shallower, yd_ball), so a world filling the glass is calm knitting, not giant loops
+			worlds *= yd_ball(wq, max(wr, 0.0001), px_rad / field_half,
+				YD_BALL_ROUND * clamp(sqrt(0.48869219 / max(field_half, 0.01)), 1.0, 2.0));
+		}
 		sky = sky * (1.0 - wocc);
 		stars = stars * (1.0 - wocc);
 		stars += worlds;
@@ -1654,6 +1691,17 @@ void fragment() {
 		sight = (vec3(1.0) - exp(-sight * 1.20)) * 0.90;
 
 		vec3 col = (sky + stars) * (1.0 - clamp(occ, 0.0, 1.0)) + sight;
+		if (astro_yarn > 0.5) {
+			// YARNLITE: the embroidered star goes on LAST so it can step aside for every cue: none
+			// under a world or a sight's body (their cover), none where a sight's own light shows,
+			// none in the calm zone round a sight. Small and capped (YD_GLASS_STAR_*), so even far
+			// from a sight a star is never the brightest or biggest thing on the glass. The veil
+			// still dims it away from the level band, as it dimmed the point stars.
+			float ylit = max(sight.r, max(sight.g, sight.b));
+			float ya = ysk.star * yclean * (1.0 - clamp(occ, 0.0, 1.0)) * (1.0 - wocc)
+				* (1.0 - smoothstep(0.015, 0.08, ylit));
+			col = mix(col, yd_star_col(ysk) * YD_GLASS_STAR_GAIN * veil, ya);
+		}
 		// the opening's own shading: dark in the recess at the edge, warm when a shot is close
 		col *= mix(0.62, 1.0, smoothstep(0.0, 0.14, eg));
 		col += vec3(0.40, 0.29, 0.13) * smoothstep(0.075, 0.0, eg) * (0.16 + 0.40 * warm);

@@ -2103,3 +2103,28 @@ by what is on screen, by an agent told nothing about where the content is, befor
 believed. And a build the user has never touched is not "five rounds deep", it is unproven - the
 first real session is the measurement, and it should happen early and cheaply. The rebuild contract
 is `docs/SAFARI_FLIGHT_SPEC.md`.
+
+## 71. [2026-10-15] The crochet look: five traps that each cost a round
+
+The user asked whether the whole game could be crochet and whether it would add heat. A promo-quality crochet (8x
+supersampled stitches plus a 64-read full-screen fuzz pass, Forward+) was offline-only. The game version bakes one 128x128
+stitch texture at boot and reads it 1-3 times per pixel with `textureLod`. Measured on the Mac (M5, Compatibility, 0.75
+scale, `--ui=mobile`, 18 separate processes): ON 2.59/2.65 ms vs OFF 2.75/2.78 ms (A/A 0.01 ms, smallest detectable
+0.08 ms) — crochet is CHEAPER, because the ON branch skips the old ground noise bands, triangle pattern and star layers.
+WKWebView showed no difference within ~1.5 points; the user's iPhone felt the same heat ON and OFF.
+
+* **`RenderingServer.global_shader_parameter_get()` only works in the editor.** In a played or exported game it logs an
+  ERROR and returns the default, so the dev toggle showed "Off" while crochet was on. Keep the state in a static var.
+* **Instance uniforms overflow on the Commons.** Marking face parts with an `instance uniform` hit Godot's 4096-slot
+  global buffer ("Too many instances"). Mark them with a cached material copy instead.
+* **Compatibility multiplies in sRGB-encoded space.** An unshaded StandardMaterial3D on Compatibility (OUTPUT_IS_SRGB)
+  multiplies the encoded vertex colour by the encoded texture. A ShaderMaterial that decodes, multiplies in linear and
+  re-encodes makes dark tones darker: the cave's dark walls came out 11-26% darker with crochet OFF. Forward+ matched, so
+  only a Compatibility parity probe (plain vs replacement, vertex colour x flat texture) caught it.
+* **Canvas items sample without repeat or mipmaps.** In the safari glass (a canvas shader) the tiled stitch texture drew
+  only one tile. Wrap the UV by hand and set `texture_filter`/`texture_repeat` on the rect once.
+* **Parallel builders make every timing run noise.** With 2-3 other agents' Godot runs live, A/A noise was 1.3-2.1 ms
+  against a 0.15 ms gate. Area critics skipped timing; cost was measured once on the merged build on a quiet machine.
+* **A cue is worth more than the look.** The safari glass's embroidered stars first outshone small sights (local
+  signal-to-noise 0.66-0.85x of plain) and soft sight bodies got a hard stitched band. In the glass, stars stay dimmer than
+  sights and soft subjects stay smooth.

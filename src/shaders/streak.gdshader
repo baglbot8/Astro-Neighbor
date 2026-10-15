@@ -22,6 +22,9 @@ shader_type spatial;
 // expect the answer to be a renderer-level change to how the additive pass composites — not a
 // constant in this file. THE IRON RULE STILL HOLDS: if it needs a gain to pass, it has failed.
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+// YARNLITE: the tail becomes a running stitch of yarn when the astro_yarn global is set
+// (src/style/yarn/yarn_lite.gdshaderinc). Plain game otherwise, line for line.
+#include "res://src/style/yarn/yarn_lite.gdshaderinc"
 
 uniform vec4 head_color : source_color = vec4(1.0, 0.97, 0.85, 1.0);
 uniform vec4 tail_color : source_color = vec4(0.65, 0.85, 1.0, 1.0);
@@ -48,7 +51,17 @@ void fragment() {
 	float dy = (h - 0.5) * 1.2 * width;
 	float dd = length(vec2((fu - 0.5) * 0.5, (v - dy) * 1.5));
 	dots = smoothstep(0.32, 0.05, dd) * step(0.35, h) * (0.3 + 0.7 * u);
-	float a = (across * along * 0.8 + dots * 0.9) * fade;
+	float body = across * along * 0.8;
+	if (astro_yarn > 0.5) {
+		// YARNLITE (ALU only): the tail is a running stitch of 8 plump stitches with a twisted ply,
+		// scaled by 0.6 / YL_RUN_MEAN (0.6 = the mean of the plain `across` profile over the strand)
+		// so the tail keeps the plain tail's mean brightness. The head (last ~20%) stays the plain
+		// bright glow - it is the cue.
+		float stitched = yl_running_stitch(u, v / max(width, 1e-3), 8.0, scroll * (8.0 / 26.0))
+			* along * 0.8 * (0.6 / YL_RUN_MEAN);
+		body = mix(stitched, body, smoothstep(0.78, 0.96, u));
+	}
+	float a = (body + dots * 0.9) * fade;
 	vec3 col = mix(tail_color.rgb, head_color.rgb, along);
 	ALBEDO = col * intensity * a;
 	ALPHA = clamp(a, 0.0, 1.0);
