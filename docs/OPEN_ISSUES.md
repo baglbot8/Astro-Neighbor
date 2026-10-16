@@ -2128,3 +2128,22 @@ WKWebView showed no difference within ~1.5 points; the user's iPhone felt the sa
 * **A cue is worth more than the look.** The safari glass's embroidered stars first outshone small sights (local
   signal-to-noise 0.66-0.85x of plain) and soft sight bodies got a hard stitched band. In the glass, stars stay dimmer than
   sights and soft subjects stay smooth.
+
+## 72. [2026-10-16] Placed furniture lost its crochet: a one-time size test ran during the pop-in tween
+
+Found while filming the promo: a `cozy_armchair` placed with `DecorationManager.place()` rendered smooth while the same
+item spawned without the pop was crochet. Measured: `YarnLite._mark` runs one frame after a mesh enters the tree, and a
+placed decoration enters at global scale 0.02 for its pop-in tween, so the armchair measured 0.0234 m (rest size
+1.169 m) — under `DETAIL_MAX_M` 0.045 — and was marked a smooth "tiny detail" for good. Every decoration a player placed
+looked smooth until the planet reloaded; Bolt's Scrap Snail (built at scale 0.001, then grown) was hit the same way.
+
+* **Fix (yarn_lite.gd only):** face and glossy parts are still marked at once; a mesh of 4.5 cm or more is left crochet;
+  a tiny mesh is marked smooth at once with its original materials kept in a meta, then watched, and restored to crochet
+  if it ever reaches 4.5 cm (a settle of 3 frames, a 180-frame cap; safety limits, not tuned gains). Hidden tiny meshes
+  use the same restore when shown. No per-frame cost when nothing is watched. Lineup and world mark dumps identical
+  before/after (190 and 7 smooth; all 128 face meshes smooth).
+* **The critic's catch:** the first fix looped `for g: GeometryInstance3D in _watch.keys()`. A typed loop variable throws
+  on a freed instance before `is_instance_valid` can run, so removing a tiny item within ~3 frames of its spawn errored
+  every frame from then on. Loop untyped, check validity first, then cast.
+* **Lesson:** a one-time measurement at spawn is only as good as the spawn state. Anything that tweens scale (or
+  visibility) at spawn breaks a "measure once" rule; measure at rest, or keep watching until it settles.

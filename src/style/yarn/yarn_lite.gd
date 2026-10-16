@@ -19,6 +19,8 @@ extends Node
 ## The node also marks face features and tiny parts (a material copy with `yarn_skip` set) so eyes,
 ## glints, mouths and buttons stay smooth like the safety eyes and embroidered features of a real
 ## amigurumi. It marks each mesh once, one frame after it appears; the ON/OFF switch touches no material.
+## A mesh that measures tiny only because its node spawned at a near-zero scale (a placed decoration's
+## pop-in) is watched for a few frames first, so it is not marked smooth by mistake.
 ##
 ## Boot: MaterialLib calls `YarnLite.ensure()` the first time it builds a toon material.
 
@@ -44,6 +46,12 @@ static var _node: YarnLite
 static var gen_ms := 0.0
 
 var _pending: Array[GeometryInstance3D] = []
+## Parts that measured tiny and are waiting to show whether that is their real size: mesh -> {last, still, age}.
+var _watch := {}
+## A tiny part is a real detail once its size has not changed for this many frames in a row ...
+const SETTLE_FRAMES := 3
+## ... or, if something keeps it moving (a breathing idle scale), once it has been watched this long (3 s at 60 fps).
+const WATCH_MAX_FRAMES := 180
 
 
 ## Builds the textures once, publishes them as shader globals, applies DEFAULT_ON and parks the
@@ -233,6 +241,9 @@ static func _build_star_texture() -> ImageTexture:
 ## (docs: CROCHET_SPEC "Glass, visor, eyes, crystals, gems: glossy plastic"). Set it with keep_glossy()
 ## when the part is built; the marker picks it up with the rest, one frame after the part appears.
 const GLOSSY_META := &"yarn_glossy"
+## Meta on a hidden part parked smooth: [material_override, [surface overrides]] from before, to restore
+## if it is shown at a real size. It lives and dies with the mesh.
+const ORIG_META := &"yarn_orig_mats"
 
 
 ## Marks a part to stay glossy plastic in the crochet look. Call when the part is built (no cost
@@ -260,8 +271,11 @@ func _on_node_added(n: Node) -> void:
 		_pending.append(n)
 
 
-## Marked one frame after they appear, once their builder has placed and scaled them.
+## Marked one frame after they appear, once their builder has placed and scaled them. A part that
+## looks tiny is not marked at once: it is watched until it is clear the size is real (see _watch).
 func _process(_delta: float) -> void:
+	if not _watch.is_empty():
+		_poll_watch()
 	if _pending.is_empty():
 		return
 	var batch := _pending
@@ -271,15 +285,103 @@ func _process(_delta: float) -> void:
 			_mark(g)
 
 
+## World-space size of a mesh's largest side, from its own AABB and its current global scale.
+func _world_size(g: GeometryInstance3D) -> float:
+	var s := g.global_transform.basis.get_scale().abs()
+	var size := g.get_aabb().size * s
+	return maxf(size.x, maxf(size.y, size.z))
+
+
 func _mark(g: GeometryInstance3D) -> void:
 	var mi := g as MeshInstance3D
 	if mi == null or mi.mesh == null:
 		return
-	var s := g.global_transform.basis.get_scale().abs()
-	var size := g.get_aabb().size * s
 	var in_face := String(g.get_path()).contains("/Face/") or g.has_meta(GLOSSY_META)
-	if not (in_face or maxf(size.x, maxf(size.y, size.z)) < DETAIL_MAX_M):
+	if in_face:
+		_apply_skip(mi)
 		return
+	if _world_size(g) >= DETAIL_MAX_M:
+		_unskip(mi)   # a part parked as hidden-and-tiny that has now been shown at its real size
+		return
+	# Looks tiny: smooth now, as before, so a real button never flickers through crochet. But a part
+	# that spawns at a near-zero scale and tweens up (a placed decoration's pop starts at 0.02, a hidden
+	# part waits at 0.001) measures tiny too, and marking it for good kept it smooth for good
+	# (docs/OPEN_ISSUES.md 72). So the original materials are remembered and the part is watched: it is
+	# a real detail only if it never reaches DETAIL_MAX_M; if it does, crochet is restored.
+	_apply_skip(mi, true)
+	if not g.is_visible_in_tree():
+		_park_hidden(mi)
+		return
+	_watch[g] = {"last": _world_size(g), "still": 0, "age": 0}
+
+
+## Settled-size check for the parts _mark found tiny. Runs only while some are being watched (a few
+## frames after a spawn); once a part is decided it costs nothing again.
+func _poll_watch() -> void:
+	# Untyped loop variable: a typed one raises on a freed key before is_instance_valid can run.
+	for k in _watch.keys():
+		if not is_instance_valid(k):
+			_watch.erase(k)
+			continue
+		var g := k as GeometryInstance3D
+		if not g.is_inside_tree():
+			_watch.erase(g)
+			continue
+		if not g.is_visible_in_tree():
+			_watch.erase(g)
+			_park_hidden(g as MeshInstance3D)
+			continue
+		var size := _world_size(g)
+		if size >= DETAIL_MAX_M:
+			_watch.erase(g)   # grew past a detail's size: a real crocheted part
+			_unskip(g as MeshInstance3D)
+			continue
+		var e: Dictionary = _watch[g]
+		e["age"] = int(e["age"]) + 1
+		if is_equal_approx(size, float(e["last"])):
+			e["still"] = int(e["still"]) + 1
+		else:
+			e["still"] = 0
+			e["last"] = size
+		if int(e["still"]) >= SETTLE_FRAMES or int(e["age"]) >= WATCH_MAX_FRAMES:
+			_watch.erase(g)   # a real detail: it stays smooth (the remembered materials stay for a later hide/show)
+
+
+## A hidden tiny part (a blink leaf, or a part parked at a token scale until it is shown): its size now
+## says nothing about its size when shown. It stays smooth meanwhile (_mark already marked it, with its
+## original materials remembered), and is looked at again when it appears - polling a hidden part would cost a
+## check per frame for as long as it stays hidden.
+func _park_hidden(mi: MeshInstance3D) -> void:
+	var shown := _on_part_shown.bind(mi)
+	if not mi.visibility_changed.is_connected(shown):
+		mi.visibility_changed.connect(shown)
+
+
+func _unskip(mi: MeshInstance3D) -> void:
+	if not mi.has_meta(ORIG_META):
+		return
+	var o: Array = mi.get_meta(ORIG_META)
+	mi.remove_meta(ORIG_META)
+	mi.material_override = o[0]
+	var surf: Array = o[1]
+	for i in surf.size():
+		mi.set_surface_override_material(i, surf[i])
+
+
+func _on_part_shown(g: Object) -> void:
+	if not is_instance_valid(g):
+		return
+	if g is GeometryInstance3D and g.is_visible_in_tree():
+		g.visibility_changed.disconnect(_on_part_shown.bind(g))
+		_pending.append(g)
+
+
+func _apply_skip(mi: MeshInstance3D, remember := false) -> void:
+	if remember and not mi.has_meta(ORIG_META):
+		var surf := []
+		for i in mi.mesh.get_surface_count():
+			surf.append(mi.get_surface_override_material(i))
+		mi.set_meta(ORIG_META, [mi.material_override, surf])
 	# A per-MATERIAL flag, not an instance uniform: an instance uniform takes a slot of the global
 	# shader buffer for every instance of the shader (the hub overflowed its 4096 on the Mac, and
 	# WebGL2 only guarantees a quarter of that). Copies are cached per source material, so all the
