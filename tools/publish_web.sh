@@ -139,6 +139,17 @@ KILLSW
 #
 # Also injects window.__astroPerf, a read-only requestAnimationFrame busy/fps meter the dev menu reads.
 python3 "$REPO/tools/web/web_postprocess.py" "$OUT" "$BASE"
+
+# --- The trailer page (<site>/trailer/) -----------------------------------------------------------
+# A plain page next to the game with the promo video (a 19 MB phone-friendly encode, 2026-10-17).
+# It is not part of the Godot export (tools/web/trailer/.gdignore keeps Godot away from it), so it is
+# copied in here. It never touches the game's pages or its service workers.
+rm -rf "$OUT/trailer"
+mkdir -p "$OUT/trailer"
+cp "$REPO/tools/web/trailer/index.html" "$REPO/tools/web/trailer/astro_neighbor_trailer.mp4" \
+	"$REPO/tools/web/trailer/poster.jpg" "$REPO/tools/web/trailer/Baloo2.ttf" "$REPO/tools/web/trailer/OFL.txt" \
+	"$OUT/trailer/"
+
 export GIT_INDEX_FILE="$(mktemp -t ghpages-index)"
 rm -f "$GIT_INDEX_FILE"
 git --work-tree="$OUT" add -A -f .
