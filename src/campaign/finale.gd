@@ -490,7 +490,7 @@ func _predict_call_shot(player: Node3D, radio_pos: Vector3, up: Vector3, fwd: Ve
 		look = sq if sq.dot(fwd) >= 0.0 else -sq
 	var mid := (p + up * 0.9 + focus + up * 0.9) * 0.5
 	var pivot := (p + up * CameraRig.PIVOT_HEIGHT).lerp(mid, 0.75)
-	var dist := float(rig.call("get_zoom_distance")) * CameraRig.FOCUS_PUSH_IN if rig.has_method("get_zoom_distance") else 6.0
+	var dist := float(rig.call("get_focus_distance")) * CameraRig.FOCUS_PUSH_IN if rig.has_method("get_focus_distance") else 6.0
 	var pitch := deg_to_rad(20.0)
 	var eye := pivot - look * cos(pitch) * dist + up * sin(pitch) * dist
 	var basis := Basis.looking_at((pivot - eye).normalized(), up)

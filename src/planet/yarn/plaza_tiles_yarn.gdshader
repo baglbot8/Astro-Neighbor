@@ -179,6 +179,60 @@ float tile_sdf(vec2 uv, out vec2 cell) {
 	return pc_rbox_sdf(p, vec2(tile_size * 0.5 - grout * 0.5), tile_corner);
 }
 
+// ---- The Commons floor pattern (the user picked 1, Panels, 2026-10-17: "go with 1 Panels") -------------
+// 0 = the old granny squares; 1 = big plain panels (shipped); 2 = rounds; 3 = plain field with a border band.
+// The user found the granny squares too busy and dark on the phone; Panels halves the busyness and is ~4% lighter.
+uniform float floor_opt = 1.0;
+const float FL_W = 0.12;   // the lawn blanket's stitch (YL_GROUND_W / _H): one stitch size for all ground
+const float FL_H = 0.095;
+const float FL_FLAT = 0.5; // relief taken this far toward flat, the same as the lawn blanket
+
+// Distance to the plaza edge (negative inside, metres) with a frame that follows the edge: along_m runs
+// round the nearest disc (per row, so the columns stay radial) or along the nearest path; ex is the
+// along direction and ey points inward, both world tangents at dir.
+float fl_contour(vec3 dir, out float along_m, out vec3 ex, out vec3 ey) {
+	float best = 1e9;
+	along_m = 0.0;
+	ex = vec3(1.0, 0.0, 0.0);
+	ey = vec3(0.0, 0.0, 1.0);
+	for (int i = 0; i < 8; i++) {
+		if (i >= zone_count) { break; }
+		vec3 zd = normalize(zone_dirs[i]);
+		float ang = acos(clamp(dot(dir, zd), -1.0, 1.0));
+		float d = ang * planet_radius - zone_radii[i];
+		if (d < best) {
+			best = d;
+			vec3 up = abs(zd.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+			vec3 e1 = normalize(cross(up, zd));
+			vec3 e2 = cross(zd, e1);
+			float th = atan(dot(dir, e2), dot(dir, e1));
+			float k = floor(-d / FL_H);
+			float rk = max(zone_radii[i] - (k + 0.5) * FL_H, FL_H * 0.5);
+			along_m = th * rk;
+			vec3 ro = dir * dot(dir, zd) - zd;
+			ey = -ro / max(length(ro), 1e-5);
+			vec3 tx = cross(zd, dir);
+			ex = tx / max(length(tx), 1e-5);
+		}
+	}
+	for (int i = 0; i < 8; i++) {
+		if (i >= path_count) { break; }
+		vec3 a = normalize(path_a[i]);
+		vec3 b = normalize(path_b[i]);
+		float d = pc_arc_distance(dir, a, b) * planet_radius - path_width * 0.5;
+		if (d < best) {
+			best = d;
+			vec3 n = normalize(cross(a, b));
+			float s = dot(dir, n);
+			vec3 ro = (n - dir * s) * (s < 0.0 ? -1.0 : 1.0);
+			ey = -ro / max(length(ro), 1e-5);
+			ex = normalize(cross(n, dir));
+			along_m = atan(dot(dir, cross(n, a)), dot(dir, a)) * planet_radius;
+		}
+	}
+	return best;
+}
+
 void fragment() {
 	vec3 wp = v_world_pos;
 	float dist = length(wp);
@@ -263,6 +317,65 @@ void fragment() {
 	} else {
 		float y_fp = yw_fp(wp);
 		yg = yl_ground(dir, uv, planet_radius, wp);
+		if (floor_opt > 0.5) {
+		vec3 ta = pc_in(tile_a.rgb);
+		vec3 tb = pc_in(tile_b.rgb);
+		vec3 tcu = pc_in(curb_color.rgb);
+		vec3 fcol;
+		vec3 ftilt;
+		float fao;
+		if (floor_opt < 1.5) {
+			// 1 PANELS: 1.5 m squares of plain single crochet (2x2 of today's tiles), rows turned on
+			// alternate panels like a patchwork, one light cream, joined by a chain in the same yarn.
+			float ps = tile_size * 2.0;
+			vec2 pcell = floor(uv / ps);
+			vec2 ploc = (fract(uv / ps) - 0.5) * ps;
+			vec4 r = yw_rows(ploc, mod(pcell.x + pcell.y, 2.0), FL_W, FL_H, y_fp, pcell);
+			float psd = pc_rbox_sdf(ploc, vec2(ps * 0.5 - 0.02), 0.04);
+			vec2 pap = abs(ploc);
+			float js = pap.x > pap.y ? ploc.y : ploc.x;
+			float jm = 1.0 - smoothstep(-0.05, -0.02, psd);
+			float jn = yw_join(psd + 0.02, js, y_fp);
+			fcol = mix(ta, tb, 0.20) * (0.985 + 0.03 * pc_hash21(pcell));
+			fao = mix(jn * 0.98, mix(1.0, r.x, 1.0 - FL_FLAT), jm);
+			ftilt = (tu * r.y + tv * r.z) * (1.0 - FL_FLAT) * jm;
+		} else {
+			float c_al;
+			vec3 c_ex;
+			vec3 c_ey;
+			float c_sd = fl_contour(dir, c_al, c_ex, c_ey);
+			float row = -c_sd / FL_H;
+			if (floor_opt < 2.5) {
+				// 2 ROUNDS: the whole plaza worked in rounds that follow its edge, like a round rug;
+				// 13-row (1.24 m) rings alternate two close creams, changing colour on a row boundary.
+				vec4 t = yl_tap(vec2(c_al / FL_W, row), yl_lod(y_fp, FL_H));
+				float ring = mod(floor(row / 13.0), 2.0);
+				fcol = ring < 0.5 ? ta * 1.04 : mix(ta, tb, 0.8) * 0.98;
+				fao = mix(1.0, t.x, 1.0 - FL_FLAT);
+				ftilt = (c_ex * t.y + c_ey * t.z) * (1.0 - FL_FLAT);
+			} else {
+				// 3 BORDER: one plain cream field in straight rows, edged by a single 8-row band that
+				// follows the plaza's outline, finished on its inner side with a row of soft shells.
+				vec4 tf = yl_tap(uv / vec2(FL_W, FL_H), yl_lod(y_fp, FL_H));
+				vec4 tbd = yl_tap(vec2(c_al / FL_W, row), yl_lod(y_fp, FL_H));
+				float shell = 0.9 * abs(sin(3.14159265 * c_al / 0.42));
+				// The band is SET IN from the edge (rows 5-13) so the edge's contact-shade pool does not
+				// swallow it, with shells on both sides.
+				float aa_r = fwidth(row) + 0.02;
+				float band = smoothstep(5.0 - shell - aa_r, 5.0 - shell + aa_r, row)
+					* (1.0 - smoothstep(13.0 + shell - aa_r, 13.0 + shell + aa_r, row));
+				fcol = mix(ta * 1.01, tb * 0.93, band);
+				vec4 tt = mix(tf, tbd, band);
+				fao = mix(1.0, tt.x, 1.0 - FL_FLAT);
+				vec3 fdir = mix(tu * tf.y + tv * tf.z, c_ex * tbd.y + c_ey * tbd.z, band);
+				ftilt = fdir * (1.0 - FL_FLAT);
+			}
+		}
+		tiles = fcol * fao * (1.0 + (yg.fibre - 0.5) * 0.04);
+		vec3 yt = ftilt * tile_mask + yg.tilt_w * (1.0 - tile_mask);
+		yt -= dir * dot(yt, dir);
+		wn = normalize(v_world_nrm * sqrt(max(1.0 - dot(yt, yt), 0.0)) + yt);
+		} else {
 		vec2 y_cell = floor(uv / tile_size);
 		vec2 y_loc = (fract(uv / tile_size) - 0.5) * tile_size;
 		vec4 gr = yw_granny(y_loc, tile_size * 0.5 - grout * 0.5, y_fp, y_cell);
@@ -294,6 +407,7 @@ void fragment() {
 		vec2 gt = gr.yz * y_in * tile_mask;
 		vec3 yt = (tu * gt.x + tv * gt.y) * 0.75 + yg.tilt_w * (1.0 - tile_mask);
 		wn = normalize(v_world_nrm * sqrt(max(1.0 - dot(yt, yt), 0.0)) + yt);
+		}
 	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
 

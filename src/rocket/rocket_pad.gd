@@ -209,6 +209,19 @@ const TRAIL_COLORS := {
 ## Stepping stones every this many metres along the spawn->pad great circle.
 const TRAIL_STEP_M := 2.0
 const TRAIL_MAX := 12
+## Bottom radius of a stepping stone (the cylinder in `_build_trail`), before the per-stone taper.
+const TRAIL_STONE_R := 0.50
+## How far a blocked stone may slide along the line to find clear ground before it is dropped.
+const TRAIL_NUDGE_M := 0.5
+## How far a blocked stone may step sideways off the line (after the along-line nudges fail).
+const TRAIL_SIDE_M := 0.9
+## Ground cover smaller than this on every side (grass tufts, pebbles) does not block a stone: the
+## stone simply sits over it, as a stepping stone in a lawn does.
+const TRAIL_GROUND_COVER_M := 0.35
+## The "foot height" slab a stone needs clear: from just under its base to this far above it. Arches
+## the line passes UNDER (the hub's entrance bunting, Fen's arch, the Tangle's root arch) are open
+## below this height, so they keep their stones; a flower bed, a monolith or a rock is not.
+const TRAIL_CLEAR_H := 0.45
 
 ## Set in a showcase when there is no PlanetData to read the id from.
 @export var planet_id_override: String = ""
@@ -876,14 +889,36 @@ func _build_trail() -> void:
 	root.name = "Trail"
 	add_child(root)
 
+	# Every stone sits on CLEAR ground (see `_trail_stone_clear`): a slot whose stone would touch a
+	# prop or building at foot height first slides TRAIL_NUDGE_M along the line either way, then
+	# steps TRAIL_SIDE_M to either side (round a monolith, the way a path bends round a rock), and is
+	# dropped if all of those are blocked too. On the Commons that drops the slot that sat in the
+	# fountain garden's flower bed, so the trail now ends under the entrance bunting, 3.3 m short of
+	# spawn; on Grig the stone that stood inside a henge monolith steps 0.9 m round it.
+	var obstacles := _trail_obstacles()
 	var xforms: Array[Transform3D] = []
+	var last_d := -INF
 	var d := PAD_R + 0.9
 	while d < total - 1.2 and xforms.size() < TRAIL_MAX:
-		var dir := planet.step_dir(pad_dir, spawn_dir, d)
-		var hint := planet.surface_point(pad_dir) - planet.surface_point(dir)
-		var xf := planet.surface_transform(dir, hint)
-		xf.origin += xf.basis.y * 0.015
-		xforms.append(xf)
+		for slot: Vector2 in [Vector2(0.0, 0.0), Vector2(TRAIL_NUDGE_M, 0.0), Vector2(-TRAIL_NUDGE_M, 0.0),
+				Vector2(0.0, TRAIL_SIDE_M), Vector2(0.0, -TRAIL_SIDE_M)]:
+			var cand := d + slot.x
+			if cand >= total - 1.2 or cand < PAD_R + 0.9 or cand - last_d < TRAIL_STEP_M - TRAIL_NUDGE_M:
+				continue
+			var dir := planet.step_dir(pad_dir, spawn_dir, cand)
+			var hint := planet.surface_point(pad_dir) - planet.surface_point(dir)
+			if slot.y != 0.0:
+				var side := planet.surface_transform(dir, hint).basis.x
+				dir = (dir + side * (slot.y / planet.radius)).normalized()
+				hint = planet.surface_point(pad_dir) - planet.surface_point(dir)
+			var xf := planet.surface_transform(dir, hint)
+			xf.origin += xf.basis.y * 0.015
+			var r := TRAIL_STONE_R * (1.0 - 0.035 * float(xforms.size()))
+			if not _trail_stone_clear(xf, r, obstacles):
+				continue
+			xforms.append(xf)
+			last_d = cand
+			break
 		d += TRAIL_STEP_M
 
 	var stone_mm := MultiMesh.new()
@@ -926,6 +961,136 @@ func _build_trail() -> void:
 	chevs.material_override = cm
 	chevs.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(chevs)
+
+
+## Everything a stepping stone must not sit under or inside: every mesh of the planet's props
+## (single meshes and each MultiMesh instance) and of the world's buildings, as [global xform, mesh].
+## THE BUG THIS ANSWERS (the user, 2026-10-17): on the Commons the trail ran straight across the
+## fountain garden, and the stone nearest spawn sat inside a flower bed. The trail used to be laid on
+## the bare great circle with no look at what stood there; a scan of all eight worlds (pads-1017,
+## triangles sampled inside each stone's foot-height cylinder) also found a Grig monolith standing
+## on one. After: 0 stones touch a prop on any world.
+func _trail_obstacles() -> Array:
+	var out: Array = []
+	var roots: Array[Node] = []
+	if planet.props_root != null:
+		roots.append(planet.props_root)
+	var b := get_parent().get_node_or_null("Buildings") if get_parent() != null else null
+	if b != null:
+		roots.append(b)
+	for r in roots:
+		_collect_trail_obstacles(r, out)
+	# Keep only what stands near the line: the grass tufts alone are thousands of instances, and the
+	# stones are tested against this list a dozen times on the frame the world loads.
+	var pad_dir := planet.data.pad_dir.normalized()
+	var spawn_dir := planet.data.spawn_dir.normalized()
+	var near: Array = []
+	for o: Array in out:
+		var oxf: Transform3D = o[0]
+		var ab := (o[1] as Mesh).get_aabb()
+		var reach := maxf(ab.position.length(), ab.end.length()) * oxf.basis.x.length() + 1.5
+		var dist := PlanetProps.arc_distance(planet.dir_of(oxf.origin), pad_dir, spawn_dir) * planet.radius
+		if dist < reach:
+			near.append(o)
+	return near
+
+
+func _collect_trail_obstacles(n: Node, out: Array) -> void:
+	# The props' soft contact shadows are a flat patch painted on the ground, not something standing.
+	if n.name == &"ContactShadows":
+		return
+	if n is MultiMeshInstance3D:
+		var mmi := n as MultiMeshInstance3D
+		var mm := mmi.multimesh
+		if mm != null and mm.mesh != null and mm.transform_format == MultiMesh.TRANSFORM_3D:
+			for k in mm.instance_count:
+				out.append([mmi.global_transform * mm.get_instance_transform(k), mm.mesh])
+	elif n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		if mi.mesh != null and mi.visible:
+			out.append([mi.global_transform, mi.mesh])
+	for ch in n.get_children():
+		_collect_trail_obstacles(ch, out)
+
+
+## True when a stone of radius `r` at `xf` (surface-aligned, origin on the ground) touches no obstacle
+## mesh between its base and TRAIL_CLEAR_H above it. Measured on the geometry, not the registered
+## clearance discs: those are generous on purpose (decorations keep off them), and an arch's disc
+## covers the opening the trail is meant to run through. A box AABB test first; only a hit there
+## reads the mesh's triangles (cached per mesh), each tested against the stone's foot-height box.
+var _trail_faces := {}
+func _trail_stone_clear(xf: Transform3D, r: float, obstacles: Array) -> bool:
+	var c := xf.origin
+	for o: Array in obstacles:
+		var oxf: Transform3D = o[0]
+		var mesh: Mesh = o[1]
+		var s := oxf.basis.x.length()
+		if s < 1e-5:
+			continue
+		var ab := mesh.get_aabb()
+		if ab.get_longest_axis_size() * s < TRAIL_GROUND_COVER_M:
+			continue
+		var to_local := oxf.affine_inverse()
+		var p := to_local * c
+		var up_l := (to_local.basis * xf.basis.y).normalized()
+		var rl := r / s
+		var hl := TRAIL_CLEAR_H / s
+		if p.x < ab.position.x - rl or p.x > ab.end.x + rl or p.z < ab.position.z - rl or p.z > ab.end.z + rl:
+			continue
+		if ab.position.y > p.y + hl or ab.end.y < p.y - 0.1 / s:
+			continue
+		var faces: PackedVector3Array
+		if _trail_faces.has(mesh):
+			faces = _trail_faces[mesh]
+		else:
+			faces = mesh.get_faces()
+			_trail_faces[mesh] = faces
+		if faces.is_empty():
+			return false
+		# The stone's clear volume in the obstacle's local frame: a box r x r around its centre, from
+		# 0.1 m under the base to TRAIL_CLEAR_H above, with the stone's own up (props lean on slopes).
+		var ax_x := (to_local.basis * xf.basis.x).normalized()
+		var ax_z := (to_local.basis * xf.basis.z).normalized()
+		var centre := p + up_l * ((hl - 0.1 / s) * 0.5)
+		var half := Vector3(rl, (hl + 0.1 / s) * 0.5, rl)
+		for i in range(0, faces.size(), 3):
+			if _tri_box_overlap(faces[i], faces[i + 1], faces[i + 2], centre, ax_x, up_l, ax_z, half):
+				return false
+	return true
+
+
+## Separating-axis test of triangle (a, b, c) against an oriented box (centre, unit axes, half sizes).
+static func _tri_box_overlap(a: Vector3, b: Vector3, c: Vector3, centre: Vector3, ux: Vector3, uy: Vector3, uz: Vector3, half: Vector3) -> bool:
+	var v0 := a - centre
+	var v1 := b - centre
+	var v2 := c - centre
+	var vs := [Vector3(v0.dot(ux), v0.dot(uy), v0.dot(uz)), Vector3(v1.dot(ux), v1.dot(uy), v1.dot(uz)),
+		Vector3(v2.dot(ux), v2.dot(uy), v2.dot(uz))]
+	var p0: Vector3 = vs[0]
+	var p1: Vector3 = vs[1]
+	var p2: Vector3 = vs[2]
+	# box face axes
+	for k in 3:
+		if minf(p0[k], minf(p1[k], p2[k])) > half[k] or maxf(p0[k], maxf(p1[k], p2[k])) < -half[k]:
+			return false
+	var e := [p1 - p0, p2 - p1, p0 - p2]
+	var n: Vector3 = (e[0] as Vector3).cross(e[1] as Vector3)
+	var cand: Array[Vector3] = [n]
+	for k in 3:
+		var ed: Vector3 = e[k]
+		cand.append(Vector3(0.0, -ed.z, ed.y))
+		cand.append(Vector3(ed.z, 0.0, -ed.x))
+		cand.append(Vector3(-ed.y, ed.x, 0.0))
+	for ax: Vector3 in cand:
+		if ax.length_squared() < 1e-12:
+			continue
+		var q0 := p0.dot(ax)
+		var q1 := p1.dot(ax)
+		var q2 := p2.dot(ax)
+		var rad := half.x * absf(ax.x) + half.y * absf(ax.y) + half.z * absf(ax.z)
+		if minf(q0, minf(q1, q2)) > rad or maxf(q0, maxf(q1, q2)) < -rad:
+			return false
+	return true
 
 
 func _build_compass() -> void:

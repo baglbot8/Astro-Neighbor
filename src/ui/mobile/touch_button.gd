@@ -15,7 +15,7 @@ extends Control
 
 signal tapped
 
-enum Glyph { NONE, JUMP, BOOST, BAG, JOURNAL, PAUSE, ROTATE_L, ROTATE_R, CLOSE, EMOTE }
+enum Glyph { NONE, JUMP, BOOST, BAG, JOURNAL, PAUSE, ROTATE_L, ROTATE_R, CLOSE, EMOTE, ZOOM_IN, ZOOM_OUT }
 
 ## Actions held down while this button is touched (empty for a TAP button).
 var actions: PackedStringArray = []
@@ -143,6 +143,12 @@ func _draw() -> void:
 			var d := radius * 0.38
 			draw_line(c - Vector2(d, d), c + Vector2(d, d), ink, 5.0, true)
 			draw_line(c + Vector2(d, -d), c + Vector2(-d, d), ink, 5.0, true)
+		Glyph.ZOOM_IN, Glyph.ZOOM_OUT:
+			# Camera zoom (closer / further). A plain plus and minus, the same stroke as CLOSE.
+			var d := radius * 0.40
+			draw_line(c - Vector2(d, 0.0), c + Vector2(d, 0.0), ink, 5.0, true)
+			if glyph == Glyph.ZOOM_IN:
+				draw_line(c - Vector2(0.0, d), c + Vector2(0.0, d), ink, 5.0, true)
 		_:
 			pass
 	if label != "" and _font != null:

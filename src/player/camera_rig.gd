@@ -12,7 +12,8 @@ extends Node3D
 ## is_first_person(), set_fov_deg(), get_fov_deg(), get_view_camera(), set_look_sensitivity_scale(),
 ## set_zoom_input_drives_fov(), get_view_pitch_deg().
 ## Touch front end (see the "external look / zoom" block): add_look(), add_look_px(), add_zoom(),
-## set_zoom_distance(), get_zoom_distance(), get_zoom_range(), get_zoom_fraction().
+## set_zoom_distance(), get_zoom_distance(), get_zoom_range(), get_zoom_fraction(), step_zoom().
+## Portrait zoom (see the "portrait zoom" block): framing_min(), get_focus_distance().
 ## It also fades out any decoration standing between the camera and the astronaut, so hub props can
 ## never hide the player - see the near-geometry fade block below. That fade is suspended outright
 ## while some other Camera3D is the viewport's current one (a cutscene): see the guard at the top of
@@ -54,6 +55,44 @@ const MOBILE_PITCH_DEFAULT_DEG := 34.0
 const MOBILE_DIST_DEFAULT := 8.6
 const MOBILE_DIST_MIN := 5.0
 const MOBILE_DIST_MAX := 13.0
+
+# ============================================================================= portrait zoom
+## The user, 2026-10-16: *"Add a normal zoom in feature just walking around the world, so the player
+## can see the astronaut closer in case they want to take screenshots on the phone or something."*
+##
+## DIST_MIN / MOBILE_DIST_MIN above are now the close end of the NORMAL framing (the old stops, kept
+## unchanged), and the zoom carries on PAST them into a portrait band that ends at the CLOSE_* stop
+## below. `dist_min()` returns the CLOSE stop, so the wheel, the pinch, the +/- buttons and every
+## clamp reach it with no special case.
+##
+## Inside the band the framing blends (smoothstep on the smoothed distance, so it eases with the
+## zoom) from the follow framing to a portrait one: the aim point drops from PIVOT_HEIGHT (1.0 m,
+## above the astronaut's shoulders) to PORTRAIT_PIVOT_HEIGHT (the middle of the 1.42 m figure), and
+## the pitch flattens from the follow pitch toward PORTRAIT_PITCH_DEG so the lens looks AT the visor
+## rather than down on the crown of the helmet. A vertical drag still tilts the view inside the band,
+## at half rate, clamped to PORTRAIT_PITCH_MIN..MAX - low hero shots without a camera in the dirt.
+##
+## Geometry, not tuning: a 45 deg vertical lens sees 2 * d * tan(22.5) = 0.83 d metres of height at
+## distance d, so at 2.2 m it sees 1.82 m and the 1.42 m astronaut fills ~80 % of the frame height
+## on both front ends (the vertical angle is the same on a 16:9 monitor and a 2.17:1 phone). 2.0 m
+## was tried first and put the helmet's crown on the top edge of a phone frame (the helmet is the
+## part nearest the lens, so it reads bigger than the 0.83 d sum says). The near plane is 0.1 m
+## and the helmet's front is ~0.37 m from the pivot axis, so the lens stays ~1.5 m clear of it.
+##
+## DIALOGUE never uses the band: `focus_on` framing works from the standard distance when started
+## from a close-up (see `_focus_base_dist_at`), so a conversation started while zoomed in still frames
+## both faces, and the player's zoom is still theirs when the conversation ends (KEEPS the choice
+## rather than resetting: a player lining up a screenshot should not have to re-zoom after a chat).
+## Travel resets it: every planet load builds a new World and so a new rig at the default.
+const CLOSE_DIST_MIN := 2.2
+const MOBILE_CLOSE_DIST_MIN := 2.2
+const PORTRAIT_PIVOT_HEIGHT := 0.72
+const PORTRAIT_PITCH_DEG := 9.0
+const PORTRAIT_PITCH_MIN_DEG := 0.0
+const PORTRAIT_PITCH_MAX_DEG := 36.0
+## Inside the band each wheel notch / pinch pixel is scaled by distance / normal-close-stop (never
+## above 1, never below this), so the old range feels exactly as before and the last metres are finer.
+const PORTRAIT_ZOOM_SCALE_MIN := 0.4
 
 ## The player, after playing the build: *"I can't control the camera well I dont think, so sometimes
 ## i cant see what im trying to interact with"*. Part of that was the missing mouse look (below);
@@ -505,7 +544,58 @@ func dist_default() -> float:
 
 
 func dist_min() -> float:
+	return MOBILE_CLOSE_DIST_MIN if Platform.is_mobile() else CLOSE_DIST_MIN
+
+
+## The close end of the NORMAL follow framing (the old zoom stop): below it the portrait band starts.
+func framing_min() -> float:
 	return MOBILE_DIST_MIN if Platform.is_mobile() else DIST_MIN
+
+
+## 0 at the normal close stop and beyond, 1 at the portrait stop. Smoothstep, so the pivot and pitch
+## blend in with no kink at either end.
+func _portrait_w(dist: float) -> float:
+	var hi := framing_min()
+	var lo := dist_min()
+	if hi - lo < 0.001:
+		return 0.0
+	return smoothstep(0.0, 1.0, clampf((hi - dist) / (hi - lo), 0.0, 1.0))
+
+
+## How hard a zoom input bites at distance `d`: 1 across the old range, smaller inside the band.
+func _zoom_scale(d: float) -> float:
+	return clampf(d / maxf(framing_min(), 0.001), PORTRAIT_ZOOM_SCALE_MIN, 1.0)
+
+
+## The follow distance the dialogue framing works from: never inside the portrait band. Outside the
+## band it is the player's own distance, exactly as before; inside it, it blends (by the same portrait
+## weight) to the platform DEFAULT, so a conversation started from a close-up gets the standard,
+## measured dialogue framing (FOCUS_REACH / FOCUS_FOV in dialogue_runner.gd were set against it)
+## rather than the cramped one from the old close stop. Continuous at the band edge.
+func _focus_base_dist_at(d: float) -> float:
+	return lerpf(maxf(d, framing_min()), maxf(d, dist_default()), _portrait_w(d))
+
+
+func _focus_base_dist() -> float:
+	return _focus_base_dist_at(_dist)
+
+
+## Pivot and pitch for the current smoothed distance, portrait band included, as (pivot_height,
+## pitch_rad). `w_scale` lets a dialogue focus fade the portrait out.
+func _framing_at(dist: float, w_scale: float = 1.0) -> Vector2:
+	var w := _portrait_w(dist) * clampf(w_scale, 0.0, 1.0)
+	if w <= 0.0:
+		return Vector2(PIVOT_HEIGHT, _pitch)
+	var pp := deg_to_rad(PORTRAIT_PITCH_DEG) + (_pitch - deg_to_rad(pitch_default_deg())) * 0.5
+	pp = clampf(pp, deg_to_rad(PORTRAIT_PITCH_MIN_DEG), deg_to_rad(PORTRAIT_PITCH_MAX_DEG))
+	return Vector2(lerpf(PIVOT_HEIGHT, PORTRAIT_PIVOT_HEIGHT, w), lerpf(_pitch, pp, w))
+
+
+## The dialogue framing's base distance, for a caller that predicts the dialogue shot before
+## `focus_on` (campaign/finale.gd). Equal to `get_zoom_distance()` unless the player is zoomed into
+## the portrait band, where the dialogue framing does not go.
+func get_focus_distance() -> float:
+	return _focus_base_dist_at(_dist_target)
 
 
 ## Fraction of the planet's radius the eye may sit above the surface at full zoom-out. A fixed
@@ -1156,6 +1246,20 @@ func _update_mouse_capture() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if want else Input.MOUSE_MODE_VISIBLE
 
 
+## Test hook: one mouse-wheel notch as a REAL InputEventMouseButton (pressed, then released) pushed
+## through `Input.parse_input_event`, so the InputMap binding and `_unhandled_input` are exercised -
+## not `Input.action_press`, which emits no event. `up` true = wheel up = zoom in.
+func debug_wheel(up: bool) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_WHEEL_UP if up else MOUSE_BUTTON_WHEEL_DOWN
+		ev.pressed = pressed
+		ev.factor = 1.0
+		ev.position = get_viewport().get_visible_rect().size * 0.5
+		ev.global_position = ev.position
+		Input.parse_input_event(ev)
+
+
 ## Test hook. A Director timeline drives actions with `Input.action_press`, which sets action state
 ## but emits no InputEvent, so it cannot deliver mouse motion. This synthesises a real
 ## InputEventMouseMotion and pushes it through the ordinary input pipeline, so what the timeline
@@ -1208,9 +1312,14 @@ func debug_set_framing(dist_m: float, pitch_deg: float) -> void:
 
 ## Prints the framing the rig is actually running, so a capture can assert it rather than assume it.
 func debug_report() -> void:
-	print("CAMRIG mode=%s dist=%.2f (target %.2f, range %.1f-%.1f) pitch=%.1f fov=%.1f user_zoom=%s user_pitch=%s" % [
+	var cam_pos := _camera.global_position if _camera else Vector3.ZERO
+	var ppos := _player.global_position if _player != null and is_instance_valid(_player) else Vector3.ZERO
+	var cam_h := (cam_pos - ppos).dot(_up)
+	var cam_d := cam_pos.distance_to(ppos + _up * PIVOT_HEIGHT)
+	print("CAMRIG mode=%s dist=%.2f (target %.2f, range %.1f-%.1f) pitch=%.1f fov=%.1f user_zoom=%s user_pitch=%s portrait_w=%.2f focus_w=%.2f cam_h=%.2f cam_d=%.2f" % [
 		Platform.mode_name(), _dist, _dist_target, dist_min(), dist_max(),
-		rad_to_deg(_pitch), _camera.fov if _camera else -1.0, str(_zoom_user_set), str(_pitch_user_set)])
+		rad_to_deg(_pitch), _camera.fov if _camera else -1.0, str(_zoom_user_set), str(_pitch_user_set),
+		_portrait_w(_dist), _focus_weight, cam_h, cam_d])
 
 
 ## THE STUCK-AFTER-LANDING PROBE. Prints, in one line a Director timeline can call at any instant,
@@ -1360,9 +1469,12 @@ func _process(delta: float) -> void:
 		return
 	_auto_recenter(delta)
 
-	var pivot := _player.global_position + _up * PIVOT_HEIGHT
-	var dist := _dist
-	var pitch := _pitch
+	# Portrait band (see the block at the top): faded out by a dialogue focus, which frames two
+	# people and so works from the normal close stop instead.
+	var fr := _framing_at(_dist, 1.0 - _focus_weight)
+	var pivot := _player.global_position + _up * fr.x
+	var dist := lerpf(_dist, _focus_base_dist(), _focus_weight)
+	var pitch := fr.y
 	var look_fwd := _fwd
 	if _focus_weight > 0.001:
 		var to_focus := _focus_pos - _player.global_position
@@ -1374,8 +1486,8 @@ func _process(delta: float) -> void:
 			look_fwd = (look_fwd - _up * look_fwd.dot(_up)).normalized()
 		var mid := (_player.global_position + _up * 0.9 + _focus_pos + _up * 0.9) * 0.5
 		pivot = pivot.lerp(mid, _focus_weight * 0.75)
-		dist = lerpf(_dist, _dist * FOCUS_PUSH_IN, _focus_weight)
-		pitch = lerpf(_pitch, deg_to_rad(20.0), _focus_weight)
+		dist = lerpf(dist, dist * FOCUS_PUSH_IN, _focus_weight)
+		pitch = lerpf(pitch, deg_to_rad(20.0), _focus_weight)
 		# Rotated about an EXPLICITLY normalised axis rather than `_fwd.slerp(look_fwd, ...)`.
 		#
 		# `Vector3.slerp` derives its axis as `cross(a, b) / sqrt(cross(a, b).length_squared())`,
@@ -1413,8 +1525,9 @@ func _process(delta: float) -> void:
 			_fwd = _fwd.slerp(target, 1.0 - exp(-ORBIT_TURN_RATE * delta * _orbit_weight)).normalized()
 			_fwd = (_fwd - _up * _fwd.dot(_up)).normalized()
 			look_fwd = _fwd
-		dist = lerpf(_dist, _dist * ORBIT_PUSH_IN, _orbit_weight)
-		pitch = lerpf(_pitch, deg_to_rad(ORBIT_PITCH_DEG), _orbit_weight)
+		# Never pushed in past the portrait stop: the emote orbit at full zoom-in stays a portrait.
+		dist = lerpf(dist, maxf(dist * ORBIT_PUSH_IN, dist_min()), _orbit_weight)
+		pitch = lerpf(pitch, deg_to_rad(ORBIT_PITCH_DEG), _orbit_weight)
 
 	var desired := pivot - look_fwd * cos(pitch) * dist + _up * sin(pitch) * dist
 	var kp := 1.0 - exp(-POS_SMOOTH * delta)
@@ -1440,8 +1553,9 @@ func _snap_to_target() -> void:
 		_smoothed_quat = t.basis.get_rotation_quaternion()
 		_camera.global_transform = t
 		return
-	var pivot := _player.global_position + _up * PIVOT_HEIGHT
-	_smoothed_pos = pivot - _fwd * cos(_pitch) * _dist + _up * sin(_pitch) * _dist
+	var fr := _framing_at(_dist)
+	var pivot := _player.global_position + _up * fr.x
+	_smoothed_pos = pivot - _fwd * cos(fr.y) * _dist + _up * sin(fr.y) * _dist
 	_smoothed_quat = Basis.looking_at((pivot - _smoothed_pos).normalized(), _up).get_rotation_quaternion()
 	_camera.global_transform = Transform3D(Basis(_smoothed_quat), _smoothed_pos)
 
@@ -1487,7 +1601,7 @@ func _handle_input(delta: float) -> void:
 	if absf(ext_zoom) > 0.00001:
 		if _zoom_tween:
 			_zoom_tween.kill()
-		_dist_target = clampf(_dist_target + ext_zoom, dist_min(), dist_max())
+		_dist_target = clampf(_dist_target + ext_zoom * _zoom_scale(_dist_target), dist_min(), dist_max())
 		_dist = _dist_target
 		_zoom_user_set = true
 
@@ -1565,13 +1679,26 @@ func _zoom_step(step_m: float) -> void:
 		if _fp_zoom_drives_fov:
 			set_fov_deg(_fp_fov + step_m * _fov_per_zoom_metre())
 		return
-	_set_zoom(_dist_target + step_m)
+	# Not during a cutscene: the camera is the cutscene's (the touch API has the same gate).
+	if not _gameplay_active():
+		return
+	_set_zoom(_dist_target + step_m * _zoom_scale(_dist_target))
+
+
+## One zoom notch from a front end that is not the wheel (the phone's +/- buttons): `notches` < 0
+## zooms in. Same scaled step, same ease, same gates as a wheel notch; dropped while a modal is open
+## and in first person (a safari owns its own lens).
+func step_zoom(notches: float) -> void:
+	if not is_finite(notches) or _fp or EventBus.is_modal_open():
+		return
+	_zoom_step(notches * ZOOM_STEP)
 
 
 ## Degrees of lens per metre of third-person zoom: the whole zoom range maps onto the whole lens range,
 ## so a pinch that would take the follow camera from fully in to fully out takes the lens from 12 to 45.
 func _fov_per_zoom_metre() -> float:
-	return (FP_FOV_DEFAULT - FP_FOV_MIN) / maxf(dist_max() - dist_min(), 0.001)
+	# The NORMAL span (framing_min, not the portrait stop), so the safari lens feels exactly as before.
+	return (FP_FOV_DEFAULT - FP_FOV_MIN) / maxf(dist_max() - framing_min(), 0.001)
 
 
 func _set_zoom(target: float) -> void:

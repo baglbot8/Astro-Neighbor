@@ -48,8 +48,10 @@ extends Control
 ## Pointer ids the debug hooks use, kept well clear of real finger indices.
 const DEBUG_ID_BASE := 100
 
-## Metres of follow distance per pixel of pinch. The mobile zoom range is 5-13 m (8 m of span), so
+## Metres of follow distance per pixel of pinch. The mobile follow range is 5-13 m (8 m of span), so
 ## at 0.014 a ~570 px spread crosses the whole range - about a full comfortable two-thumb pinch.
+## Below 5 m (the portrait band, down to 2.2 m, 2026-10-16) the rig scales each pinch metre down by
+## distance / 5 m, so the last stretch to the close-up takes ~300 px more rather than a flick.
 const PINCH_M_PER_PX := 0.014
 
 ## Prompts that mean "there is nothing to interact with"; the context button dims but stays put, so
@@ -66,6 +68,20 @@ var _place_cancel: TouchButton
 var _bag: TouchButton
 var _journal: TouchButton
 var _pause: TouchButton
+## Camera zoom +/- (2026-10-16, the user: "so the player can see the astronaut closer in case they
+## want to take screenshots on the phone"). TAP buttons: a tap is one wheel notch through
+## `CameraRig.step_zoom`, and holding past ZOOM_HOLD_DELAY keeps zooming at ZOOM_HOLD_RATE through
+## `CameraRig.add_zoom` (the pinch path), so the rig's clamps, scaling and gates apply to both.
+var _zoom_in: TouchButton
+var _zoom_out: TouchButton
+## Seconds the current zoom button has been held; -1 when neither is down.
+var _zoom_hold := -1.0
+const ZOOM_HOLD_DELAY := 0.35
+## Metres per second while a zoom button is held (scaled by the rig inside the portrait band).
+const ZOOM_HOLD_RATE := 3.0
+## Width kept free after the pause button for home_album_camera.gd's mobile "Camera" pill (measured
+## 146 px wide on the 1560x720 canvas of a 2556x1179 phone frame, 2026-10-16), plus a little slack.
+const ALBUM_PILL_RESERVE := 156.0
 ## name -> TouchButton, for hit testing and for the timeline hooks.
 var _buttons: Dictionary = {}
 
@@ -216,7 +232,15 @@ func _build() -> void:
 		UIStyle.CREAM, UIStyle.CREAM_EDGE, [])
 	_pause.glyph = TouchButton.Glyph.PAUSE
 	_pause.tapped.connect(_open_pause)
-	for b in [_bag, _journal, _pause]:
+	_zoom_in = _make_button("zoom_in", MobileUI.HUD_BTN_R, MobileUI.HUD_BTN_HIT_R,
+		UIStyle.CREAM, UIStyle.CREAM_EDGE, [])
+	_zoom_in.glyph = TouchButton.Glyph.ZOOM_IN
+	_zoom_in.tapped.connect(_on_zoom_tapped.bind(-1.0))
+	_zoom_out = _make_button("zoom_out", MobileUI.HUD_BTN_R, MobileUI.HUD_BTN_HIT_R,
+		UIStyle.CREAM, UIStyle.CREAM_EDGE, [])
+	_zoom_out.glyph = TouchButton.Glyph.ZOOM_OUT
+	_zoom_out.tapped.connect(_on_zoom_tapped.bind(1.0))
+	for b in [_bag, _journal, _pause, _zoom_in, _zoom_out]:
 		b.chrome = true
 	_on_prompt_changed("")
 
@@ -280,6 +304,14 @@ func _layout() -> void:
 	_bag.centre = Vector2(hx, hy)
 	_journal.centre = Vector2(hx + step, hy)
 	_pause.centre = Vector2(hx + step * 2.0, hy)
+	# Zoom pair: the same row, AFTER the slot home_album_camera.gd's "Camera" pill takes on the home
+	# planet (it sits at pause's hit edge + 24 and takes taps that no TouchControls widget claims, so
+	# a zoom button there would steal them). The slot is reserved on every planet so the pair never
+	# moves under the thumb. Hit circles end at x ~690 of a 1560-wide canvas: left of the camera-drag
+	# half (x >= 50 %) and above the stick zone (starts at STICK_ZONE_TOP), like the rest of the row.
+	var zx := hx + step * 2.0 + MobileUI.HUD_BTN_HIT_R + 24.0 + ALBUM_PILL_RESERVE + 12.0 + MobileUI.HUD_BTN_R
+	_zoom_out.centre = Vector2(zx, hy)
+	_zoom_in.centre = Vector2(zx + MobileUI.HUD_BTN_R * 2.0 + 16.0, hy)
 
 
 ## True when `p` may start a camera drag: the open right-hand side, below the HUD row, and not on
@@ -719,6 +751,7 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_update_photo_gate()
+	_hold_zoom(delta)
 	_drive_camera()
 	_fade(delta)
 
@@ -733,7 +766,7 @@ func _update_photo_gate() -> void:
 	if active == _photo_gate_active:
 		return
 	_photo_gate_active = active
-	for b in [_primary, _emote, _boost, _bag, _journal, _pause]:
+	for b in [_primary, _emote, _boost, _bag, _journal, _pause, _zoom_in, _zoom_out]:
 		if b == null:
 			continue
 		if active:
@@ -757,6 +790,31 @@ func _drive_camera() -> void:
 		rig.call("add_zoom", _pinch_zoom)
 	_cam_drag = Vector2.ZERO
 	_pinch_zoom = 0.0
+
+
+## One tap on + or -: a single notch through the rig (it scales, clamps, eases and gates it).
+func _on_zoom_tapped(notches: float) -> void:
+	_zoom_hold = 0.0
+	var rig := _camera_rig()
+	if rig != null and rig.has_method("step_zoom"):
+		rig.call("step_zoom", notches)
+
+
+## Holding + or - keeps zooming after ZOOM_HOLD_DELAY, through the same accumulator a pinch uses.
+func _hold_zoom(delta: float) -> void:
+	var dir := 0.0
+	if _zoom_in != null and _zoom_in.down:
+		dir = -1.0
+	elif _zoom_out != null and _zoom_out.down:
+		dir = 1.0
+	if dir == 0.0:
+		_zoom_hold = -1.0
+		return
+	if _zoom_hold < 0.0:
+		_zoom_hold = 0.0
+	_zoom_hold += delta
+	if _zoom_hold > ZOOM_HOLD_DELAY:
+		_pinch_zoom += dir * ZOOM_HOLD_RATE * delta
 
 
 ## Any touch at all wakes the controls back to their idle opacity.
@@ -825,7 +883,8 @@ func debug_drag(id: int, x: float, y: float) -> void:
 
 
 ## Puts a finger on the CENTRE of a named widget ("primary", "emote", "boost", "bag", "journal",
-## "pause", "rotate_l", "rotate_r", "place_cancel") and lifts it again on the next call.
+## "pause", "zoom_in", "zoom_out", "rotate_l", "rotate_r", "place_cancel") and lifts it again on the
+## next call.
 func debug_widget(id: String, pressed: bool) -> void:
 	var b: TouchButton = _buttons.get(id)
 	if b == null:
