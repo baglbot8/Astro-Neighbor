@@ -6,11 +6,17 @@ extends Node
 ## TWO SHAPES, chosen once per scene by `CampaignData.gates_on()`:
 ##
 ## THE CAMPAIGN ("Stranded", docs/CORE_LOOP.md) - a new game:
-##   crash    `CrashIntro`, once ever (flag intro_crash_done): your survey ship is bonked by an
-##            asteroid in deep space and crash-lands on the pad at home, one continuous shot with no
-##            cut (STYLE_GUIDE R2.5), skippable by any press. Only at home, only on a fresh start.
-##   beat 0  GREET    Professor Comet radios in: he saw it all on his scope, is relieved you are in
-##                    one piece, and says what to do. "I'll manage" skips every hint.
+##   crash    once ever (flag intro_crash_done), only at home, only on a fresh start. Since 2026-10-18
+##            (docs/INTRO_SPEC.md 3-5) it opens in the COCKPIT (`CockpitIntro`, first person, the
+##            Professor on the radio, things to look at, then the giant meteor grazes the ship) and cuts
+##            under the cockpit's white impact flash to `CrashIntro` begun AT THE HIT: the exterior fall,
+##            landing, bounce and hatch. Both are created on the scene's first frame - the crash shot
+##            sets up and waits (`wait_for_go`) while the cockpit plays - see `_start_crash`. One skip
+##            pop-up at any point; a skip ends in exactly the played-out state.
+##   beat 0  GREET    Professor Comet radios in (INTRO_SPEC 6): he saw it all, are you hurt, what shall
+##                    he call you (`NamePicker`), the ship can only hop to the Commons, the meteor, the
+##                    neighbours are packing, meet him on the Commons; then "Shall I talk you through
+##                    it?". "I'll manage" skips every hint.
 ##   beat 1  MOVE     walk MOVE_DIST metres.
 ##   beat 2  SCRAP    pick up scrap (EventBus.scrap_changed with a positive delta).
 ##   beat 3  ROCKET   look at the rocket: within ROCKET_LOOK_DIST and facing it for ROCKET_LOOK_HOLD,
@@ -35,6 +41,8 @@ extends Node
 ## COMMAND LINE (Director timelines)
 ##   --intro      run the intro even though a Director timeline is driving (opt-in, see below)
 ##   --no-intro   never run it
+##   --crash-only the opening without the cockpit: the old full CrashIntro shot from its navy card
+##                (2026-10-18; for A/B runs of the crash shot and as a way round a broken cockpit)
 ## The intro freezes the player for a conversation (and the crash for a whole shot), which would
 ## break every existing timeline that presses move_forward at t=0.5. So under a Director it is OFF
 ## unless the timeline asks for it with `--intro`; the crash additionally needs the campaign, i.e.
@@ -95,6 +103,9 @@ var _hinted := false
 var _greeting := false
 var _crashing := false
 var _crash: CrashIntro
+## The cockpit half of the opening while it plays (it frees itself); see `_start_crash`.
+var _cockpit: CockpitIntro
+var _cockpit_running := false
 var _player: Node3D
 var _last_pos := Vector3.ZERO
 var _walked := 0.0
@@ -245,18 +256,64 @@ func _finish() -> void:
 
 
 # ============================================================================= the crash
+## THE OPENING (docs/INTRO_SPEC.md 3 and 5). Both halves are created here, on the scene's first frame:
+##   1. CrashIntro, told to begin AT THE HIT and to WAIT. Its `_begin` (deferred, this same frame) does
+##      what it always did under its navy card: freezes and hides the astronaut, picks the landing spot
+##      and snaps the rig behind it - so environment.gd's 1.5 s sky-bearing lock reads the rig where
+##      control will come back - and builds its nodes. Then it waits, drawing nothing.
+##   2. CockpitIntro (builder B1), which plays and then emits `finished(skipped)`:
+##        false - on the cut, its white flash fully opaque: `_crash.go()` starts the exterior shot at
+##                the hit, under the cockpit's fading white.
+##        true  - after its own SkipConfirm and fade-out: `_crash.finish_skipped()` puts everything in
+##                the played-out end state and fades back in.
+## FLAG_CRASH is set here, as it always was, so a quit half way through never replays the opening.
 func _start_crash() -> void:
-	if _crash != null or not is_inside_tree():
+	if _crash != null or _cockpit != null or not is_inside_tree():
 		return
 	GameState.set_flag(FLAG_CRASH)
 	_crashing = true
 	_crash = CrashIntro.new()
 	_crash.name = "CrashIntro"
 	_crash.finished.connect(_on_crash_finished)
+	if OS.get_cmdline_user_args().has("--crash-only"):
+		add_child(_crash)
+		return
+	_crash.start_t = CrashIntro.HIT_T
+	_crash.wait_for_go = true
 	add_child(_crash)
+	_cockpit = CockpitIntro.new()
+	_cockpit.name = "CockpitIntro"
+	_cockpit.finished.connect(_on_cockpit_finished)
+	_cockpit_running = true
+	add_child(_cockpit)
+
+
+## The cockpit is done (it frees itself; it is never freed here). Hand over to the crash shot.
+func _on_cockpit_finished(skipped: bool) -> void:
+	_cockpit_running = false
+	_cockpit = null
+	if _crash != null and is_instance_valid(_crash) and not _crash.is_done():
+		if skipped:
+			_crash.finish_skipped()
+		else:
+			_crash.go()
+		return
+	# The crash shot could not run (CrashIntro found a piece of the world missing and bowed out while the
+	# cockpit played): nothing else will fade a skip back in, so do it here, then on to the radio call.
+	if skipped:
+		SceneRouter.fade_in(0.45)
+	_crash_over()
 
 
 func _on_crash_finished(_skipped: bool) -> void:
+	# A crash shot that bowed out early (a missing piece) while the cockpit still has the screen: wait
+	# for the cockpit, which calls `_crash_over` itself.
+	if _cockpit_running:
+		return
+	_crash_over()
+
+
+func _crash_over() -> void:
 	_crashing = false
 	# The radio call follows CRASH_TO_RADIO seconds after control returns (see _tick_greet).
 	_time = maxf(_time, GREET_DELAY - CRASH_TO_RADIO)
@@ -380,7 +437,7 @@ func _rocket_seen() -> void:
 		return
 	HintChannel.mark_acted(_hint_key(Beat.ROCKET))
 	_set_beat(Beat.ROCKET)
-	_request_hint("intro_rocket_seen", "Rusty and dented. She'll only hop to nearby worlds.", "star", 0.3)
+	_request_hint("intro_rocket_seen", "Rusty and dented. She'll just about limp to the Commons.", "star", 0.3)
 	if _beat == Beat.ROCKET:
 		_advance()
 
@@ -434,7 +491,8 @@ func _hint_text(b: int) -> String:
 			return "Walk up to your rocket and take a look at her."
 		Beat.FLY:
 			if _campaign:
-				return "Take the rocket to %s, Zorp or Bolt." % Journal.planet_name("hub")
+				# Only the Commons is in reach until the Commons patch (docs/INTRO_SPEC.md 7.1).
+				return "Take the rocket to the Commons."
 			return "Zorp and Bolt live out there. Take the rocket."
 	return ""
 
@@ -628,7 +686,7 @@ func dev_replay_call() -> String:
 	AudioManager.play_sfx("ui_open", -8.0)
 	runner.begin(radio, player)
 	if campaign:
-		await _campaign_call(runner, radio)
+		await _campaign_call(runner, radio, true)
 	else:
 		await _legacy_call(runner, radio)
 	runner.finish()
@@ -678,27 +736,48 @@ func _hang_campaign_radio(radio: Node3D, player: Node3D) -> void:
 	radio.global_position = player.global_position + side * RADIO_SIDE_M + up * 0.30
 
 
-## The campaign's call, straight after the crash: he saw it, he is relieved, and he says what to
-## do in the order the beats ask for it. Each string is ONE box; "\n" gives a box its second line
-## (<= 60 characters a line, STYLE_GUIDE "Writing").
-func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
+## THE CAMPAIGN CALL'S NEW LINES (docs/INTRO_SPEC.md 6, 2026-10-18), each ONE box of at most 60
+## characters with the longest NamePicker name in place of "%s" (showcase/name_picker_lines.tscn checks
+## every one of them, and every box of `_campaign_call`, and fails tools/check.sh on a long one).
+const CALL_HURT := "You're not hurt, are you? No? Tough as old boots!"
+const CALL_ASK_NAME := "What shall I call you, pilot?"
+const CALL_WELCOME := "Welcome to the neighbourhood, %s!"
+const CALL_SHIP := "Your ship is hurt. It can hop to the Commons, no more."
+const CALL_BUSY := "Everyone's busy getting ready to go. Few can spare a hand."
+const CALL_MEET := "Meet me on the Commons. I will explain there."
+const CALL_HOP := "Then hop over to the Commons. I'll put the kettle on."
+
+
+## The campaign's call, straight after the crash (docs/INTRO_SPEC.md 6): he saw it, are you hurt, your
+## name, the ship, the meteor, the packing, meet me on the Commons - then the walkthrough offer, in the
+## order the beats ask for it. Each string is ONE box; "\n" gives an older box its second line (<= 60
+## characters a line, STYLE_GUIDE "Writing"); every box new on 2026-10-18 is one line of <= 60.
+## `replay` (the dev menu's "Radio call only") keeps the name already picked instead of asking again.
+func _campaign_call(runner: DialogueRunner, radio: Node3D, replay: bool = false) -> void:
 	await runner.say(radio, [
-		"Hello? Is this thing on? Oh! Professor Comet here.\nAre you all right down there?",
+		"Pilot? Come in, pilot! Can you hear me?",
 		"Oh, thank the stars. I saw it all on my scope.\nWhat a tumble! Quite the landing, too.",
+		CALL_HURT,
+		CALL_ASK_NAME,
 	])
-	# THE METEOR (docs/STORY_HOME_SPEC.md 5.1): the story's very first mention of it, right after the
-	# crash, in the same unworried tone as the rest of this call - "not soon", never a countdown.
+	# The picker writes GameState.player_style["name"] (player_home.gd `_who()` and the Day-1 mail read
+	# it). The box closes behind it and the conversation (camera, frozen astronaut) stays open.
+	var who := str(GameState.player_style.get("name", NamePicker.DEFAULT_NAME))
+	if not replay:
+		who = await NamePicker.pick(self)
 	await runner.say(radio, [
+		CALL_WELCOME % who,
+		CALL_SHIP,
+		# THE METEOR (docs/STORY_HOME_SPEC.md 5.1): the story's very first mention of it, right after
+		# the crash, in the same unworried tone as the rest of this call - "not soon", never a countdown.
 		"Bad timing, I'm afraid. There's a meteor coming.",
 		"Oh, not today! Not for ages. But folks are packing.",
+		CALL_BUSY,
+		CALL_MEET,
 	])
-	# HIS FIRST TASK (docs/PLANET_SAFARI_SPEC.md 15.3, 2026-09-26; it replaces S4's lantern-fish sky ask,
-	# whose flight is retired): photograph a neighbour on their world and bring it to him at the
-	# Commons. Opened here, UNCONDITIONALLY, before the walkthrough choice below - both branches speak
-	# it in their own words. `ProfessorAsk.open_task` is a no-op once he has been paid (DONE_FLAG), so
-	# the dev menu's "replay call" can never re-open a finished task. He collects it in person -
-	# src/campaign/professor_ask.gd `run`, the only place the task is ever closed.
-	ProfessorAsk.open_task()
+	# HIS PHOTO TASK is no longer opened here (INTRO_SPEC 6 and 7.4): it opens on the Commons once the
+	# patch is fitted (src/campaign/first_hour.gd, builder B3), with the residents' last look as its
+	# reason. So no line in this call mentions photos any more.
 	var solo: int = await runner.ask(radio, "Shall I talk you through it?", ["Yes, please", "I'll manage"])
 	if solo == 1:
 		# "I'll manage" tapped by accident is exactly the user's 2026-09-14 report - confirm before
@@ -707,23 +786,18 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D) -> void:
 		if skip_it:
 			await runner.say(radio, [
 				"Splendid. I'll keep my scope on you.\nShout if the sky misbehaves.",
-				"Oh — and when you visit a neighbour, snap\ntheir photo for my records? Bring it to the Commons.",
 			])
 			_skip_all()
 			return
+	# Only the Commons is in reach at the start (INTRO_SPEC 1.5 and 7.1; CALL_SHIP says so), so the old
+	# "Zorp and Bolt are a short hop" box became CALL_HOP. "That rock" became "That bump": the thing you
+	# grazed is called the meteor in every line (INTRO_SPEC 2), and this one meant the landing.
 	await runner.say(radio, [
 		"First, have a little look around.\nYou've landed somewhere rather nice.",
-		"That rock knocked scrap all over the place.\nPick it up. Scrap mends things.",
-		"Then check your rocket. I'm afraid she's badly\nbruised. She'll only reach the nearest worlds.",
-		"%s, Zorp and Bolt are a short hop.\nFly over and ask for help. Folk are kind here." % Journal.planet_name("hub"),
+		"That bump knocked scrap all over the place.\nPick it up. Scrap mends things.",
+		"Then check your rocket. She's badly bruised, poor thing.",
+		CALL_HOP,
 		"I'll keep my scope on you. Off you go!",
-	])
-	# Come and see him at the Commons, with a neighbour's photo (spec 15.3) - one more box, right after
-	# his existing send-off above (kept intact). The first line is S4's, unchanged; the second used to
-	# ask for a lantern-fish from the retired flight.
-	await runner.say(radio, [
-		"Oh — one more thing. Come and see me at the\nCommons when you get a moment, would you?",
-		"And when you visit a neighbour, photograph them\nfor my records. Bring it along when you come.",
 	])
 
 

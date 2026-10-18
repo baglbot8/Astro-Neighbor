@@ -276,6 +276,22 @@ const DATA := {
 			"remind": ["Still looking? No rush! Slight rush.", "Our shelves miss you. So do I."],
 			"gift": ["A parcel! Ooh, exciting!", "Ooh it's heavy. Heavy is good!"],
 		},
+		# THE FIRST HOUR (docs/INTRO_SPEC.md 7.3, src/campaign/first_hour.gd): her bit of the ship's
+		# patch, for a fair deal - sweep the scrap off the Commons (you keep it). "ask" %d = the count,
+		# "progress" %d of %d = picked / needed. Every box <= 60 characters.
+		"first_hour": {
+			"ask": [
+				"A patch bit? Sure, customer. Let's make a deal!",
+				"Pick up %d scrap around the Commons for me.",
+				"You keep the scrap. I get a tidy shop front. Deal!",
+			],
+			"progress": ["%d of %d scrap so far. Keep sweeping, customer!"],
+			"done": [
+				"Spotless! You drive a hard bargain, customer.",
+				"One patch bit, as promised. Pleasure doing business!",
+			],
+			"after": ["Off you go! The Professor's waiting, customer."],
+		},
 	},
 	# ==========================================================================================
 	"pop": {
@@ -334,6 +350,24 @@ const DATA := {
 			"decline": ["Oh. Okay! I'll do it. Slowly.", "No worries! I'll figure it out."],
 			"remind": ["Still on that errand? Take your time.", "Our shelves miss you. Mostly."],
 			"gift": ["A delivery! For us! Yay!", "It's heavy. I'll pretend it isn't."],
+		},
+		# THE FIRST HOUR (docs/INTRO_SPEC.md 7.3, src/campaign/first_hour.gd): he dropped his bit of
+		# the patch and it rolled off toward the event space. Every box <= 60 characters.
+		"first_hour": {
+			"ask": [
+				"Oh. The patch bit. I had it just now.",
+				"I think it rolled off toward the music. Oops.",
+				"Can you look? I'd only drop it again.",
+			],
+			"progress": [
+				"Over by the music, I think. My feelers say so.",
+				"By the big speakers, I think! Near the dance floor.",
+			],
+			"done": [
+				"You found it! You're a really good finder.",
+				"Keep it. It's safer with you than with me.",
+			],
+			"after": ["Hi! I haven't dropped anything. Yet."],
 		},
 	},
 	# ==========================================================================================
@@ -397,6 +431,23 @@ const DATA := {
 			"decline": ["Of course. Fashion can wait.", "Another time. No trouble at all."],
 			"remind": ["Still hunting? Take your time, darling.", "My order can wait. Mostly."],
 			"gift": ["A parcel! Beautifully carried, too.", "Oh, the wrapping! Someone has taste."],
+		},
+		# THE FIRST HOUR (docs/INTRO_SPEC.md 7.3, src/campaign/first_hour.gd): she cuts the patch's
+		# cover, but it must fit - measure the dent on your rocket with her tape. Her "done" lines
+		# notice your camera, which is how the Professor hears you are a photographer.
+		"first_hour": {
+			"ask": [
+				"A patch? I'll cut you a cover, darling.",
+				"But a patch must fit. Take my tape measure.",
+				"Go and measure the dent on your rocket for me.",
+			],
+			"progress": ["The dent, darling. Your rocket's on the pad."],
+			"done": [
+				"Perfect numbers. Snip, snip... there!",
+				"Cut to fit, and in a decent colour.",
+				"Is that a camera on your belt? So cool, darling!",
+			],
+			"after": ["Off you go, darling. Love the boots!"],
 		},
 	},
 	# ==========================================================================================

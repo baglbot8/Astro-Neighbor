@@ -96,10 +96,20 @@ static func run(npc: NPC, player: Node3D) -> void:
 	# `ready()`'s narrower case (a photo already in hand), so `ProfessorAsk.run` below is his whole
 	# first meeting then: it names him and places him, not the player, as the voice on the radio, in one
 	# line, instead of a generic intro followed by a second introduction right before his thanks.
+	# THE FIRST HOUR (docs/INTRO_SPEC.md 7, src/campaign/first_hour.gd): while the Commons patch is
+	# being earned, the Professor, Pip, Pop and Stella talk about it and nothing else; checked before
+	# his photo task so it wins while both are open.
+	if FirstHour.handles(npc_id):
+		await FirstHour.run(runner, npc, first_meeting)
+		runner.finish()
+		return
 	if ProfessorAsk.handles(npc_id):
 		await ProfessorAsk.run(runner, npc, first_meeting)
 		runner.finish()
 		return
+	# The Professor's parcel for Zorp is handed over first; his project then starts in this same talk.
+	if FirstHour.parcel_for(npc_id):
+		await FirstHour.deliver_parcel(runner, npc)
 
 	# ---- ONE QUESTION PER TALK (docs/PLANET_SAFARI_SPEC.md 8.2) ------------------------------
 	# The planet safari's offer below gives way to anything else this talk carries: a first meeting,

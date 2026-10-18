@@ -64,6 +64,26 @@ extends Node3D
 ## SKIP. Any key, click, tap or pad button - or the interact / ui_accept / jump / cancel / pause
 ## actions, so a Director timeline can skip it too - fades to navy, puts everything where the shot
 ## would have left it and fades back in. Armed from SKIP_ARM_T, after SceneRouter's own fade-in.
+##
+## BEGIN AT THE HIT (2026-10-18, docs/INTRO_SPEC.md 5). A new campaign game now opens in the cockpit
+## (CockpitIntro, IntroDirector starts it) and CUTS to this shot under the cockpit's white impact flash
+## - the one cut the user allowed. Three knobs, all set before add_child; untouched, the shot plays
+## exactly as it always has (the dev menu's replay and every old timeline):
+##   start_t      where the shot clock starts. HIT_T starts on the hit's own frame: no navy card (its
+##                alpha is the same function of `_t` it always was, 0 there), no cruise, and the hit's
+##                flash, sparks, chips, shake and clean-to-rusty stepping all play under the cockpit's
+##                fading white. Everything else is a function of `_t`, so seeding it is the whole job.
+##   wait_for_go  `_begin` does all the set-up (freezes and hides the astronaut, picks the landing spot,
+##                snaps the rig there, builds the nodes) and then WAITS; `go()` starts the clock, or
+##                `finish_skipped()` ends it in the skipped state. IntroDirector creates this BEFORE the
+##                cockpit, on the scene's first frame, for the two reasons the old card had (see "WHY THE
+##                NAVY CARD"): environment.gd locks the neighbouring worlds' bearings from the rig it sees
+##                in the first 1.5 s, so the rig should already stand where control comes back, as it did
+##                under the card; and the landing solve (37-39 ms, measured for the card) belongs on the
+##                first frame, not on the cut.
+##   the rock     the small lumpy asteroid only flies when the shot starts before it enters. A shot that
+##                begins at the hit never shows it: the thing you grazed was the cockpit's giant meteor,
+##                and this little rock must not pass for it (INTRO_SPEC 5, the lead's default).
 
 signal finished(skipped: bool)
 
@@ -292,7 +312,7 @@ const CAPTIONS := [
 	[4.3, 6.1, "Hang on, what's that on my scope? Look out!"],
 	# From 7.95, not 7.6: the first fast spin swings the nose up to the phone caption's bottom edge
 	# at 7.8-7.9 (measured 0.015 of frame height under it at 1404x648), and this lets that pass first.
-	[7.95, 10.3, "Bonk! Oh dear, you're spinning like a top!"],
+	[7.95, 10.3, "Oof! Oh dear, you're spinning like a top!"],
 	[10.6, 13.3, "Hold tight! Aim for that little green planet!"],
 	[13.6, 15.4, "Nose up! Nose up!"],
 ]
@@ -318,7 +338,19 @@ var _chips: Array[MeshInstance3D] = []
 var _chip_vel: Array[Vector3] = []
 var _chip_spin: Array[Vector3] = []
 
+## Where the shot clock starts (see "BEGIN AT THE HIT" above). Set before add_child.
+var start_t := -CARD_SECONDS
+## Set up, then wait for `go()` / `finish_skipped()` (see "BEGIN AT THE HIT" above). Set before add_child.
+var wait_for_go := false
+
 var _t := -CARD_SECONDS
+## `_begin` has solved the shot and built its nodes (the world is frozen for it).
+var _prepared := false
+## `go()` / `finish_skipped()` arrived before `_begin` had run; acted on at the end of `_begin`.
+var _go_requested := false
+var _skip_requested := false
+## Whether the small rock flies in this shot (only when the shot starts before it enters).
+var _rock_on := true
 var _running := false
 var _done := false
 var _skipping := false
@@ -404,17 +436,34 @@ func _begin() -> void:
 		# Never strand anybody on a missing piece: no shot, straight to the radio call.
 		push_warning("CrashIntro: world is missing a piece (planet/rocket/player/rig); skipping the crash.")
 		_done = true
-		finished.emit(false)
+		# A skip that came in before this ran was promised a fade back in (see `finish_skipped`).
+		if _skip_requested:
+			SceneRouter.fade_in(0.45)
+		finished.emit(_skip_requested)
 		queue_free()
 		return
 	_modal = true
 	EventBus.ui_modal_opened.emit("cutscene")
 	for a in OS.get_cmdline_user_args():
 		_trace_on = _trace_on or a.begins_with("--crash-trace=")
+	_t = start_t
+	_rock_on = start_t < ASTEROID_IN_T - 0.1
 	_freeze_player()
 	_solve_geometry()
 	_build_nodes()
 	_music = _planet.data.music_track if _planet.data != null else ""
+	_open_trace()
+	_prepared = true
+	if _skip_requested:
+		finish_skipped()
+	elif wait_for_go and not _go_requested:
+		_log("prepared; waiting for go (start_t=%.2f)" % start_t)
+	else:
+		_start_shot()
+
+
+## Starts the clock at `start_t` (from `_begin`, or from `go()` when the shot was told to wait).
+func _start_shot() -> void:
 	AudioManager.play_music("space", 0.8)
 	_rocket.set_ladder_deployed(false)
 	_rocket.set_engine(true, 0.7)
@@ -423,11 +472,52 @@ func _begin() -> void:
 	# asteroid"); rocket_pad.gd has already painted CampaignData.finish_stage() (0, rusty, on a new
 	# game) by the time this node runs, so this overrides it. The hit swaps it back (_update_fx).
 	_rocket.set_finish_stage(RocketModel.FINISH_CLEAN)
-	_open_trace()
-	_log("begin card=%.2fs hit=%.2f td=%.2f end=%.2f" % [CARD_SECONDS, HIT_T, TD_T, END_T])
+	_log("begin card=%.2fs start=%.2f hit=%.2f td=%.2f end=%.2f rock=%s" % [
+		CARD_SECONDS, start_t, HIT_T, TD_T, END_T, str(_rock_on)])
 	_running = true
 	set_process(true)
 	_step(0.0)
+
+
+## Starts a shot that was created with `wait_for_go` (IntroDirector, on the cockpit's cut). Safe to call
+## before `_begin` has run (it starts as soon as the set-up is done) and a no-op once started or ended.
+func go() -> void:
+	if _done or _running or _skipping:
+		return
+	if not _prepared:
+		_go_requested = true
+		return
+	# The cockpit had the screen until now. Put the astronaut and the rig back exactly where the shot
+	# was solved for, in case anything touched them meanwhile (the same calls `_apply_candidate` made,
+	# so on an untouched world this changes nothing).
+	_freeze_player()
+	_place_player(_face, 0.02)
+	_rig.reseat_behind_player()
+	_start_shot()
+
+
+## Ends the shot at once in the state playing it out would have left (`_apply_end_state` via
+## `_complete(true)`), then fades the screen back in - the second half of `_skip()`, for a skip the
+## cockpit already asked about and faded out for (IntroDirector). Safe before `_begin` has run.
+func finish_skipped() -> void:
+	if _done or _skipping:
+		return
+	if not _prepared:
+		_skip_requested = true
+		return
+	_skipping = true
+	_log("skipped before the shot started")
+	if _captions != null:
+		_captions.stop_voice()
+	# The wisp tail and the self-free run in _process (see `_process`), which waits for `go()` otherwise.
+	set_process(true)
+	_complete(true)
+	SceneRouter.fade_in(0.45)
+
+
+## True once the shot has handed control back (played out or skipped).
+func is_done() -> bool:
+	return _done
 
 
 # ============================================================================= geometry
@@ -1120,7 +1210,7 @@ func _rocket_look(k: float) -> void:
 
 
 func _update_asteroid(t: float, _dt: float) -> void:
-	if t < ASTEROID_IN_T - 0.1 or t > AST_HIDE_T:
+	if not _rock_on or t < ASTEROID_IN_T - 0.1 or t > AST_HIDE_T:
 		if _asteroid.visible:
 			_asteroid.visible = false
 			_asteroid.set_trail(false)
@@ -1435,7 +1525,13 @@ func _complete(skipped: bool) -> void:
 	_end_modal()
 	_done = true
 	_running = false
-	_log("complete skipped=%s finish=%d" % [str(skipped), _rocket.finish_stage()])
+	# The end state, one line, so a skipped and a played run can be compared field by field.
+	var rc := _rig.get_camera()
+	_log("complete skipped=%s finish=%d rocket=%s player=%s visible=%s physics=%s rocket_at_rest=%s rig_cam=%s current=%s" % [
+		str(skipped), _rocket.finish_stage(), str(_rocket.global_position.snapped(Vector3.ONE * 0.001)),
+		str(_player.global_position.snapped(Vector3.ONE * 0.001)), str(_player.visible),
+		str(_player.is_physics_processing()), str(_rocket.global_transform.is_equal_approx(_rest)),
+		str(rc.global_position.snapped(Vector3.ONE * 0.01)), str(rc.current)])
 	finished.emit(skipped)
 
 
@@ -1457,8 +1553,9 @@ func _end_modal() -> void:
 
 func _exit_tree() -> void:
 	# Leaving mid-shot (quit to title): never leave the menus locked, the player frozen or the
-	# rocket hanging in space.
-	if not _done and _running:
+	# rocket hanging in space. `_prepared` covers a shot still waiting for `go()` under the cockpit,
+	# which has already frozen the astronaut and opened the cutscene modal.
+	if not _done and (_running or _prepared):
 		if _rocket != null and is_instance_valid(_rocket):
 			_rocket.global_transform = _rest
 			_rocket.set_engine(false)
@@ -1536,7 +1633,9 @@ func _build_nodes() -> void:
 	var who := str(NpcData.get_data("mayor_orbit").get("display_name", "Professor Comet"))
 	var accent := Color(str(NpcData.get_data("mayor_orbit").get("accent", "#c9a15c")))
 	_captions.setup("%s (radio)" % who, accent)
-	_captions.set_card_alpha(1.0)
+	# The same function of the clock `_step` uses: fully up for a shot from the start, never shown for a
+	# shot that begins at the hit (nor while one waits for `go()` under the cockpit).
+	_captions.set_card_alpha(1.0 - smoothstep(0.0, REVEAL_SECONDS, start_t))
 
 
 # ============================================================================= measurement
@@ -1577,12 +1676,22 @@ func _on_pre_draw() -> void:
 	# Quaternions at 8 decimals: at 5 the rounding alone read as 0.5 deg "rotations" between frames
 	# (2 acos(1 - 1e-5) = 0.51 deg), which swamped the real per-frame turn in round 1's trace.
 	_trace.store_line("%d,%.4f,%s,%.3f,%.4f,%.4f,%.4f,%.8f,%.8f,%.8f,%.8f,%.3f,%.4f,%.4f,%.4f,%.4f,%d,%.3f,%s" % [
-		_trace_frame, _t, "crash" if cam == _cam else "rig", card,
+		_trace_frame, _t, _cam_tag(cam), card,
 		xf.origin.x, xf.origin.y, xf.origin.z, q.x, q.y, q.z, q.w, cam.fov, cam.h_offset, cam.v_offset,
 		sp.x / vp.x, sp.y / vp.y, 0 if cam.is_position_behind(centre) else 1, blend, _trace_extra(cam, vp)])
 	_trace_frame += 1
 	# Runs on after the hand-back until this node leaves (WISP_TAIL), so the radio call's opening
 	# push-in, 0.9 s after control returns, is in the same file as the shot.
+
+
+## Which camera drew the frame: this shot's, the gameplay rig's, or another (the cockpit's, while a
+## shot made with `wait_for_go` waits under it).
+func _cam_tag(cam: Camera3D) -> String:
+	if cam == _cam:
+		return "crash"
+	if _rig != null and is_instance_valid(_rig) and cam == _rig.get_camera():
+		return "rig"
+	return "other"
 
 
 ## The trace's measurement columns, all as fractions of the canvas: the rock's centre and radius, the

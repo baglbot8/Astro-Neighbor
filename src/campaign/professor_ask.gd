@@ -6,8 +6,14 @@ extends RefCounted
 ## where you meet him in person (the user's 2026-09-22 ruling, docs/STORY_SPINE_SPEC.md 2.5).
 ##
 ## Static functions only, no autoload - same shape as `PhotoAsks`/`CampaignData`/`NormQuiz`. The task
-## is OPENED by `src/onboarding/intro_director.gd` (his radio call, `_campaign_call` -> `open_task()`),
-## and this file is the only place that ever closes it.
+## is OPENED by `src/campaign/first_hour.gd` when he fits the Commons patch (docs/INTRO_SPEC.md 6 and
+## 7.4: no longer by the radio call; an older build's radio call may still call `open_task()`, which is
+## harmless - it only sets a flag, so opening twice is the same as once), and this file is the only
+## place that ever closes it.
+##
+## WHY HE WANTS THE PHOTO (INTRO_SPEC 1.6, option A "one last look", 2026-10-18): the neighbours are
+## packing, and a photo of their world shows them what they might leave behind. Not "for my records" -
+## the user did not understand why he wanted the picture.
 ##
 ## THE ROUTE (docs/PLANET_SAFARI_SPEC.md 17.2 item 2): `Conversation.run` -> `ProfessorAsk.handles
 ## (npc_id)` -> `ProfessorAsk.run(runner, npc, first_meeting)`. `handles()` is the gate (mayor_orbit,
@@ -44,7 +50,8 @@ const OPEN_FLAG := "professor_neighbour_photo_open"
 const PROFESSOR_PAY := 50
 
 
-## Opens the task. Called by the radio call; a no-op once he has been paid (the dev menu's replay).
+## Opens the task. Called by FirstHour when the patch is fitted; a no-op once he has been paid (the dev
+## menu's replay), and idempotent before that (a second call only sets the same flag again).
 static func open_task() -> void:
 	migrate_old_ask()
 	if GameState.flag(DONE_FLAG):
@@ -152,6 +159,35 @@ static func _roster_friend(key: String) -> String:
 	return ""
 
 
+## His face-to-face first meeting (docs/STORY_HOME_SPEC.md 5.2): the radio-voice reveal, then the
+## meteor in person. `photo_in_hand` false means conversation.gd already played his generic stranger
+## `intro`, so only the radio-voice line is new; true means it skipped it, so he names himself here.
+## Shared by `run()` below (a gates-off save meeting him with the task open) and FirstHour (a new game).
+static func first_meeting_lines(photo_in_hand: bool) -> Array:
+	var lines: Array = []
+	if not photo_in_hand:
+		# NO PHOTO YET (round-2 fix, STORY_SPINE_SPEC.md 6.4 again): `ready()` is false here, so
+		# `conversation.gd` ~76 already played the generic stranger `intro` - which is itself his
+		# self-introduction ("Oh! Hello! ... I'm Professor Comet. / I watch the sky. / If it
+		# twinkles, I've probably named it."). Repeating "Oh! Hello there — I'm Professor Comet."
+		# here introduced him a second time in the same talk. Only the radio-voice reveal is new
+		# information, so that is all this half keeps.
+		lines.append("That crackly voice on the radio? That was me!")
+	else:
+		# WITH a photo already in hand, `ready()` is true, so `conversation.gd` skipped the
+		# generic intro entirely - this line is his ONLY self-introduction, unchanged.
+		lines.append("Oh! Hello there — I'm Professor Comet.\nThat crackly voice on the radio? That was me!")
+	# THE METEOR, in person (docs/STORY_HOME_SPEC.md 5.2) - what the radio call already said, and
+	# what it means here: everyone packing, nobody left behind, and where HE stands on it.
+	lines.append_array([
+		"Mind the boxes. Everyone's packing to leave.",
+		"They'll all fly out together, once your ship is fixed.",
+		"Nobody gets left behind. That's how it is here.",
+		"Not me, though. I say that meteor can be pushed.",
+	])
+	return lines
+
+
 ## The whole talk. Caller (`Conversation.run`) has already checked `handles()` and ends the
 ## conversation right after this returns, whether that was a hand-in or the reminder below - never a
 ## favour and never the planet-safari offer, that talk (docs/PLANET_SAFARI_SPEC.md 17.2 item 2).
@@ -161,26 +197,7 @@ static func run(runner: DialogueRunner, npc: NPC, first_meeting: bool = false) -
 	var who_id := neighbour_photo_id()
 	var lines: Array = []
 	if first_meeting:
-		if who_id == "":
-			# NO PHOTO YET (round-2 fix, STORY_SPINE_SPEC.md 6.4 again): `ready()` is false here, so
-			# `conversation.gd` ~76 already played the generic stranger `intro` - which is itself his
-			# self-introduction ("Oh! Hello! ... I'm Professor Comet. / I watch the sky. / If it
-			# twinkles, I've probably named it."). Repeating "Oh! Hello there — I'm Professor Comet."
-			# here introduced him a second time in the same talk. Only the radio-voice reveal is new
-			# information, so that is all this half keeps.
-			lines.append("That crackly voice on the radio? That was me!")
-		else:
-			# WITH a photo already in hand, `ready()` is true, so `conversation.gd` skipped the
-			# generic intro entirely - this line is his ONLY self-introduction, unchanged.
-			lines.append("Oh! Hello there — I'm Professor Comet.\nThat crackly voice on the radio? That was me!")
-		# THE METEOR, in person (docs/STORY_HOME_SPEC.md 5.2) - what the radio call already said, and
-		# what it means here: everyone packing, nobody left behind, and where HE stands on it.
-		lines.append_array([
-			"Mind the boxes. Everyone's packing to leave.",
-			"They'll all fly out together, once your ship is fixed.",
-			"Nobody gets left behind. That's how it is here.",
-			"Not me, though. I say that meteor can be pushed.",
-		])
+		lines.append_array(first_meeting_lines(who_id != ""))
 	if who_id == "":
 		# THE REMINDER (docs/PLANET_SAFARI_SPEC.md 17.2 item 2 / STORY_HOME_SPEC.md 5.2): his task is
 		# open and the journal holds no neighbour photo yet - a short reminder, never a favour and never
@@ -192,10 +209,11 @@ static func run(runner: DialogueRunner, npc: NPC, first_meeting: bool = false) -
 		await runner.say(npc, lines)
 		return
 	var who := Journal.npc_name(who_id)
-	lines.append("A photo of %s, for my records!\nDelightful. Simply delightful." % who)
-	# WHY he wants it (the user, 2026-09-27: "im not sure why he needed the picture") - said once, right
-	# after the thanks, so the ask is never left unexplained again.
-	lines.append("I'm tracking that meteor. Every sky you photograph helps.")
+	lines.append("A photo of %s! Simply delightful." % who)
+	# WHY he wants it (the user, 2026-09-27: "im not sure why he needed the picture", and again on
+	# 2026-10-18: option A, "one last look") - said once, right after the thanks. The neighbours are
+	# packing; the photo is their last look at home, so nothing is left behind. Not "for my records".
+	lines.append("One last look at home, so nothing gets left behind.")
 	if _grade_of(who_id) == "Smudge":
 		# The old task's gentle extra line for a soft photo (never mocking, one short box). It teaches
 		# the same hold-to-focus the first safari's first pause teaches.

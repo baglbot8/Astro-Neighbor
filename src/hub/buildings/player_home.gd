@@ -356,12 +356,12 @@ func _on_mail(player: Node3D) -> void:
 		# after the build plan"), so no Town Hall and no plot deeds. A new game is the Stranded campaign,
 		# which opens with your ship crash-landing here, so the letter is his note that he saw it come
 		# down. Changed by the lead after Phase 1 builder C listed this string but did not own the file.
-		# Lines kept to 48 characters or fewer, the longest line the old letter used.
+		# Lines kept to 60 characters or fewer (STYLE_GUIDE "Writing"); the longest is 51.
 		await say("A letter from Professor Comet", [
 			"Dear neighbour,",
 			"I saw your ship come down on my telescope.",
 			"Nobody hurt - that is what matters!",
-			"Your rocket can still hop to nearby worlds.",
+			"Your rocket can still make one hop: to the Commons.",
 			"  - Professor Comet",
 		], "elder", Color("#6fc3ff"))
 		_refresh_flag()

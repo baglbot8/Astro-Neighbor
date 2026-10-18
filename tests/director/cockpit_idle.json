@@ -1,0 +1,13 @@
+[
+  {"t": 0.0, "log": "cockpit_idle: the opening with NO input (needs B2's IntroDirector; run with --new-game --campaign --intro)"},
+  {"t": 1.0, "capture": "cockpit_00_card"},
+  {"t": 3.2, "capture": "cockpit_01_reveal"},
+  {"t": 33.5, "capture": "cockpit_02_nudge"},
+  {"t": 78.5, "capture": "cockpit_03_meteor_in"},
+  {"t": 81.5, "capture": "cockpit_04_meteor_big"},
+  {"t": 83.7, "capture": "cockpit_05_graze"},
+  {"t": 84.3, "capture": "cockpit_06_after_cut"},
+  {"t": 86.0, "capture": "cockpit_07_fall"},
+  {"t": 99.5, "capture": "cockpit_08_handback"},
+  {"t": 101.0, "quit": true}
+]

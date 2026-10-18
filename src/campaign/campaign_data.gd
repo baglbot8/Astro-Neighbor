@@ -39,6 +39,19 @@ static func gates_on() -> bool:
 	return GameState.campaign_active and not GameState.story_done \
 		and (not Director.is_active() or Director.campaign_opt_in())
 
+## THE FIRST PATCH (docs/INTRO_SPEC.md 7.1). While the gates are on and the Commons patch is not yet
+## fitted, these tier-1 worlds stay closed even at 0 parts: a new game reaches only home and the
+## Commons. The patch is NOT a ship part - it is a GameState.flags entry ("first_patch") written by
+## src/campaign/first_hour.gd, never in PARTS and never in rocket_part_count(), so finish_stage() and
+## the later tiers are untouched. A campaign save from before the patch existed that already reached
+## Zorp or Bolt counts as patched (FirstHour.patch_fitted), and gates-off saves never see this gate.
+const PATCH_GATED: Array[String] = ["zorp", "bolt"]
+
+## True for a world that is closed only because the first patch is not fitted yet. The rocket pad's
+## card reads it to say "Needs a patch" instead of "Needs 0 parts".
+static func needs_patch(planet_id: String) -> bool:
+	return gates_on() and PATCH_GATED.has(planet_id) and not FirstHour.patch_fitted()
+
 ## True for every planet when gates are off - an old save, a finished story, or a Director
 ## timeline that did not opt in all see the game's open world, unchanged from today.
 static func planet_in_range(planet_id: String) -> bool:
@@ -46,6 +59,8 @@ static func planet_in_range(planet_id: String) -> bool:
 		return true
 	if planet_id == "home":
 		return true
+	if needs_patch(planet_id):
+		return false
 	var have := GameState.rocket_part_count()
 	for tier in TIERS:
 		if (tier["planets"] as Array).has(planet_id):

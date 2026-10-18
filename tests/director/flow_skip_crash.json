@@ -1,0 +1,13 @@
+[
+  {"t": 0.1, "log": "FLOW SKIP DURING THE CRASH SHOT (after the cockpit stub's cut at ~3.15 s). Real time. --new-game --campaign --intro Keys are REAL InputEventKeys via CrashIntro.debug_key (Input.parse_input_event): Enter opens the pop-up, Right moves to Skip, Enter confirms. Synthesised, not a hardware keyboard."},
+  {"t": 0.15, "call": {"node": "/root/World", "method": "_spawn_optional", "args": ["res://showcase/name_picker_probe.tscn", "FlowProbe"]}},
+  {"t": 6.0, "call": {"node": "/root/World/Onboarding/CrashIntro", "method": "debug_key", "args": [4194309]}},
+  {"t": 6.4, "capture": "c1_crash_confirm"},
+  {"t": 6.5, "call": {"node": "/root/World/FlowProbe", "method": "state", "args": ["confirm_open"]}},
+  {"t": 6.8, "call": {"node": "/root/World/Onboarding/CrashIntro", "method": "debug_key", "args": [4194321]}},
+  {"t": 7.6, "call": {"node": "/root/World/Onboarding/CrashIntro", "method": "debug_key", "args": [4194309]}},
+  {"t": 8.3, "call": {"node": "/root/World/FlowProbe", "method": "state", "args": ["skipped_end"]}},
+  {"t": 8.3, "capture": "c2_crash_skipped_end"},
+  {"t": 8.7, "call": {"node": "/root/World/FlowProbe", "method": "state", "args": ["skipped_end_later"]}},
+  {"t": 9.0, "quit": true}
+]

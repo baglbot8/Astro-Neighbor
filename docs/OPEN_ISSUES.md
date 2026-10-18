@@ -2147,3 +2147,25 @@ looked smooth until the planet reloaded; Bolt's Scrap Snail (built at scale 0.00
   every frame from then on. Loop untyped, check validity first, then cast.
 * **Lesson:** a one-time measurement at spawn is only as good as the spawn state. Anything that tweens scale (or
   visibility) at spawn breaks a "measure once" rule; measure at rest, or keep watching until it settles.
+
+## 73. [2026-10-18] The cockpit opening: traps that cost a round
+
+* **A timeline written against a stub is wrong for the real scene.** `tests/director/flow_opening.json` taps the radio
+  boxes by wall clock for a 3 s stub cockpit. With the real 75 s cockpit its taps only opened skip pop-ups, and the log
+  said "no picker open", which read as a bug. The same flow with the real cockpit is `flow_full_real.json` (taps 82.9 s
+  later). Re-time any timeline when the scene it was written against is replaced.
+* **A synthetic press inside a physics step is lost at `--max-fps 30`.** Two physics steps run per drawn frame, so
+  press and release are applied together and `Input.is_action_pressed` never sees it (B3's windowed fallbacks).
+  Hold a synthetic press for 3 or more physics frames. Real presses last 50 ms or more.
+* **Synthetic mouse `relative` motion comes out about 20x in headless runs.** Drag-look tests must run windowed.
+* **`Planet.find_free_dir_near` cannot search a small band.** It picks random points over the whole sphere and throws
+  away those outside the band, so a 3-4 m band almost always falls back (Pop's brass bit landed 60 m away, then 18 m
+  behind the stage). Walk a line between two known points instead (`FirstHour._bit_dir_toward_pop`).
+* **YarnLite swaps tiny parts to a smooth material copy,** so warming up a shrunk mesh warms the wrong shader: the
+  meteor's first frame hitched 126-137 ms. Draw the real-size mesh hidden for 3 frames under an opaque card.
+* **"Giant" must be measured against the thing next to it.** A rock 11 m across beside a 16 m planet, with stitches the
+  size of the cabin wall's, read as a cushion. Size, distance, stitch scale and the caption box all had to change. The
+  neighbour worlds hang 140 m from the cockpit camera, so a rock placed further out is drawn behind them.
+* **A tap that opens a skip pop-up is a trap on a phone.** Make taps do nothing and give skip its own small button.
+* **Merging builders' copies: compare each builder to the MAIN tree, never to the merge copy.** Comparing to the merge
+  copy overwrote B2's files with B3's older copies of them (caught by a full verify; no harm shipped).

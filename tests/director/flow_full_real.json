@@ -1,0 +1,243 @@
+[
+ {
+  "t": 0.1,
+  "log": "FLOW FULL REAL v2: real cockpit (idle 75 s) -> cut -> crash at the hit -> radio call with name picker -> guided walkthrough"
+ },
+ {
+  "t": 0.15,
+  "call": {
+   "node": "/root/World",
+   "method": "_spawn_optional",
+   "args": [
+    "res://showcase/name_picker_probe.tscn",
+    "FlowProbe"
+   ]
+  }
+ },
+ {
+  "t": 3.2,
+  "capture": "r00_cockpit"
+ },
+ {
+  "t": 84.4,
+  "capture": "r02_after_cut"
+ },
+ {
+  "t": 99.4,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "state",
+   "args": [
+    "after_crash?"
+   ]
+  }
+ },
+ {
+  "t": 100.2,
+  "capture": "r_f12_control"
+ },
+ {
+  "t": 100.2,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "state",
+   "args": [
+    "control"
+   ]
+  }
+ },
+ {
+  "t": 101.5,
+  "capture": "r_f13_radio_box1"
+ },
+ {
+  "t": 101.8,
+  "tap": "interact"
+ },
+ {
+  "t": 104.1,
+  "capture": "r_f14_radio_tumble"
+ },
+ {
+  "t": 104.4,
+  "tap": "interact"
+ },
+ {
+  "t": 105.8,
+  "capture": "r_f15_radio_hurt"
+ },
+ {
+  "t": 106.1,
+  "tap": "interact"
+ },
+ {
+  "t": 107.1,
+  "capture": "r_f16_radio_askname"
+ },
+ {
+  "t": 107.4,
+  "tap": "interact"
+ },
+ {
+  "t": 108.3,
+  "capture": "r_f17_picker_open"
+ },
+ {
+  "t": 108.3,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "picker_report",
+   "args": [
+    "open"
+   ]
+  }
+ },
+ {
+  "t": 108.6,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "tap",
+   "args": [
+    "Mochi"
+   ]
+  }
+ },
+ {
+  "t": 109.1,
+  "capture": "r_f18_picker_mochi"
+ },
+ {
+  "t": 109.3,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "tap",
+   "args": [
+    "confirm"
+   ]
+  }
+ },
+ {
+  "t": 110.9,
+  "capture": "r_f19_welcome"
+ },
+ {
+  "t": 110.9,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "state",
+   "args": [
+    "welcome"
+   ]
+  }
+ },
+ {
+  "t": 111.2,
+  "tap": "interact"
+ },
+ {
+  "t": 112.8,
+  "capture": "r_f20_ship"
+ },
+ {
+  "t": 113.1,
+  "tap": "interact"
+ },
+ {
+  "t": 114.6,
+  "capture": "r_f21_meteor1"
+ },
+ {
+  "t": 114.9,
+  "tap": "interact"
+ },
+ {
+  "t": 116.5,
+  "capture": "r_f22_meteor2"
+ },
+ {
+  "t": 116.8,
+  "tap": "interact"
+ },
+ {
+  "t": 118.4,
+  "capture": "r_f23_busy"
+ },
+ {
+  "t": 118.7,
+  "tap": "interact"
+ },
+ {
+  "t": 120.2,
+  "capture": "r_f24_meet"
+ },
+ {
+  "t": 120.5,
+  "tap": "interact"
+ },
+ {
+  "t": 122.1,
+  "capture": "r_f25_talk_choice"
+ },
+ {
+  "t": 122.4,
+  "tap": "interact"
+ },
+ {
+  "t": 124.5,
+  "capture": "r_f26_guided1"
+ },
+ {
+  "t": 124.8,
+  "tap": "interact"
+ },
+ {
+  "t": 126.9,
+  "capture": "r_f27_guided2"
+ },
+ {
+  "t": 127.2,
+  "tap": "interact"
+ },
+ {
+  "t": 129.3,
+  "capture": "r_f28_guided3"
+ },
+ {
+  "t": 129.6,
+  "tap": "interact"
+ },
+ {
+  "t": 131.7,
+  "capture": "r_f29_guided4"
+ },
+ {
+  "t": 132.0,
+  "tap": "interact"
+ },
+ {
+  "t": 134.1,
+  "capture": "r_f30_guided5"
+ },
+ {
+  "t": 134.4,
+  "tap": "interact"
+ },
+ {
+  "t": 135.9,
+  "capture": "r_f31_call_done"
+ },
+ {
+  "t": 135.9,
+  "call": {
+   "node": "/root/World/FlowProbe",
+   "method": "state",
+   "args": [
+    "call_done"
+   ]
+  }
+ },
+ {
+  "t": 136.9,
+  "quit": true
+ }
+]

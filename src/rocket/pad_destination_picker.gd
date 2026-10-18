@@ -72,6 +72,9 @@ const ORDER: Array[String] = ["home", "zorp", "bolt", "hub", "fen", "grig", "vel
 ## simply is not a place you can go until the story (or the dev menu) sets `jungle_open`. Once open it
 ## is never range-gated: CampaignData's tiers do not list it, and `planet_in_range` would lock it.
 const LOCKED_UNTIL := {"jungle": "jungle_open"}
+## A locked tile's pill while the first patch is missing (CampaignData.needs_patch), in place of
+## "Needs N parts". 13 characters, the same as "Needs 2 parts".
+const PATCH_TEXT := "Needs a patch"
 ## One line of flavour per world - the same copy the map card used.
 const BLURB := {
 	"home": "Home sweet orbit.",
@@ -354,7 +357,11 @@ func _apply_pill_state(i: int) -> void:
 		pill.add_theme_stylebox_override("panel",
 			UIStyle.make_pill_style(UIStyle.CREAM_INSET, UIStyle.CREAM_EDGE, 2, 4, 16.0, 5.0))
 		var n: int = _needed[i] if i < _needed.size() else 0
-		label.text = "Needs %d part%s" % [n, "" if n == 1 else "s"]
+		# THE FIRST PATCH (docs/INTRO_SPEC.md 7.1): Zorp and Bolt need 0 parts but stay closed until
+		# the Commons patch is fitted - "Needs 0 parts" would read as a bug. Same length as "Needs 2
+		# parts", so it sits on one line in the same pill.
+		var patch := i < _options.size() and CampaignData.needs_patch(_options[i])
+		label.text = PATCH_TEXT if patch else "Needs %d part%s" % [n, "" if n == 1 else "s"]
 		label.add_theme_color_override("font_color", UIStyle.TEXT_SOFT)
 	else:
 		pill.add_theme_stylebox_override("panel",

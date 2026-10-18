@@ -833,7 +833,16 @@ func _on_minigame_finished(_kind: String, success: bool, cfg: Dictionary) -> voi
 
 # ============================================================================= helpers
 func _templates_for(npc_id: String) -> Array:
-	var out: Array = ["bring"]
+	var out: Array = []
+	# "bring" only while some material grows on a world the rocket can reach (header "ONLY REACHABLE
+	# WORLDS"). Before the first patch (docs/INTRO_SPEC.md 7.1) only home and the Commons are open and
+	# neither grows a material, so `_foreign_material` fell back to MATERIALS[0] - a moon flower from a
+	# closed world (measured on Nova, 2026-10-18). Checked over every material, not one random pick, so
+	# this does not draw from `_rng`.
+	for m: String in MATERIALS:
+		if _material_reachable(m):
+			out.append("bring")
+			break
 	if _local_collectible(npc_id) != "":
 		out.append("fetch")
 	if _delivery_target(npc_id) != "":

@@ -192,3 +192,6 @@ returns the conclusion, not the dump.
 - The new story campaign (2026-09-10): `docs/CORE_LOOP.md` (what the game is) and
   `docs/BUILD_PLAN.md` (phases, builders, file owners). CORE_LOOP's "Changed after the build plan" section wins over
   anything older in either file.
+- The opening and first hour (2026-10-18, built, not yet played by the user): `docs/INTRO_SPEC.md` (cockpit intro,
+  name picker, the Commons patch; section 11 = what was built). It wins over `docs/STORY_HOME_SPEC.md` beats 1-2
+  and sections 5.1-5.2.

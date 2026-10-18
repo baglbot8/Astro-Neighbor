@@ -2,6 +2,8 @@
 
 Status: **beats and lines drafted 2026-09-26** (the user picked option Three in `STORY_OPTIONS.md`,
 with one change). Built after merge9, in the story wave (section 6).
+**Amended 2026-10-18: `INTRO_SPEC.md` wins over this file on the opening and the first hour (beats 1-2
+and sections 5.1-5.2).**
 This file wins over `STORY_SPINE_SPEC.md`, `CORE_LOOP.md` and `PHASE5_SPEC.md` on **what the story
 says**. `STORY_SPINE_SPEC.md` still wins on **how a part is earned** (the chain, then the photo, then
 `_hand_over_part`). Source map of every current line: the lead's inventory of 2026-09-26 (106 items:
