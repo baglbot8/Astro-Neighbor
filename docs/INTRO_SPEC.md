@@ -296,3 +296,13 @@ meteor. Every sky you photograph helps."; the reason is the residents' last look
   first meeting is 12 boxes and the fitting 13. The user's play decides whether to lengthen or split them.
 * Pop's bit is small from the stage front (visible from Pop's shop); real players decide if it is findable.
 * `docs/OPEN_ISSUES.md` 73 lists the traps found.
+
+**Round 3, after the user's first look (2026-10-18).** The user: "the crochet of the interior cockpit is very hard to look at
+with all the crochet inside it, can we make it like panels or something to reduce the intensity of the crochet? also it feels
+very rectangular, can we add some rounded corners to the window?" Changed in `cockpit_props.gd` only: the walls, ceiling, front
+plate, bezel, dash body, teal band, knobs, radar, camera body and sleeves are smooth matte toon panels (cream, seams, rivets);
+crochet stays only on the mittens and cuffs, the dash-edge cushion, the camera strap, the plant and pot, the photo board's border
+and the seat (measured 0-6% of the screen per view). The window is a rounded rectangle with radius 0.30 m (35% of its 0.86 m
+height) and a rolled bezel; the letter sits 4 cm further out. Palette rulings unchanged: the navy space through the window pushes
+the whole-frame saturation p90 to 0.66-0.71 (the interior crops are 0.17-0.42); space is exempt. Blown is 0.0-0.1% and luma p95
+is at most 0.919. Not measured: the phone-speed gain from dropping the full-screen yarn (GPU time reads 0 on this Mac).

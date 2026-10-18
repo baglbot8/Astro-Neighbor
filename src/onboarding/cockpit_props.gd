@@ -47,6 +47,8 @@ const MUSTARD := Color("#dcae55")
 const SEAT := Color("#d27f63")
 const SUIT := Color("#ece7dc")
 const SUIT_BAND := Color("#d3957c")
+## The smooth sleeve, a step darker than the mitten so the smooth white never clips.
+const SUIT_SLEEVE := Color("#ddd6c9")
 const BRASS := Color("#b39a6a")
 const BRASS_DARK := Color("#7a6648")
 const LENS := Color("#262a3c")
@@ -81,6 +83,14 @@ const WALL := 0.12
 const WIN_X := 0.80
 const WIN_Y0 := -0.20
 const WIN_Y1 := 0.66
+## The window's corner radius: 35% of its 0.86 m height (the user: "rounded corners"; at a quarter of
+## the height the radio box and the letter covered the corners and it read only as softened).
+const WIN_CORNER_R := 0.30
+## Points round the window outline (plus the cabin outline's own corners).
+const WIN_SAMPLES := 160
+## Height of the alarm beacon above the window's top edge (above the bezel's roll).
+const BEACON_UP := 0.125
+const RIVET_R := 0.012
 ## The dash: its top slopes from (y DASH_Y0 at the window) down to (y DASH_Y1 at DASH_Z1).
 const DASH_Y0 := -0.22
 const DASH_Y1 := -0.33
@@ -89,7 +99,7 @@ const DASH_Z1 := -0.62
 ## Target points (cockpit-local); `CockpitIntro` reads them through `targets()`.
 const PHOTOS_AT := Vector3(-0.955, 0.17, -0.79)
 const CAMERA_AT := Vector3(-0.47, -0.213, -0.84)
-const LETTER_AT := Vector3(0.78, 0.30, -1.0)
+const LETTER_AT := Vector3(0.82, 0.30, -0.96)
 const PLANT_AT := Vector3(0.55, -0.20, -0.92)
 ## Angular radius (deg) of each target as the centre dot sees it.
 const PHOTOS_R := 14.0
@@ -116,7 +126,24 @@ static func targets() -> Dictionary:
 	}
 
 
+## The cabin's SHELL: smooth matte toon panels (the user, 2026-10-18: "the crochet of the interior
+## cockpit is very hard to look at ... can we make it like panels"). The game's own toon material with
+## its per-material `yarn_skip` flag set - the same switch YarnLite flips for eyes and screens - so it
+## draws the plain game look whatever the crochet global says.
+static var _room_mat: ShaderMaterial
 static func room_material() -> ShaderMaterial:
+	if _room_mat == null:
+		_room_mat = (MaterialLib.toon_vertex_color({"rim": 0.08, "spec": 0.05, "spec_size": 120.0,
+			"roughness": 0.95}) as ShaderMaterial).duplicate() as ShaderMaterial
+		_room_mat.set_shader_parameter("yarn_skip", true)
+	return _room_mat
+
+
+## The SOFT accents that stay crochet: the gloves, the dash's hand cushion, the camera strap, the
+## plant and its pot, the photo board's border and the seat - things you could squeeze. In the finer
+## room yarn (ROOM_YARN_SCALE), all in one mesh, which is large, so YarnLite never mistakes it for a
+## "tiny part" and smooths it.
+static func soft_material() -> ShaderMaterial:
 	return MaterialLib.toon_vertex_color({"rim": 0.08, "spec": 0.04, "spec_size": 120.0, "roughness": 0.95,
 		"yarn_scale": ROOM_YARN_SCALE})
 
@@ -127,13 +154,14 @@ static func room_material() -> ShaderMaterial:
 ##   "spark_at" Vector3 (local; where the graze throws sparks, the upper-right window corner).
 static func build(root: Node3D) -> Dictionary:
 	var kit := PlanetMeshKit.new()
-	_shell(kit)
-	_window_frame(kit)
-	_dash(kit)
-	_hands(kit)
-	_camera_prop(kit)
-	_plant(kit)
-	_photo_board(kit)
+	var soft := PlanetMeshKit.new()
+	_shell(kit, soft)
+	_front_wall(kit)
+	_dash(kit, soft)
+	_hands(kit, soft)
+	_camera_prop(kit, soft)
+	_plant(soft)
+	_photo_board(kit, soft)
 	_letter_clip(kit)
 	var room := MeshInstance3D.new()
 	room.name = "Room"
@@ -141,11 +169,16 @@ static func build(root: Node3D) -> Dictionary:
 	room.material_override = room_material()
 	room.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(room)
+	var soft_mi := MeshInstance3D.new()
+	soft_mi.name = "Soft"
+	soft_mi.mesh = soft.commit()
+	soft_mi.material_override = soft_material()
+	soft_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(soft_mi)
 
 	_glows(root)
 	_photos(root)
 	_letter(root)
-	_glass(root)
 
 	var out := {}
 	# Warm reading lamp in the ceiling: the room's own light, so it is cosy whatever the sun does.
@@ -184,7 +217,7 @@ static func build(root: Node3D) -> Dictionary:
 	var amat := (MaterialLib.glow(ALARM, 0.0, Color("#b0614e")) as ShaderMaterial).duplicate() as ShaderMaterial
 	beacon.material_override = amat
 	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	beacon.position = Vector3(0.0, WIN_Y1 + 0.075, Z_FRONT + 0.11)
+	beacon.position = Vector3(0.0, WIN_Y1 + BEACON_UP, Z_FRONT + 0.1)
 	YarnLite.keep_glossy(beacon)
 	root.add_child(beacon)
 	out["alarm_mat"] = amat
@@ -214,7 +247,7 @@ static func build(root: Node3D) -> Dictionary:
 
 
 # ============================================================================= the shell
-static func _shell(kit: PlanetMeshKit) -> void:
+static func _shell(kit: PlanetMeshKit, soft: PlanetMeshKit) -> void:
 	var depth := Z_BACK - Z_FRONT
 	var zc := (Z_BACK + Z_FRONT) * 0.5
 	# Floor and ceiling.
@@ -246,18 +279,13 @@ static func _shell(kit: PlanetMeshKit) -> void:
 		kit.rounded_box(Vector3(x, 0.20, Z_BACK - 0.03), Vector3(0.58, 0.56, 0.07), 0.06, PANEL)
 		kit.rounded_box(Vector3(x, -0.24, Z_BACK - 0.03), Vector3(0.58, 0.09, 0.07), 0.04, STRIPE)
 		kit.rounded_box(Vector3(x, -0.62, Z_BACK - 0.03), Vector3(0.58, 0.60, 0.07), 0.06, PANEL_LOW)
-	kit.rounded_box(Vector3(0.0, -0.32, 0.40), Vector3(0.66, 0.78, 0.16), 0.08, SEAT)
-	kit.rounded_box(Vector3(0.0, 0.14, 0.38), Vector3(0.42, 0.22, 0.14), 0.07, SEAT.lightened(0.08))
-	# Front wall around the window: above it and the two pillars (the dash fills below).
-	kit.rounded_box(Vector3(0.0, (WIN_Y1 + Y_CEIL) * 0.5 + 0.02, Z_FRONT - WALL * 0.5),
-		Vector3(X_HALF * 2.0 + WALL * 2.0, Y_CEIL - WIN_Y1 + 0.06, WALL), 0.03, PANEL)
-	for sgn: float in [-1.0, 1.0]:
-		var xc := sgn * (WIN_X + X_HALF) * 0.5
-		kit.rounded_box(Vector3(xc, (Y_FLOOR + WIN_Y1) * 0.5, Z_FRONT - WALL * 0.5),
-			Vector3(X_HALF - WIN_X + 0.04, WIN_Y1 - Y_FLOOR, WALL), 0.03, PANEL)
-		# The shoulder corners of the front wall, under the leaning panels.
-		kit.rounded_box(Vector3(sgn * (X_HALF + X_CEIL) * 0.5, (WIN_Y1 + Y_CEIL) * 0.5, Z_FRONT - WALL * 0.5),
-			Vector3(X_HALF - X_CEIL + 0.1, Y_CEIL - WIN_Y1 + 0.1, WALL), 0.03, PANEL)
+	soft.rounded_box(Vector3(0.0, -0.32, 0.40), Vector3(0.66, 0.78, 0.16), 0.08, SEAT)
+	soft.rounded_box(Vector3(0.0, 0.14, 0.38), Vector3(0.42, 0.22, 0.14), 0.07, SEAT.lightened(0.08))
+	# Rivets at the corners of the back panels (the front wall is `_front_wall`).
+	for i in 3:
+		var x := -0.64 + 0.64 * float(i)
+		for c: Vector2 in [Vector2(-0.25, 0.44), Vector2(0.25, 0.44), Vector2(-0.25, -0.04), Vector2(0.25, -0.04)]:
+			kit.sphere(Vector3(x + c.x, c.y, Z_BACK - 0.07), RIVET_R, FRAME_SHADE, Vector3(1.0, 1.0, 0.5), 8)
 	# Floor: a darker footwell and two rails.
 	kit.rounded_box(Vector3(0.0, Y_FLOOR + 0.01, -0.5), Vector3(1.2, 0.03, 0.8), 0.015, NAVY)
 	for sgn: float in [-1.0, 1.0]:
@@ -272,29 +300,138 @@ static func _quilted_wall(kit: PlanetMeshKit, sgn: float) -> void:
 		var z := Z_FRONT + 0.33 + 0.62 * float(i)
 		var is_board := sgn < 0.0 and i == 0
 		if not is_board:
-			kit.rounded_box(Vector3(x, 0.17, z), Vector3(0.07, 0.62, 0.56), 0.06, PANEL)
-		kit.rounded_box(Vector3(x, -0.24, z), Vector3(0.07, 0.09, 0.56), 0.04, STRIPE)
-		kit.rounded_box(Vector3(x, -0.62, z), Vector3(0.07, 0.60, 0.56), 0.06, PANEL_LOW)
+			kit.rounded_box(Vector3(x, 0.17, z), Vector3(0.07, 0.62, 0.56), 0.04, PANEL)
+			# A rivet in each corner of the upper panel: a ship's panel, not a cushion.
+			for c: Vector2 in [Vector2(-0.24, 0.43), Vector2(0.24, 0.43), Vector2(-0.24, -0.09), Vector2(0.24, -0.09)]:
+				kit.sphere(Vector3(x - sgn * 0.04, c.y, z + c.x), RIVET_R, FRAME_SHADE, Vector3(0.5, 1.0, 1.0), 8)
+		kit.rounded_box(Vector3(x, -0.24, z), Vector3(0.07, 0.09, 0.56), 0.03, STRIPE)
+		kit.rounded_box(Vector3(x, -0.62, z), Vector3(0.07, 0.60, 0.56), 0.04, PANEL_LOW)
 
 
 # ============================================================================= window and dash
-static func _window_frame(kit: PlanetMeshKit) -> void:
-	var z := Z_FRONT + 0.02
-	var t := 0.075
-	# A thick rounded frame on all four sides.
-	kit.rounded_box(Vector3(0.0, WIN_Y1 + t * 0.4, z), Vector3(WIN_X * 2.0 + t * 2.0, t, 0.14), 0.035, FRAME)
-	kit.rounded_box(Vector3(0.0, WIN_Y0 - t * 0.2, z), Vector3(WIN_X * 2.0 + t * 2.0, t, 0.14), 0.035, FRAME)
-	for sgn: float in [-1.0, 1.0]:
-		kit.rounded_box(Vector3(sgn * (WIN_X + t * 0.4), (WIN_Y0 + WIN_Y1) * 0.5, z),
-			Vector3(t, WIN_Y1 - WIN_Y0 + t, 0.14), 0.035, FRAME)
-	# Rounded inner corners: fillet blocks so the opening reads as a rounded rectangle.
-	for sx: float in [-1.0, 1.0]:
-		for sy: float in [-1.0, 1.0]:
-			var cx := sx * (WIN_X - 0.03)
-			var cy := (WIN_Y1 - 0.03) if sy > 0.0 else (WIN_Y0 + 0.03)
-			kit.rounded_box(Vector3(cx, cy, z + 0.01), Vector3(0.11, 0.11, 0.10), 0.05, FRAME)
+## THE FRONT WALL AND THE ROUNDED WINDOW (the user, 2026-10-18: "it feels very rectangular, can we
+## add some rounded corners to the window?"). One plate across the whole front of the cabin, cut by a
+## rounded-rectangle opening (corner radius WIN_CORNER_R, a quarter of the window's height), and a
+## rolled bezel swept along that same curve. Built from two closed outlines sampled at the same
+## angles round the window's centre - the cabin's cross-section outside, the rounded opening inside -
+## so the plate is one ring of quads, and every corner of the cabin outline is sampled exactly.
+## Nothing at all is drawn inside the opening.
+static func _front_wall(kit: PlanetMeshKit) -> void:
+	var c := Vector2(0.0, (WIN_Y0 + WIN_Y1) * 0.5)
+	var outer := PackedVector2Array([Vector2(-X_HALF - 0.02, DASH_Y1 - 0.02), Vector2(X_HALF + 0.02, DASH_Y1 - 0.02),
+		Vector2(X_HALF + 0.02, Y_SHOULDER), Vector2(X_CEIL + 0.02, Y_CEIL + 0.02), Vector2(-X_CEIL - 0.02, Y_CEIL + 0.02),
+		Vector2(-X_HALF - 0.02, Y_SHOULDER)])
+	# Sample angles: an even sweep plus the exact angle of every outline corner.
+	var angles: Array[float] = []
+	for k in WIN_SAMPLES:
+		angles.append(TAU * float(k) / float(WIN_SAMPLES))
+	for v in outer:
+		angles.append(fposmod(atan2(v.y - c.y, v.x - c.x), TAU))
+	angles.sort()
+	var inner := PackedVector2Array()
+	var outp := PackedVector2Array()
+	for a in angles:
+		var d := Vector2(cos(a), sin(a))
+		inner.append(c + d * _ray_to_rounded_rect(d))
+		outp.append(c + d * _ray_to_polygon(c, d, outer))
+	var n := inner.size()
+	var z := Z_FRONT
+	var fwd := Vector3(0.0, 0.0, 1.0)
+	for k in n:
+		var k2 := (k + 1) % n
+		var a := Vector3(inner[k].x, inner[k].y, z)
+		var b := Vector3(inner[k2].x, inner[k2].y, z)
+		var cc := Vector3(outp[k2].x, outp[k2].y, z)
+		var dd := Vector3(outp[k].x, outp[k].y, z)
+		_tri(kit, a, b, cc, fwd, fwd, fwd, PANEL)
+		_tri(kit, a, cc, dd, fwd, fwd, fwd, PANEL)
+	# The bezel: a rolled lip swept along the opening. Profile = (outward from the opening, toward
+	# the pilot): it rises from the glass edge, rolls over and settles onto the plate.
+	var prof := [Vector2(0.0, 0.0), Vector2(-0.004, 0.03), Vector2(0.012, 0.052), Vector2(0.04, 0.062),
+		Vector2(0.075, 0.056), Vector2(0.10, 0.034), Vector2(0.115, 0.0)]
+	var outward: Array[Vector2] = []
+	for k in n:
+		var t := (inner[(k + 1) % n] - inner[(k - 1 + n) % n]).normalized()
+		outward.append(Vector2(t.y, -t.x))
+	var pn: Array[Vector2] = []
+	for m in prof.size():
+		var t2: Vector2 = (prof[mini(m + 1, prof.size() - 1)] as Vector2) - (prof[maxi(m - 1, 0)] as Vector2)
+		pn.append(Vector2(t2.y, -t2.x).normalized() * -1.0)
+	for k in n:
+		var k2 := (k + 1) % n
+		for m in prof.size() - 1:
+			var corners: Array[Vector3] = []
+			var norms: Array[Vector3] = []
+			for e: Array in [[k, m], [k2, m], [k2, m + 1], [k, m + 1]]:
+				var ki: int = e[0]
+				var mi: int = e[1]
+				var pr: Vector2 = prof[mi]
+				var o: Vector2 = outward[ki]
+				var p2 := inner[ki] + o * pr.x
+				corners.append(Vector3(p2.x, p2.y, z + pr.y))
+				var nn: Vector2 = pn[mi]
+				norms.append((Vector3(o.x, o.y, 0.0) * nn.x + fwd * nn.y).normalized())
+			_tri(kit, corners[0], corners[1], corners[2], norms[0], norms[1], norms[2], FRAME)
+			_tri(kit, corners[0], corners[2], corners[3], norms[0], norms[2], norms[3], FRAME)
+	# Rivets round the bezel, on the plate.
+	var step := maxi(n / 14, 1)
+	for k in range(0, n, step):
+		var p3 := inner[k] + outward[k] * 0.155
+		if p3.y > DASH_Y0 + 0.03:
+			kit.sphere(Vector3(p3.x, p3.y, z + 0.006), RIVET_R, FRAME_SHADE, Vector3(1.0, 1.0, 0.5), 8)
 	# The alarm beacon's cup, centred over the window (the glowing dome is its own node).
-	kit.cylinder(Vector3(0.0, WIN_Y1 + 0.075, z + 0.06), 0.05, 0.045, 0.03, FRAME_SHADE, Basis(Vector3.RIGHT, PI * 0.5), 16)
+	kit.cylinder(Vector3(0.0, WIN_Y1 + BEACON_UP, z + 0.07), 0.05, 0.045, 0.03, FRAME_SHADE, Basis(Vector3.RIGHT, PI * 0.5), 16)
+
+
+## Distance from the window's centre to the rounded opening's edge along unit direction `d`
+## (bisection on the rounded rectangle's signed distance; the shape is convex, so it is monotonic).
+static func _ray_to_rounded_rect(d: Vector2) -> float:
+	var h := Vector2(WIN_X, (WIN_Y1 - WIN_Y0) * 0.5)
+	var lo := 0.0
+	var hi := 2.0
+	for _i in 32:
+		var mid := (lo + hi) * 0.5
+		var q := (d * mid).abs() - (h - Vector2(WIN_CORNER_R, WIN_CORNER_R))
+		var sd := Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - WIN_CORNER_R
+		if sd < 0.0:
+			lo = mid
+		else:
+			hi = mid
+	return lo
+
+
+## Distance from `c` to convex polygon `poly`'s edge along unit direction `d`.
+static func _ray_to_polygon(c: Vector2, d: Vector2, poly: PackedVector2Array) -> float:
+	var lo := 0.0
+	var hi := 4.0
+	for _i in 32:
+		var mid := (lo + hi) * 0.5
+		if Geometry2D.is_point_in_polygon(c + d * mid, poly):
+			lo = mid
+		else:
+			hi = mid
+	return lo
+
+
+## One triangle straight into the kit's arrays with the given (smooth) normals, wound so its front
+## face is the side its normals point to (PlanetMeshKit.triangle's own convention).
+static func _tri(kit: PlanetMeshKit, a: Vector3, b: Vector3, c: Vector3, na: Vector3, nb: Vector3, nc: Vector3, col: Color) -> void:
+	var face := (c - a).cross(b - a)
+	if face.dot(na + nb + nc) < 0.0:
+		var t := b
+		b = c
+		c = t
+		var tn := nb
+		nb = nc
+		nc = tn
+	var base := kit._verts.size()
+	var lc := PlanetMeshKit._lin(col)
+	for e: Array in [[a, na], [b, nb], [c, nc]]:
+		kit._verts.append(e[0] as Vector3)
+		kit._norms.append(e[1] as Vector3)
+		kit._cols.append(lc)
+		kit._uvs.append(Vector2.ZERO)
+	kit._idx.append_array(PackedInt32Array([base, base + 1, base + 2]))
 
 
 static func _dash_basis() -> Basis:
@@ -309,7 +446,7 @@ static func _dash_top_centre() -> Vector3:
 	return Vector3(0.0, (DASH_Y0 + DASH_Y1) * 0.5 - 0.03, (zf + DASH_Z1) * 0.5)
 
 
-static func _dash(kit: PlanetMeshKit) -> void:
+static func _dash(kit: PlanetMeshKit, soft: PlanetMeshKit) -> void:
 	var zf := Z_FRONT + 0.05
 	var depth := DASH_Z1 - zf
 	var zc := (zf + DASH_Z1) * 0.5
@@ -322,8 +459,8 @@ static func _dash(kit: PlanetMeshKit) -> void:
 	kit.rounded_box(top_c, Vector3(wide, 0.07, top_len + 0.06), 0.03, DASH_TOP, b)
 	kit.rounded_box(Vector3(0.0, (Y_FLOOR + DASH_Y1) * 0.5 - 0.04, zc + 0.02),
 		Vector3(wide, DASH_Y1 - Y_FLOOR - 0.04, absf(depth) * 0.9), 0.04, DASH)
-	# A rounded cream lip along the pilot's edge, where the hands rest.
-	kit.rounded_box(Vector3(0.0, DASH_Y1 - 0.045, DASH_Z1 + 0.01), Vector3(wide - 0.04, 0.07, 0.09), 0.035, FRAME)
+	# A crocheted cushion along the pilot's edge, where the hands rest (one of the soft accents).
+	soft.rounded_box(Vector3(0.0, DASH_Y1 - 0.045, DASH_Z1 + 0.01), Vector3(wide - 0.04, 0.07, 0.09), 0.035, FRAME)
 	# The face under the lip (seen when looking down): darker teal with two vents.
 	kit.rounded_box(Vector3(0.0, -0.60, DASH_Z1 - 0.02), Vector3(wide - 0.08, 0.40, 0.04), 0.02, DASH_DARK)
 	for sgn: float in [-1.0, 1.0]:
@@ -333,6 +470,11 @@ static func _dash(kit: PlanetMeshKit) -> void:
 	var up := b * Vector3.UP
 	var on_top := func(x: float, along: float) -> Vector3:
 		return top_c + b * Vector3(x, 0.035, along)
+	# Two panel seams across the dash top, outboard of the controls, and a rivet at each end.
+	for sx: float in [-0.62, 0.62]:
+		kit.rounded_box(on_top.call(sx, 0.0) - up * 0.031, Vector3(0.012, 0.012, top_len + 0.02), 0.005, DASH_DARK, b)
+		for along: float in [-0.18, 0.18]:
+			kit.sphere(on_top.call(sx + signf(sx) * 0.05, along) - up * 0.03, RIVET_R, FRAME_SHADE, Vector3(1.0, 0.5, 1.0), 8, b)
 	# Radar: a cream bezel ring round the glow screen (the screen is a separate node, see _glows).
 	kit.torus(on_top.call(0.0, -0.02) + up * 0.005, 0.10, 0.02, FRAME, b)
 	kit.cylinder(on_top.call(0.0, -0.02) - up * 0.01, 0.095, 0.095, 0.018, NAVY, b, 24)
@@ -354,24 +496,25 @@ static func _dash(kit: PlanetMeshKit) -> void:
 
 ## The pilot's gloved hands resting on the dash: chunky mittens with the suit's accent cuff, and the
 ## sleeves running back out of view.
-static func _hands(kit: PlanetMeshKit) -> void:
+static func _hands(kit: PlanetMeshKit, soft: PlanetMeshKit) -> void:
 	var b := _dash_basis()
 	var top_c := _dash_top_centre()
 	for sgn: float in [-1.0, 1.0]:
 		var c := top_c + b * Vector3(sgn * 0.22, 0.09, 0.17)
 		var yaw := b * Basis(Vector3.UP, -sgn * 0.3)
-		kit.sphere(c, 0.07, SUIT, Vector3(1.0, 0.62, 1.2), 16, yaw)
+		soft.sphere(c, 0.07, SUIT, Vector3(1.0, 0.62, 1.2), 16, yaw)
 		# The thumb, on the inside.
-		kit.sphere(c + yaw * Vector3(-sgn * 0.062, 0.006, 0.01), 0.03, SUIT, Vector3(1.0, 0.8, 1.3), 10, yaw)
-		# Cuff band and sleeve, back toward the pilot and down out of view.
+		soft.sphere(c + yaw * Vector3(-sgn * 0.062, 0.006, 0.01), 0.03, SUIT, Vector3(1.0, 0.8, 1.3), 10, yaw)
+		# Cuff band (crochet, with the mitten) and the suit sleeve (smooth: round 4 frames had the sleeves
+		# as the biggest knitted area on screen), back toward the pilot and down out of view.
 		var back := yaw * Basis(Vector3.RIGHT, PI * 0.5 + 0.35)
-		kit.cylinder(c + yaw * Vector3(0.0, -0.006, 0.065), 0.058, 0.062, 0.045, SUIT_BAND, back, 16)
-		kit.cylinder(c + yaw * Vector3(0.0, -0.02, 0.105), 0.064, 0.08, 0.32, SUIT, back, 16)
+		soft.cylinder(c + yaw * Vector3(0.0, -0.006, 0.065), 0.058, 0.062, 0.045, SUIT_BAND, back, 16)
+		kit.cylinder(c + yaw * Vector3(0.0, -0.02, 0.105), 0.064, 0.08, 0.32, SUIT_SLEEVE, back, 16)
 
 
 # ============================================================================= the four things
 ## Your camera: a brass box camera with a big lens, a dent in the top corner and a worn strap.
-static func _camera_prop(kit: PlanetMeshKit) -> void:
+static func _camera_prop(kit: PlanetMeshKit, soft: PlanetMeshKit) -> void:
 	var c := CAMERA_AT
 	var yaw := Basis(Vector3.UP, 0.5)
 	kit.rounded_box(c, Vector3(0.19, 0.115, 0.095), 0.028, BRASS, yaw)
@@ -390,37 +533,38 @@ static func _camera_prop(kit: PlanetMeshKit) -> void:
 	kit.sphere(c + yaw * Vector3(0.07, 0.053, 0.033), 0.03, BRASS_DARK.darkened(0.25), Vector3(1.2, 0.45, 1.0), 10, yaw)
 	kit.sphere(c + yaw * Vector3(0.045, 0.06, 0.043), 0.016, Color("#d8c08c"), Vector3(1.4, 0.3, 0.8), 8, yaw)
 	# Strap loop lying on the dash.
-	kit.torus(c + Vector3(0.0, -0.053, 0.10), 0.07, 0.009, NAVY, Basis.IDENTITY, 18)
+	soft.torus(c + Vector3(0.0, -0.053, 0.10), 0.07, 0.011, NAVY, Basis.IDENTITY, 18)
 
 
 ## A tiny sprout in a pot, stuck to the dash with two strips of tape.
-static func _plant(kit: PlanetMeshKit) -> void:
+static func _plant(soft: PlanetMeshKit) -> void:
 	var base := PLANT_AT + Vector3(0.0, -0.05, 0.0)
-	kit.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.032, 0.0), Vector2(0.042, 0.055),
+	soft.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.032, 0.0), Vector2(0.042, 0.055),
 		Vector2(0.048, 0.06), Vector2(0.048, 0.072), Vector2(0.0, 0.072)]), 16,
 		Transform3D(Basis.IDENTITY, base), POT, false)
-	kit.torus(base + Vector3(0.0, 0.066, 0.0), 0.046, 0.008, POT_RIM, Basis.IDENTITY, 16)
-	kit.cylinder(base + Vector3(0.0, 0.06, 0.0), 0.04, 0.04, 0.008, SOIL, Basis.IDENTITY, 16)
+	soft.torus(base + Vector3(0.0, 0.066, 0.0), 0.046, 0.008, POT_RIM, Basis.IDENTITY, 16)
+	soft.cylinder(base + Vector3(0.0, 0.06, 0.0), 0.04, 0.04, 0.008, SOIL, Basis.IDENTITY, 16)
 	var stem_top := base + Vector3(0.0, 0.13, 0.0)
-	kit.cylinder(base + Vector3(0.0, 0.065, 0.0), 0.006, 0.005, 0.07, LEAF_DARK, Basis.IDENTITY, 8)
+	soft.cylinder(base + Vector3(0.0, 0.065, 0.0), 0.006, 0.005, 0.07, LEAF_DARK, Basis.IDENTITY, 8)
 	# Three leaves, flattened spheres, tilted out.
 	for i in 3:
 		var a := TAU * float(i) / 3.0 + 0.4
 		var tilt := Basis(Vector3.UP, a) * Basis(Vector3.FORWARD, 0.75)
 		var col := LEAF if i != 1 else LEAF.lightened(0.08)
-		kit.sphere(stem_top + Basis(Vector3.UP, a) * Vector3(0.028, -0.008, 0.0), 0.03, col, Vector3(1.3, 0.28, 0.75), 12, tilt)
-	kit.sphere(stem_top + Vector3(0.0, 0.012, 0.0), 0.013, LEAF.lightened(0.12), Vector3(1.0, 0.7, 1.0), 8)
+		soft.sphere(stem_top + Basis(Vector3.UP, a) * Vector3(0.028, -0.008, 0.0), 0.03, col, Vector3(1.3, 0.28, 0.75), 12, tilt)
+	soft.sphere(stem_top + Vector3(0.0, 0.012, 0.0), 0.013, LEAF.lightened(0.12), Vector3(1.0, 0.7, 1.0), 8)
 	# Tape strips over the pot's foot onto the dash.
 	for sgn: float in [-1.0, 1.0]:
-		kit.rounded_box(base + Vector3(sgn * 0.045, 0.012, 0.0), Vector3(0.05, 0.006, 0.026), 0.003, TAPE,
+		soft.rounded_box(base + Vector3(sgn * 0.045, 0.012, 0.0), Vector3(0.05, 0.006, 0.026), 0.003, TAPE,
 			Basis(Vector3.FORWARD, sgn * 0.5))
 
 
 ## The cork board set into the left wall in place of a panel, and the two strings across it.
-static func _photo_board(kit: PlanetMeshKit) -> void:
+static func _photo_board(kit: PlanetMeshKit, soft: PlanetMeshKit) -> void:
 	var b := _board_basis()
 	var c := PHOTOS_AT + b * Vector3(0.0, 0.0, -0.025)
-	kit.rounded_box(c + b * Vector3(0.0, 0.0, -0.012), Vector3(BOARD_SIZE.x + 0.05, BOARD_SIZE.y + 0.05, 0.03), 0.02, BOARD_EDGE, b)
+	# The border is a crocheted frame (a soft accent); the cork inside it is smooth.
+	soft.rounded_box(c + b * Vector3(0.0, 0.0, -0.012), Vector3(BOARD_SIZE.x + 0.05, BOARD_SIZE.y + 0.05, 0.03), 0.02, BOARD_EDGE, b)
 	kit.rounded_box(c, Vector3(BOARD_SIZE.x, BOARD_SIZE.y, 0.03), 0.015, BOARD, b)
 	for row in 2:
 		var prev := Vector3.ZERO
@@ -510,7 +654,7 @@ static func _glows(root: Node3D) -> void:
 	cm.height = 0.004
 	cm.radial_segments = 28
 	screen.mesh = cm
-	screen.material_override = MaterialLib.glow(Color("#7cc4b8"), 0.3, Color("#3d6366"))
+	screen.material_override = MaterialLib.glow(Color("#9cc4bc"), 0.3, Color("#55686a"))
 	screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	screen.transform = Transform3D(b, top_c + b * Vector3(0.0, 0.047, -0.02))
 	YarnLite.keep_glossy(screen)
@@ -584,21 +728,6 @@ static func _paper_material(tex: Texture2D) -> StandardMaterial3D:
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
-
-
-## A faint sheen on the window so it reads as glass: two soft diagonal streaks in the top-left
-## corner, nothing over the middle where home is.
-static func _glass(root: Node3D) -> void:
-	var streaks := [[Vector3(-0.56, 0.47, Z_FRONT + 0.01), 0.08], [Vector3(-0.45, 0.52, Z_FRONT + 0.01), 0.03]]
-	for s: Array in streaks:
-		var mi := MeshInstance3D.new()
-		var q := QuadMesh.new()
-		q.size = Vector2(float(s[1]), 0.34)
-		mi.mesh = q
-		mi.material_override = MaterialLib.flat_unlit(Color(1.0, 0.98, 0.94, 0.05))
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.transform = Transform3D(Basis(Vector3.BACK, 0.5), s[0] as Vector3)
-		root.add_child(mi)
 
 
 # ============================================================================= painted images

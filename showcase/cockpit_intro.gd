@@ -176,8 +176,28 @@ func _process(delta: float) -> void:
 func _drive_play(s: Dictionary, _delta: float) -> void:
 	if not bool(s["cam_current"]) or str(s["phase"]) == "CARD":
 		return
+	# --mask-soft: paint the crochet accents flat magenta, so a frame can be counted for how much of the
+	# screen is crochet (measurement only).
+	if OS.get_cmdline_user_args().has("--mask-soft") and _once("mask_soft"):
+		var soft := _cockpit.get_node_or_null("Cockpit/Soft") as MeshInstance3D
+		if soft != null:
+			var m := StandardMaterial3D.new()
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.albedo_color = Color(1.0, 0.0, 1.0)
+			soft.material_override = m
+			print("PROBE mask-soft: crochet accents painted magenta")
 	if str(s["phase"]) == "LOOK" and float(s["look_t"]) < 2.3:
 		_shot_at(s, "reveal", float(s["look_t"]) >= 2.0)
+		return
+	if str(s["phase"]) == "LOOK" and not _shot_done.has("window_corner"):
+		# First a look up and right at the window's rounded corner, for the frame that shows it.
+		var corner := Vector2(-26.0, 22.0)
+		_steer(s, corner)
+		if Vector2(float(s["yaw"]) - corner.x, float(s["pitch"]) - corner.y).length() < 0.8:
+			_release()
+			if _shots == "":
+				_shot_done["window_corner"] = true
+			_shot("window_corner")
 		return
 	if str(s["phase"]) == "LOOK":
 		if _target_i < _target_order.size():
