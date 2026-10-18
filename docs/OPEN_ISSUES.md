@@ -2169,3 +2169,18 @@ looked smooth until the planet reloaded; Bolt's Scrap Snail (built at scale 0.00
 * **A tap that opens a skip pop-up is a trap on a phone.** Make taps do nothing and give skip its own small button.
 * **Merging builders' copies: compare each builder to the MAIN tree, never to the merge copy.** Comparing to the merge
   copy overwrote B2's files with B3's older copies of them (caught by a full verify; no harm shipped).
+
+## 74. [2026-10-18] Cool mode saves nothing while the player is moving (by design of the saver it wraps)
+
+The user asked for anything that cuts phone heat without costing quality or adding lag, and chose to make the hidden
+30-frames-per-second saver a player setting, "Cool mode", off by default (pause > Settings; `GameState.settings["cool_mode"]`;
+`DrawGate.set_cool_mode`). The critic measured the catch: `DrawGate` treats every input event, and `Input.is_anything_pressed()`,
+as activity and draws at full rate for 0.5 s after it. A held touch stick (`touch_stick.gd:162` uses `Input.action_press`) or
+a camera drag therefore keeps it at 60 pictures a second. Measured in the real hub while walking: Cool mode ON drew 60.0 and
+60.0 per second, the same as OFF; standing still it drew 30.0. So the saving comes only from hands-off time (dialogue boxes,
+the cockpit and crash cutscenes, standing and watching), and a tap or stick push brings full rate back on the same tick
+(no input lag added). The phone saving is UNMEASURED: the web path (`render_loop_enabled` on WebGL) was never exercised, only
+the desktop `--draw-saver` stand-in. On the phone read the Perf overlay's "draw gate: saver NN drawn/s" line with the switch on.
+If that is not enough, a second level that also caps walking at 30 is a design change with a real smoothness cost.
+Also: the choice lives inside the save, so Reload + New Game starts with it off (as music volume does); a non-bool value in a
+save reads as OFF (`typeof(raw) == TYPE_BOOL and raw`; `bool("yes")` throws a script error every tick).

@@ -214,7 +214,10 @@ var trash_last_check_unix: float = Time.get_unix_time_from_system()
 ## `mouse_sensitivity` is a multiplier on CameraRig.MOUSE_*_DEG_PER_PX (clamped 0.1..4.0 there);
 ## `camera_invert_y` is the vertical twin of the existing `camera_invert_x`. Both were added with
 ## mouse look (see src/player/camera_rig.gd) and are surfaced on the pause menu's Settings page.
-var settings: Dictionary = {"music_volume": 0.8, "sfx_volume": 1.0, "camera_invert_x": false, "camera_invert_y": false, "mouse_sensitivity": 1.0}
+## `cool_mode` (2026-10-18): the player's "Cool mode" switch - DrawGate draws ~30 pictures a second
+## instead of 60 to cut phone heat. Off by default; a save without the key reads off, and DrawGate
+## (src/autoload/draw_gate.gd `_sync_setting`) carries the live choice across a load and a New Game.
+var settings: Dictionary = {"music_volume": 0.8, "sfx_volume": 1.0, "camera_invert_x": false, "camera_invert_y": false, "mouse_sensitivity": 1.0, "cool_mode": false}
 
 # ----------------------------------------------------------------------------- economy
 func add_stardust(amount: int) -> void:

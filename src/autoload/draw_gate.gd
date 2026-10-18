@@ -59,7 +59,8 @@ const MENU_INTERVAL_MS := 45
 ## Opt-in "battery saver": ~30 Hz, matching heat-web-2's own measured configuration
 ## (`render_loop_enabled` alternated so exactly 30 frames drew against a 60 Hz process loop).
 ## Off by default — this changes what movement and flights look like, and only the player, on
-## their own phone, gets to decide that trade-off is worth it (round-1 safety note).
+## their own phone, gets to decide that trade-off is worth it (round-1 safety note). Since
+## 2026-10-18 the player decides it with pause > Settings > "Cool mode" (see COOL MODE below).
 ##
 ## ROUND-2 FIX (critic): same frame-edge quantization as MENU_INTERVAL_MS above — a raw 33 ms target
 ## measured 25.6-27.1 draws/s with uneven 33/50 ms gaps, not the ~30/s heat_ranked asks for. Lowering
@@ -76,7 +77,27 @@ const WATCHDOG_MS := 100
 const ACTIVITY_WINDOW_MS := 500
 
 var _active := false
-var _saver := false
+## COOL MODE (2026-10-18, the user: "anything that could reduce the heat that doesn't compromise
+## quality or introduce lag"). ONE truth for "saver on": `GameState.settings["cool_mode"]` (bool,
+## default false, a missing key reads false) is the persisted choice; `_cool` is this node's copy of
+## it, re-read every tick by `_sync_setting()`. The dev menu's Perf-tab switch (`set_saver`) is a
+## RUNTIME OVERRIDE on top: `_override` is -1 (none), 0 (forced off) or 1 (forced on). It lasts until
+## the page reloads or the setting itself changes (menu flip, a save load that changes it), whichever
+## comes first; then the setting rules again. See `_saver_effective()`.
+var _cool := false
+var _override := -1
+## The last value `set_saver` was called with. PerfOverlay re-asserts its own `_saver_wanted` (default
+## false) on EVERY planet load; a call that only repeats the previous one is a re-assert, not a new
+## dev decision, and must not override a Cool mode the player turned on in between. Starts false to
+## match PerfOverlay's default.
+var _last_dev_request := false
+## Set once the player flips the switch this session. A save loaded AFTER that keeps the player's
+## live choice (it is a device preference); a save loaded before it (the title's Continue at boot)
+## supplies the choice instead, because the save is where the choice is stored between sessions.
+var _player_chose := false
+## The exact Dictionary object last seen in `GameState.settings`. `GameState.from_dict()` REPLACES it
+## with the save's own dictionary on a load, which is how a load is detected here.
+var _settings_ref: Variant = null
 var _last_draw_ms := 0
 var _accum_step := 0.0
 var _last_activity_ms := -ACTIVITY_WINDOW_MS - 1000
@@ -95,7 +116,8 @@ func _ready() -> void:
 	var now := Time.get_ticks_msec()
 	_last_draw_ms = now
 	_window_start_ms = now
-	print("[DrawGate] active: ", _active, " (web: ", OS.has_feature("web"), ")")
+	_sync_setting()
+	print("[DrawGate] active: ", _active, " (web: ", OS.has_feature("web"), ") cool_mode: ", _cool)
 	if _active:
 		# Baseline: drawing is on until the first frame decides otherwise. On desktop without
 		# --draw-saver this function returns above and NOTHING here ever runs (item 4's checklist
@@ -132,15 +154,75 @@ func notify_activity() -> void:
 
 
 ## DEV's saver toggle (Perf tab). Never persisted — heat_ranked.md's toggles are re-applied on
-## `planet_loaded` and are never saved, and this is not the exception (unlike HEAT-LOAD's warm-up
-## setting, this is deliberately session-only so the player is re-asked, not stuck on a forgotten
-## trade-off).
+## `planet_loaded` and are never saved. Since Cool mode (2026-10-18) this is a RUNTIME OVERRIDE of
+## the player's setting, not a second truth: it wins until the page reloads or the setting changes.
+## A call that repeats the previous call's value is PerfOverlay's planet-load re-assert and is
+## ignored (see `_last_dev_request`). A request equal to the setting just clears the override, so the
+## two can never be left disagreeing with nothing to undo it: the next flip of either one decides.
 func set_saver(on: bool) -> void:
-	_saver = on
+	if on == _last_dev_request:
+		return
+	_last_dev_request = on
+	_sync_setting()
+	_override = -1 if on == _cool else int(on)
 
 
+## True when the ~30 Hz saver applies outside menus: the dev override if one is set, else Cool mode.
 func saver_on() -> bool:
-	return _saver
+	return _saver_effective()
+
+
+## The pause menu's "Cool mode" switch. Writes the persisted setting and applies it at once (also
+## while the tree is paused - this node is PROCESS_MODE_ALWAYS and this call needs no tick at all).
+func set_cool_mode(on: bool) -> void:
+	_player_chose = true
+	_sync_setting()
+	GameState.settings["cool_mode"] = on
+	_sync_setting()
+
+
+## The persisted choice, as last read from GameState.settings.
+func cool_mode() -> bool:
+	_sync_setting()
+	return _cool
+
+
+## Whether a "Cool mode" switch would do anything here: DrawGate only gates draws on the web build
+## (or with the `--draw-saver` user arg). The pause menu hides its row when this is false rather than
+## show a switch that changes nothing.
+func cool_mode_available() -> bool:
+	return _active
+
+
+## Who decides right now, for probes and the dev overlay: "setting" or "dev override".
+func saver_source() -> String:
+	return "setting" if _override < 0 else "dev override"
+
+
+func _saver_effective() -> bool:
+	return _cool if _override < 0 else _override == 1
+
+
+## Re-reads the persisted setting. Cheap enough to run every tick (one identity check, one lookup),
+## which is what makes startup, a menu flip, a save load and a New Game all land without anyone
+## having to remember to call in: `reset_new_game()` keeps the same dictionary (its `from_dict({})`
+## falls back to the live one), and a real load swaps in the save's own dictionary, handled here.
+func _sync_setting() -> void:
+	var s: Dictionary = GameState.settings
+	if not is_same(s, _settings_ref):
+		# A save was loaded (or this is the first read at boot). A save written before Cool mode has
+		# no key: keep the live choice rather than silently reverting to off. A save that HAS the key
+		# supplies the choice - unless the player already chose this session, which wins.
+		if _settings_ref != null and (_player_chose or not s.has("cool_mode")):
+			s["cool_mode"] = _cool
+		_settings_ref = s
+	# Only a real bool true counts. A hand-edited or corrupted save can hold anything here ("yes", 1,
+	# null); `bool("yes")` is a script error every tick, and `"yes" == true` errors too, so test the type.
+	var raw: Variant = s.get("cool_mode", false)
+	var v: bool = typeof(raw) == TYPE_BOOL and raw
+	if v != _cool:
+		_cool = v
+		_override = -1 # a setting change ends any dev override
 
 
 ## "off" (desktop, no --draw-saver: this whole script is a no-op), "normal" (full rate), "menu"
@@ -152,7 +234,7 @@ func mode() -> String:
 	if not _recent_activity():
 		if get_tree().paused:
 			return "menu"
-		if _saver:
+		if _saver_effective():
 			return "saver"
 	return "normal"
 
@@ -176,13 +258,14 @@ func _process(delta: float) -> void:
 	# because release happens on the NEXT frame's input flush, after this poll already ran.
 	if Input.is_anything_pressed():
 		notify_activity()
+	_sync_setting()
 	var now := Time.get_ticks_msec()
 	_accum_step += delta
 	var interval := 0
 	if not _recent_activity():
 		if get_tree().paused:
 			interval = MENU_INTERVAL_MS
-		elif _saver:
+		elif _saver_effective():
 			interval = SAVER_INTERVAL_MS
 	var since_draw := now - _last_draw_ms
 	if interval <= 0:

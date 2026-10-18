@@ -1,0 +1,166 @@
+[
+  {
+    "t": 0.2,
+    "log": "cool_mode_menu: the Cool mode row on pause > Settings - frames, focus order, switch states"
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_done"
+      ]
+    }
+  },
+  {
+    "t": 0.2,
+    "call": {
+      "node": "/root/GameState",
+      "method": "set_flag",
+      "args": [
+        "intro_greeted"
+      ]
+    }
+  },
+  {
+    "t": 2.5,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "open",
+      "args": []
+    }
+  },
+  {
+    "t": 3.0,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "_open_settings",
+      "args": []
+    }
+  },
+  {
+    "t": 3.6,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "settings_open"
+      ]
+    }
+  },
+  {
+    "t": 3.7,
+    "capture": "cool_settings_off"
+  },
+  {
+    "t": 4.0,
+    "log": "keyboard/gamepad: six ui_down steps from Music land on Cool mode"
+  },
+  {
+    "t": 4.2,
+    "tap": "ui_down"
+  },
+  {
+    "t": 4.5,
+    "tap": "ui_down"
+  },
+  {
+    "t": 4.8,
+    "tap": "ui_down"
+  },
+  {
+    "t": 5.1,
+    "tap": "ui_down"
+  },
+  {
+    "t": 5.4,
+    "tap": "ui_down"
+  },
+  {
+    "t": 5.7,
+    "tap": "ui_down"
+  },
+  {
+    "t": 6.2,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "after_6_down"
+      ]
+    }
+  },
+  {
+    "t": 6.4,
+    "tap": "ui_accept"
+  },
+  {
+    "t": 6.9,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "after_accept"
+      ]
+    }
+  },
+  {
+    "t": 7.0,
+    "capture": "cool_settings_on_focused"
+  },
+  {
+    "t": 7.3,
+    "tap": "ui_left"
+  },
+  {
+    "t": 7.8,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "after_left"
+      ]
+    }
+  },
+  {
+    "t": 8.0,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_tap_cool_hint",
+      "args": []
+    }
+  },
+  {
+    "t": 8.5,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "after_hint_tap"
+      ]
+    }
+  },
+  {
+    "t": 8.6,
+    "capture": "cool_settings_on"
+  },
+  {
+    "t": 8.9,
+    "tap": "ui_down"
+  },
+  {
+    "t": 9.3,
+    "call": {
+      "node": "/root/World/HUD/PauseMenu",
+      "method": "debug_report_cool",
+      "args": [
+        "after_down_past"
+      ]
+    }
+  },
+  {
+    "t": 9.6,
+    "quit": true
+  }
+]

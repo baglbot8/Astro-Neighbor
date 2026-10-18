@@ -34,6 +34,16 @@ const DEV_KEY := KEY_F1
 ## (measured at 1560x720 --ui=mobile).
 const SETTINGS_GAP := 14
 const SETTINGS_GAP_MOBILE := 6
+## COOL MODE (2026-10-18): the plain-words line that says what the switch trades. At most 60
+## characters a line (the brief), and no jargon - "pictures", not "frames". Short on purpose: the
+## phone layout has only the ~212 px beside the switch, two lines inside the switch's own 56-px row
+## (measured: a 57-character line wrapped to four lines there, made the row 102 px tall and pushed
+## Back off a 720-px frame; this 42-character one still took three lines, 76 px, panel 721 px), and the
+## computer layout has one 412-px line under the row. So the phone gets the shorter of the two.
+## Wording (lead, 2026-10-18): DrawGate draws at full rate for 0.5 s after any input, so Cool mode only
+## saves while the player's hands are off (standing still, dialogue, cutscenes) - say exactly that.
+const COOL_HINT := "Fewer pictures when you stand still: cooler."
+const COOL_HINT_PHONE := "Cooler when you stand still."
 
 var is_open := false
 
@@ -54,6 +64,13 @@ var _sfx: PillSlider
 var _invert: ToggleSwitch
 var _invert_y: ToggleSwitch
 var _show_carry: ToggleSwitch
+## COOL MODE row (2026-10-18). `_cool_row` is the whole row (hidden where DrawGate does nothing);
+## the hint sits beside the switch on the phone layout (no height to spare, see `_layout_cool_hint`)
+## and on its own line under the row on the computer layout (no width to spare).
+var _cool: ToggleSwitch
+var _cool_row: HBoxContainer
+var _cool_hint_side: Label
+var _cool_hint_below: Label
 var _look: PillSlider
 var _ui_mode: SegmentedControl
 ## The keyboard hint strip at the foot of the menu - desktop only (R2.10), and it has to follow a
@@ -154,6 +171,7 @@ func _build() -> void:
 	_show_carry.on = bool(GameState.settings.get("show_carry_item", true))
 	_show_carry.toggled.connect(_set_show_carry)
 	_settings_items.append(_add_setting_row("Show package", _show_carry))
+	_build_cool_row()
 	# ADDED BY THE MOBILE UI BUILDER for R2.10. The game ships two front ends and the layout nobody
 	# is sitting in front of never gets checked, so the player (and any reviewer on any machine)
 	# can force either. Writes GameState.settings["ui_mode"] through `Platform.set_ui_mode`, which
@@ -264,11 +282,13 @@ func _on_platform_mode_changed(_mobile: bool) -> void:
 	for c in _settings_items:
 		if c is Button:
 			c.custom_minimum_size = Vector2(0.0, touch_h)
-	for c in [_music, _sfx, _look, _invert, _invert_y, _show_carry, _ui_mode]:
+	for c in [_music, _sfx, _look, _invert, _invert_y, _show_carry, _cool, _ui_mode]:
 		if c != null and c.has_method("refresh_platform"):
 			c.call("refresh_platform")
 	if _hints_row != null:
 		_hints_row.visible = not MobileUI.is_mobile()
+	_layout_cool_hint()
+	_refresh_subtitle()
 	_refresh_ui_mode()
 	if is_open:
 		call_deferred("_relayout")
@@ -296,6 +316,143 @@ func _set_show_carry(on: bool) -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player != null and player.has_method("refresh_carry_visibility"):
 		player.call("refresh_carry_visibility")
+
+
+# ----------------------------------------------------------------------------- cool mode
+## COOL MODE (2026-10-18, the user's hot phone: "anything that could reduce the heat that doesn't
+## compromise quality or introduce lag"). One switch row, built like "Show package", writing
+## GameState.settings["cool_mode"] through DrawGate.set_cool_mode, which applies it at once.
+##
+## HIDDEN, NOT GREYED, WHERE IT CANNOT WORK: DrawGate only withholds draws on the web build (or with
+## the `--draw-saver` user arg). On a desktop build the switch would change nothing at all, and a
+## disabled row would spend a whole row of height explaining a thing the player cannot use, so the
+## row is not shown there. The whole row is the tap target, label and hint included.
+func _build_cool_row() -> void:
+	_cool = ToggleSwitch.new()
+	_cool.on = _cool_setting()
+	_cool.toggled.connect(_set_cool_mode)
+	_settings_items.append(_add_setting_row("Cool mode", _cool))
+	_cool_row = _cool.get_parent() as HBoxContainer
+	_cool_row.name = "CoolModeRow"
+	_cool_row.mouse_filter = Control.MOUSE_FILTER_STOP
+	_cool_row.gui_input.connect(_on_cool_row_input)
+	for c in _cool_row.get_children():
+		if c is Label:
+			(c as Label).mouse_filter = Control.MOUSE_FILTER_PASS
+	_cool_hint_side = UIStyle.make_label(COOL_HINT_PHONE, "Soft")
+	_cool_hint_side.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cool_hint_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cool_row.add_child(_cool_hint_side)
+	_cool_hint_below = UIStyle.make_label(COOL_HINT, "Soft")
+	_cool_hint_below.name = "CoolModeHint"
+	_cool_hint_below.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cool_hint_below.mouse_filter = Control.MOUSE_FILTER_STOP
+	_cool_hint_below.gui_input.connect(_on_cool_row_input)
+	# Row and under-line hint share one block with no gap between them, so the hint reads as part
+	# of the row and costs only its own line height, not an extra SETTINGS_GAP.
+	var block := VBoxContainer.new()
+	block.name = "CoolModeBlock"
+	block.add_theme_constant_override("separation", 0)
+	_settings_box.add_child(block)
+	_settings_box.move_child(block, _cool_row.get_index())
+	_cool_row.reparent(block, false)
+	block.add_child(_cool_hint_below)
+	_layout_cool_hint()
+
+
+## Phone: the settings page already fills a 720-px-tall frame (SETTINGS_GAP_MOBILE's note), so the
+## hint goes BESIDE the switch and the switch stops stretching. Computer: the 460-px panel leaves no
+## width beside the switch, so the hint takes its own line right under the row's label.
+func _layout_cool_hint() -> void:
+	if _cool == null:
+		return
+	var available := _cool_available()
+	var mobile := MobileUI.is_mobile()
+	_cool_row.visible = available
+	_cool_hint_side.visible = available and mobile
+	_cool_hint_below.visible = available and not mobile
+	_cool.size_flags_horizontal = Control.SIZE_FILL if mobile else Control.SIZE_EXPAND_FILL
+	(_cool_row.get_parent() as Control).visible = available
+	# Keep keyboard/gamepad focus off a hidden row: it is not in the list the menu steps through.
+	var i := _settings_items.find(_cool)
+	if available and i < 0:
+		_settings_items.insert(_settings_items.find(_show_carry) + 1, _cool)
+	elif not available and i >= 0:
+		_settings_items.remove_at(i)
+
+
+## Phone layout, Settings page, Cool mode row shown: the page is one row taller than a 720-px frame
+## holds (measured 785 px with the subtitle, Back clipped), so the subtitle line - which only repeats
+## what the row labels already say - is dropped there. Every other page and layout keeps it.
+func _refresh_subtitle() -> void:
+	if _subtitle != null:
+		_subtitle.visible = not (_in_settings and MobileUI.is_mobile() and _cool_available())
+
+
+func _on_cool_row_input(event: InputEvent) -> void:
+	var press := (event is InputEventMouseButton and (event as InputEventMouseButton).pressed
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT) \
+		or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+	if press and _cool != null:
+		_cool.grab_focus()
+		_cool.activate()
+		accept_event()
+
+
+static func _draw_gate() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null("DrawGate") if tree != null and tree.root != null else null
+
+
+func _cool_available() -> bool:
+	var g := _draw_gate()
+	return g != null and g.has_method("cool_mode_available") and bool(g.call("cool_mode_available"))
+
+
+func _cool_setting() -> bool:
+	var g := _draw_gate()
+	if g != null and g.has_method("cool_mode"):
+		return bool(g.call("cool_mode"))
+	var raw: Variant = GameState.settings.get("cool_mode", false)
+	return typeof(raw) == TYPE_BOOL and raw
+
+
+func _set_cool_mode(on: bool) -> void:
+	var g := _draw_gate()
+	if g != null and g.has_method("set_cool_mode"):
+		g.call("set_cool_mode", on)
+	else:
+		GameState.settings["cool_mode"] = on
+
+
+## Test hook: flips the "Cool mode" switch the way a tap does (through ToggleSwitch's own signal).
+func debug_set_cool_mode(on: bool) -> void:
+	if _cool != null:
+		_cool.on = on
+
+
+## Test hook: one real tap (MobileUI.synth_tap, an actual InputEventMouseButton through
+## Input.parse_input_event) on the centre of the Cool mode hint, so a probe can show the row - not
+## only the switch - takes a tap. Synthesised: not a real finger.
+func debug_tap_cool_hint() -> void:
+	var target: Control = _cool_hint_side if _cool_hint_side.visible else _cool_hint_below
+	if target.is_visible_in_tree():
+		MobileUI.synth_tap(target.get_global_rect().get_center())
+
+
+## One-line state dump for a timeline to assert against.
+func debug_report_cool(tag: String = "") -> void:
+	var g := _draw_gate()
+	var r := _cool_row.get_global_rect() if _cool_row.is_visible_in_tree() else Rect2()
+	var sw := _cool.get_global_rect() if _cool.is_visible_in_tree() else Rect2()
+	var focus := get_viewport().gui_get_focus_owner()
+	print("PAUSECOOL %s available=%s row_visible=%s switch=%s setting=%s saver_on=%s mode=%s index=%d focus=%s in_list=%s row=%s switch_rect=%s panel=%s viewport=%s" % [
+		tag, str(_cool_available()), str(_cool_row.is_visible_in_tree()), str(_cool.on),
+		str(GameState.settings.get("cool_mode", "missing")),
+		str(g.call("saver_on")) if g != null else "n/a", str(g.call("mode")) if g != null else "n/a",
+		_index, ("cool" if focus == _cool else (focus.get_class() if focus != null else "none")),
+		str(_settings_items.has(_cool)), str(r), str(sw), str(_panel.get_global_rect()),
+		str(get_viewport_rect().size)])
 
 
 ## Test hook: flips the "Show package" switch the way a tap does (through ToggleSwitch's own signal).
@@ -343,6 +500,11 @@ func open() -> void:
 	_invert.on = bool(GameState.settings.get("camera_invert_x", false))
 	_invert_y.on = bool(GameState.settings.get("camera_invert_y", false))
 	_look.value = _sens_to_slider(float(GameState.settings.get("mouse_sensitivity", 1.0)))
+	# Re-read on every open: a save load can swap the setting underneath. `set_on` emits `toggled`
+	# only on a change, and writing back the value DrawGate just reported is a no-op there.
+	_cool.on = _cool_setting()
+	_layout_cool_hint()
+	_refresh_subtitle()
 	_refresh_ui_mode()
 	get_tree().paused = true
 	EventBus.ui_modal_opened.emit("pause")
@@ -376,6 +538,11 @@ func _relayout() -> void:
 	# area off-centre and a plain centre would put the panel edge under it.
 	var sa := MobileUI.safe_area()
 	_panel.position = (size - _panel.size) * 0.5 + Vector2((sa.x - sa.z) * 0.5, (sa.y - sa.w) * 0.5)
+	# COOL MODE (2026-10-18): the phone Settings page is now 701 px tall, more than a 720-px frame
+	# minus a 38-px home-indicator inset, so centring in the safe rect alone would push its top edge
+	# off the screen. Keep the whole panel on screen first (the home bar may overlap its bottom
+	# padding); for any panel that fits the safe rect this changes nothing.
+	_panel.position.y = clampf(_panel.position.y, 0.0, maxf(0.0, size.y - _panel.size.y))
 
 func _items() -> Array[Control]:
 	return _settings_items if _in_settings else _main_items
@@ -412,6 +579,7 @@ func _open_settings() -> void:
 	_index = 0
 	_title.text = "Settings"
 	_subtitle.text = "Music, sounds and camera."
+	_refresh_subtitle()
 	call_deferred("_relayout")
 	_focus_current()
 
@@ -424,6 +592,7 @@ func _close_settings() -> void:
 	_index = 3
 	_title.text = "Paused"
 	_subtitle.text = "Take a breather."
+	_refresh_subtitle()
 	call_deferred("_relayout")
 	_focus_current()
 
