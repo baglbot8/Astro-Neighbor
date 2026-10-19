@@ -10,7 +10,7 @@ extends Node
 ## With all three bits the Professor fits the patch (a dialogue, a chime and two emotes - NOT the part
 ## celebration, which only exists on home and would step the rocket's finish). The patch is not a ship
 ## part: it is never in CampaignData.PARTS and never counts in GameState.rocket_part_count(), so the
-## rusty finish and Departure Day are unchanged. Fitting it sets PATCH_FLAG, which opens Zorp and Bolt
+## rusty finish and the parts ladder are unchanged. Fitting it sets PATCH_FLAG, which opens Zorp and Bolt
 ## (CampaignData.needs_patch). Then he says the photographer lines (option A, "one last look"), opens his
 ## photo task (ProfessorAsk.open_task) and hands over a parcel of glow bulbs for Zorp. Talking to Zorp
 ## with the parcel plays his delivery lines, then his project starts exactly as it does today.
@@ -111,31 +111,33 @@ const FIT_BEFORE := [
 ]
 const FIT_AFTER := [
 	"There! Patched. Not pretty, but it will hop.",
-	"Zorp and Bolt are in reach now.",
+	"Zorp and Bolt are in reach now. Bolt loves visitors.",
 ]
 ## Option A, "one last look" (INTRO_SPEC 1.6 and 7.4). Stella's "done" lines notice the camera first,
 ## so he has heard it from her.
 const PHOTOGRAPHER := [
 	"Stella tells me you carry a camera everywhere.",
 	"A photographer? Splendid!",
-	"Nobody can see all of their own world.",
+	"Your ship's log mentions the Station. That can wait a bit.",
 	"Your photos could show what they might leave behind.",
-	"Help them, and they will help fix your ship.",
+	"Help them, and each will give a part for your ship.",
 ]
 const PHOTO_ASK := [
 	"Snap a neighbour on their own world, then show me.",
-	"A last look at home, so they can see what they'd miss.",
+	# The camera is only reached through a neighbour's own "Photo safari?" offer in a plain talk
+	# (conversation.gd); the player cannot ask for one, so this says who offers (STORY_FIT_REVIEW B3).
+	"Chat with them. They'll offer a photo safari.",
 ]
 const PARCEL := [
-	"First, a parcel for Zorp. His rivers are dimming.",
+	"Oh, and a parcel for Zorp. His rivers are dimming.",
 	"Spare glow bulbs. Fragile, so no juggling!",
 ]
 const PARCEL_REMINDER := [
 	"Zorp's glow bulbs! His rivers are waiting.",
 	"Your rocket's on the pad. It can reach him now.",
 ]
-## Zorp, right after his own first-meeting intro and right before his project's intro ("Oh no, oh no!
-## My rivers are going dark!"), which follows in the same talk.
+## Zorp, right after his own first-meeting intro and right before his project's intro ("My rivers are
+## going dark. Little by little."), which follows in the same talk.
 const ZORP_PARCEL := [
 	"A parcel? From the Professor? For me?",
 	"Glow bulbs! Thank you for carrying them so far!",
@@ -149,7 +151,7 @@ const TOAST_SCRAP_DONE := "That's enough scrap! Back to Pip."
 const TOAST_POP_FOUND := "Found Pop's patch bit! Back to Pop."
 const TOAST_TAPE := "Stella lent you her tape measure"
 const TOAST_MEASURED := "Dent measured! Back to Stella."
-const TOAST_PATCH := "Patch fitted! Zorp and Bolt are in reach."
+const TOAST_PATCH := "Patch fitted!"
 const TOAST_PARCEL := "You got glow bulbs for Zorp!"
 const TOAST_DELIVERED := "Delivered the glow bulbs!"
 const BIT_PROMPT := "Pick up"
@@ -216,8 +218,11 @@ static func task_met(id: String) -> bool:
 	return false
 
 
+## The chosen name, stripped; "Astro" when it is missing, blank or only spaces (finale_gift.gd `_named`'s
+## rule), so DISPATCH never reads "Now then, ." (STORY_FIT_REVIEW polish, 2026-10-18).
 static func _player_name() -> String:
-	return str(GameState.player_style.get("name", "Astro"))
+	var who := str(GameState.player_style.get("name", "")).strip_edges()
+	return who if who != "" else "Astro"
 
 
 static func _named(lines: Array) -> Array:
@@ -276,8 +281,10 @@ static func _run_professor(runner: DialogueRunner, npc: NPC, first_meeting: bool
 		return
 	var lines: Array = []
 	if first_meeting:
-		# conversation.gd already played his generic stranger intro (no photo is ever in hand here).
-		lines.append_array(ProfessorAsk.first_meeting_lines(false))
+		# conversation.gd SKIPPED his generic stranger intro here (docs/STORY_FIT_REVIEW.md B2): he has
+		# just talked the player through the crash by radio and knows their name, so he greets them by
+		# it instead of meeting a stranger (no photo is ever in hand here).
+		lines.append_array(ProfessorAsk.first_meeting_lines(false, _player_name()))
 	if not GameState.flag(STARTED_FLAG):
 		GameState.set_flag(STARTED_FLAG)
 		lines.append_array(_named(DISPATCH))

@@ -285,8 +285,9 @@ photographer lines, the photo task opens, and the parcel (spare glow bulbs) is d
 normal project then starts in the same talk. The patch leaves `rocket_part_count()` at 0 and the finish rusty.
 While the gate is closed Commons residents only offer deliveries (a "bring" favour could ask for a flower from a
 closed world). **Changed in `STORY_HOME_SPEC.md` 5.2:** the Professor's thanks no longer says "I'm tracking that
-meteor. Every sky you photograph helps."; the reason is the residents' last look at home. The `town_hall` line
-"That streak is in all your photos" still plants the streak.
+meteor. Every sky you photograph helps."; the reason is the residents' last look at home. (Correction 2026-10-18: the
+streak was removed from the sky on 2026-09-28, so the `town_hall` line "That streak is in all your photos" is wrong and is
+replaced in `docs/STORY_FIT_REVIEW.md` A4.)
 
 **Known and unproven.**
 * No real finger was used anywhere. Drag-look and hold-the-dot on the iPhone are the user's test (gate 9).
@@ -306,3 +307,11 @@ and the seat (measured 0-6% of the screen per view). The window is a rounded rec
 height) and a rolled bezel; the letter sits 4 cm further out. Palette rulings unchanged: the navy space through the window pushes
 the whole-frame saturation p90 to 0.66-0.71 (the interior crops are 0.17-0.42); space is exempt. Blown is 0.0-0.1% and luma p95
 is at most 0.919. Not measured: the phone-speed gain from dropping the full-screen yarn (GPU time reads 0 on this Mac).
+
+**Words pass (2026-10-18).** The story lines were reviewed against this opening by two read-only Opus reviewers; the work list,
+the rulings and the result are in `docs/STORY_FIT_REVIEW.md`. In short: the radio call now calls the grazed rock "that meteor you
+clipped"; the finale call says "fly on to the Station"; the four part farewells say "good luck out there"; the Professor greets
+you by name on the Commons and no longer introduces himself twice; the name is used in the finale and the Day-1 letter; the finale
+meteor is recoloured to the cockpit's palette (partial at night, see A7). Deferred to a later round (new scenes): the Station letter
+after the finale, a free sprout for the plant, hanging the group photo beside the parents' photo, DJ Nova reacting to the crash,
+scrapbook "Page 1", Commons "!" markers during the errands.

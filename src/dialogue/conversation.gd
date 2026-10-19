@@ -73,7 +73,12 @@ static func run(npc: NPC, player: Node3D) -> void:
 		# Comet...") introduced him once, then ProfessorAsk.run introduced the radio call a second
 		# time right before thanking the player - the defect 6.4 names word for word. This is a
 		# REORDER (nothing plays before his own line), not an extra line stacked on top of it.
-		if not (npc_id == ProfessorAsk.NPC_ID and ProfessorAsk.ready(npc_id)):
+		# ALSO SKIPPED while the first hour claims him (docs/STORY_FIT_REVIEW.md B2): in the new opening
+		# he has just talked the player through the crash by radio, so FirstHour.run greets them by
+		# name ("There you are, %s!") instead of meeting a stranger. Old saves and every other path
+		# (FirstHour.handles false) keep the stranger intro exactly as before.
+		var meets_by_name := npc_id == ProfessorAsk.NPC_ID and FirstHour.handles(npc_id)
+		if not meets_by_name and not (npc_id == ProfessorAsk.NPC_ID and ProfessorAsk.ready(npc_id)):
 			var intro: Array = NpcData.get_data(npc_id).get("intro", [])
 			if not intro.is_empty():
 				await runner.say(npc, intro)

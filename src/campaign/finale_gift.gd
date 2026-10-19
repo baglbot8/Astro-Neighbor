@@ -382,7 +382,7 @@ func _run() -> void:
 					await _party()
 			continue
 		var id := str(turn.get("speaker", ""))
-		var lines: Array = turn.get("lines", [])
+		var lines: Array = _named(turn.get("lines", []))
 		var n := _meeting.call("npc", id) as Node3D
 		if n == null:
 			_beat("say %s: not in the crowd, box skipped" % id)
@@ -394,6 +394,20 @@ func _run() -> void:
 		if _player != null and is_instance_valid(_player):
 			_player.set("input_enabled", false)
 	await _done(toast)
+
+
+## HOME's boxes with "%s" filled by the player's chosen name (docs/STORY_FIT_REVIEW.md C1: the
+## Professor's "Welcome home, %s."). The name is GameState.player_style["name"] (the cockpit's
+## NamePicker writes it); a save with none, or a blank one, reads "Astro". Boxes without "%s" pass as is.
+static func _named(lines: Array) -> Array:
+	var who := str(GameState.player_style.get("name", "")).strip_edges()
+	if who == "":
+		who = "Astro"
+	var out: Array = []
+	for l: Variant in lines:
+		var s := str(l)
+		out.append(s % who if s.contains("%s") else s)
+	return out
 
 
 # ============================================================================= the ships come back
@@ -1175,7 +1189,7 @@ func _show_print() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "The last page of your scrapbook."
+	sub.text = "One more for your photo wall."
 	sub.add_theme_font_override("font", UIStyle.ui_font())
 	sub.add_theme_font_size_override("font_size", 20)
 	sub.add_theme_color_override("font_color", UIStyle.TEXT_SOFT)

@@ -43,6 +43,9 @@ const ASK_ID := OLD_ASK_ID
 const DONE_FLAG := "professor_photo_done"
 ## Set by the radio call (`open_task`), cleared by `run()` (and never re-set once DONE_FLAG is).
 const OPEN_FLAG := "professor_neighbour_photo_open"
+## His first face-to-face line in the new opening (docs/STORY_FIT_REVIEW.md B2), %s the chosen name.
+## Only FirstHour's first meeting uses it; see `first_meeting_lines`.
+const MEET_BY_NAME := "There you are, %s! Professor Comet, in person."
 
 ## THE PAYMENT, unchanged from the lantern-fish task (a modest thank-you, not an economy change; paid in
 ## STARDUST - the lead's 2026-09-22 unit fix). Spec 15.3 names the number: 15 stardust, once.
@@ -163,9 +166,14 @@ static func _roster_friend(key: String) -> String:
 ## meteor in person. `photo_in_hand` false means conversation.gd already played his generic stranger
 ## `intro`, so only the radio-voice line is new; true means it skipped it, so he names himself here.
 ## Shared by `run()` below (a gates-off save meeting him with the task open) and FirstHour (a new game).
-static func first_meeting_lines(photo_in_hand: bool) -> Array:
+## `greet_name` (docs/STORY_FIT_REVIEW.md B2): FirstHour's first meeting in the new opening passes the
+## player's chosen name; conversation.gd skipped the stranger intro for that case, so MEET_BY_NAME is his
+## whole greeting. Every other caller leaves it empty and hears exactly the lines below.
+static func first_meeting_lines(photo_in_hand: bool, greet_name: String = "") -> Array:
 	var lines: Array = []
-	if not photo_in_hand:
+	if greet_name != "":
+		lines.append(MEET_BY_NAME % greet_name)
+	elif not photo_in_hand:
 		# NO PHOTO YET (round-2 fix, STORY_SPINE_SPEC.md 6.4 again): `ready()` is false here, so
 		# `conversation.gd` ~76 already played the generic stranger `intro` - which is itself his
 		# self-introduction ("Oh! Hello! ... I'm Professor Comet. / I watch the sky. / If it
@@ -204,6 +212,8 @@ static func run(runner: DialogueRunner, npc: NPC, first_meeting: bool = false) -
 		# the safari offer, this talk (whether or not it is also his first meeting).
 		lines.append_array([
 			"Snapped a neighbour yet? On their own world, mind.",
+			# How the camera is reached (STORY_FIT_REVIEW B3): a neighbour offers a photo safari.
+			"Chat with them. They'll offer a photo safari.",
 			"Bring the photo here. I'll be charting.",
 		])
 		await runner.say(npc, lines)

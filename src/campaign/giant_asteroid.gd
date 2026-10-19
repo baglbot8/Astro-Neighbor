@@ -5,8 +5,9 @@ extends Node3D
 ## send-off, 11.0 s). Built once, procedural, driven by FinaleMeeting (place) and FinaleLaunch
 ## (break_at).
 ##
-## FRIENDLY, NOT MENACING. It is CrashAsteroid's lumpy space potato grown up - the same recipe, the
-## same lavender grey (#8a839b, S ~0.15), matte stone microsurface - hanging still and turning
+## FRIENDLY, NOT MENACING. It is CrashAsteroid's lumpy space potato grown up - the same recipe, in
+## the cockpit meteor's grey-brown (CockpitProps.METEOR_BODY #82786d, S ~0.16; was CrashAsteroid's
+## lavender #8a839b until STORY_FIT_REVIEW A7), matte stone microsurface - hanging still and turning
 ## slowly. No fire, no glowing cracks, no spikes, no red. When it breaks it does not explode: ten
 ## pieces part a hand's width over a warm gold core, warm up and shrink (scale, never fade) into
 ## streak heads for the meteor shower.
@@ -369,9 +370,12 @@ func _build_rock() -> void:
 ## squashed faceted blob, a sunk shoulder and a knuckle, and three pressed-in craters.
 static func _rock_kit() -> PlanetMeshKit:
 	var k := RADIUS / CrashAsteroid.RADIUS
-	var body := CrashAsteroid.BODY
-	var light := CrashAsteroid.BODY_LIGHT
-	var dark := CrashAsteroid.BODY_DARK
+	# RECOLOURED (docs/STORY_FIT_REVIEW.md A7, 2026-10-18): the cockpit's meteor palette, so the rock over
+	# the Commons reads as the one the player grazed in the opening. Colours only - the recipe, radius
+	# and facets are unchanged (a rescale is a separate decision, ruling 2).
+	var body := CockpitProps.METEOR_BODY
+	var light := CockpitProps.METEOR_LIGHT
+	var dark := CockpitProps.METEOR_DARK
 	var sq := CrashAsteroid.SQUASH
 	var kit := PlanetMeshKit.new()
 	kit.faceted_blob(Vector3.ZERO, RADIUS, body, sq, 2, 0.26, 3.7)

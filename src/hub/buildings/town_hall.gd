@@ -377,8 +377,11 @@ func _commons_name() -> String:
 ## talking to him directly gives (ProfessorAsk, via Conversation.run) - instead of this building's own
 ## sky talk below. Falls through to that sky talk if he cannot be found (an isolated scene with no NPC
 ## placed, or a Director probe): the door should still say something rather than nothing.
+## THE FIRST HOUR (docs/STORY_FIT_REVIEW.md A3): the same hand-off while `FirstHour.handles` claims him
+## (before the patch, or carrying his parcel) - the very hook the Commons talk uses (conversation.gd),
+## so the door reaches his errand talk instead of his telescope.
 func _on_door(player: Node3D) -> void:
-	if ProfessorAsk.is_open():
+	if ProfessorAsk.is_open() or FirstHour.handles(FirstHour.PROFESSOR_ID):
 		var prof := _find_professor()
 		if prof != null:
 			if not begin_flow(player):
@@ -422,12 +425,23 @@ func _on_door(player: Node3D) -> void:
 func _sky_flow() -> void:
 	var have := GameState.rocket_part_count()
 	var total: int = CampaignData.PARTS.size()
-	var lines: Array[String] = ["%d of %d parts fitted. We're flying further now." % [have, total]]
+	var lines: Array[String] = [_parts_line(have, total)]
 	var opened := _worlds_just_opened(have)
 	if not opened.is_empty():
 		lines.append("%s just swam into my scope!" % _list_names(opened))
 	lines.append(_watch_line(have))
 	await say(_prof_name(), lines, "elder", PROF_ACCENT)
+
+
+## The telescope's first line. At 0 parts it says where the patch stands (docs/STORY_FIT_REVIEW.md A3):
+## "flying further" was wrong before any part. The patch is read from its own flag, not
+## `FirstHour.patch_fitted()`, whose legacy heuristic would thank an old save for a patch it never had.
+func _parts_line(have: int, total: int) -> String:
+	if have <= 0:
+		if GameState.flag(FirstHour.PATCH_FLAG):
+			return "Your patch holds! Zorp and Bolt are in reach."
+		return "Your ship needs five parts. None fitted yet."
+	return "%d of %d parts fitted. We're flying further now." % [have, total]
 
 
 ## Planet ids whose CampaignData tier opens at EXACTLY `have` parts - "just" opened, not merely "in
@@ -461,9 +475,9 @@ func _list_names(planet_ids: Array[String]) -> String:
 ## keep, per the story's own beats).
 func _watch_line(have: int) -> String:
 	if have >= 4:
-		return "Nearly Departure Day. I'm staying, pushing or not."
+		return "Ships nearly packed. I'm staying, pushing or not."
 	if have >= 2:
-		return "Funny thing. That streak is in all your photos."
+		return "That meteor's a big one. Still far off, mind."
 	if have >= 1:
 		return "Still out past the ring. Enough ships could nudge it."
 	return "Everyone's packing. I'm charting. That meteor can move."

@@ -144,7 +144,8 @@ const RADIO_HELLO := "Survey ship, this is Professor Comet. Loud and clear!"
 const RADIO_NEIGHBOURS := "You're passing through our little neighbourhood."
 const RADIO_QUIET := "Quiet day. Just how I like the sky."
 const RADIO_NUDGE := "Still there, pilot? Take a good look around."
-const RADIO_LATE := "That rock is far bigger than my scope said!"
+## No scope is ever mentioned before this line, and the story calls it "the meteor" (STORY_FIT_REVIEW A2).
+const RADIO_LATE := "Wait... is that a meteor?! It's huge!"
 const RADIO_ALARM := "Pilot! Look up! LOOK UP!"
 ## [due t, text]. Chatter between the looking; each waits for any item line to finish.
 const RADIO_SCHEDULE := [[0.3, RADIO_HELLO], [8.0, RADIO_NEIGHBOURS], [18.0, RADIO_QUIET]]

@@ -126,7 +126,7 @@ static func definition() -> Dictionary:
 		"intro": [
 			"Hmph. My chalk is dry. No water in it at all.",
 			"My stairs are dusty. Nothing grows on them.",
-			"We leave soon. I don't leave jobs half done.",
+			"Before we go, I leave no job half done.",
 			"Help me find water under the ground.",
 		],
 		"part_lines": [
@@ -261,7 +261,7 @@ static func definition() -> Dictionary:
 				"target": 225,
 				"lines": {
 					"ask": [
-						"Before I go. One safari here, on my hill.",
+						"Before I go. One last look from my hill.",
 						"Take photos worth 225 stardust. At least.",
 					],
 					"progress": [

@@ -38,6 +38,10 @@ var _seen_lines: Array[String] = []
 var _toasts: Array[String] = []
 var _last_dir := Vector3.ZERO
 var _direct := 0
+## `--fh-name=Sprout`: the name the cockpit's picker would have written (default: the save's "Astro").
+var pick_name := ""
+## Option index taken at each CHOICE box, in order; 0 once the plan runs out (see `_drive`).
+var _choice_plan: Array[int] = []
 
 
 func _ready() -> void:
@@ -48,7 +52,9 @@ func _ready() -> void:
 			out_dir = a.substr(9)
 		elif a == "--fh-task-open":
 			task_open = true
-	if mode != "pass" and mode != "reload" and mode != "bitview":
+		elif a.begins_with("--fh-name="):
+			pick_name = a.substr(10)
+	if mode != "pass" and mode != "reload" and mode != "bitview" and mode != "meet":
 		return
 	if not persistent:
 		var p: Node = load("res://showcase/first_hour_pass.gd").new()
@@ -78,6 +84,8 @@ func _setup_state() -> void:
 	for f: String in ["intro_crash_done", "intro_greeted", "intro_done"]:
 		GameState.set_flag(f)
 	GameState.time_of_day = 10.0
+	if pick_name != "":
+		GameState.player_style["name"] = pick_name
 	if task_open:
 		ProfessorAsk.open_task()
 	if mode == "bitview":
@@ -105,6 +113,9 @@ func _run() -> void:
 	if mode == "bitview":
 		await _bitview()
 		return
+	if mode == "meet":
+		await _meet()
+		return
 	if mode == "reload":
 		var fh := get_tree().root.get_node_or_null("World/FirstHour")
 		_ok(fh != null, "reload: FirstHour node built on load with no talk")
@@ -127,10 +138,14 @@ func _run() -> void:
 	await _picker("picker_gated", true)
 
 	# --- the Professor's first meeting: he sends you out
-	await _talk("mayor_orbit", "prof_meet", [9])
+	await _talk("mayor_orbit", "prof_meet", [6])
 	_ok(GameState.flag(FirstHour.STARTED_FLAG), "the Professor sent the player to the residents")
-	_ok(_seen("That crackly voice on the radio? That was me!") and _seen("Mind the boxes. Everyone's packing to leave."),
-		"his first-meeting lines played")
+	# STORY_FIT_REVIEW B2: no stranger intro and no radio reveal; he greets the player by name.
+	_ok(_seen(ProfessorAsk.MEET_BY_NAME % GameState.player_style.get("name", "Astro"))
+		and _seen("Mind the boxes. Everyone's packing to leave.")
+		and not _seen("Oh! Hello! Sorry, I was counting meteors.")
+		and not _seen("That crackly voice on the radio? That was me!"),
+		"his first-meeting lines played (by name, no stranger intro)")
 	_ok(_seen("Now then, %s. About that poor ship of yours." % GameState.player_style.get("name", "Astro")),
 		"his dispatch uses the player's name")
 
@@ -196,8 +211,8 @@ func _run() -> void:
 	_ok(FirstHour.parcel_held(), "carrying the parcel")
 	var player := _player()
 	_ok(player != null and str(player.call("get_carry_item")) == FirstHour.PARCEL_CARRY_ID, "the parcel is in the astronaut's hands")
-	_ok(_seen("A photographer? Splendid!") and _seen("Help them, and they will help fix your ship."), "photographer lines played")
-	_ok(_seen("First, a parcel for Zorp. His rivers are dimming."), "parcel line played")
+	_ok(_seen("A photographer? Splendid!") and _seen("Help them, and each will give a part for your ship."), "photographer lines played")
+	_ok(_seen("Oh, and a parcel for Zorp. His rivers are dimming."), "parcel line played")
 	_ok(CampaignData.planet_in_range("zorp") and CampaignData.planet_in_range("bolt") and CampaignData.planet_in_range("hub"),
 		"after the patch: zorp, bolt, hub open")
 	await _picker("picker_open", false)
@@ -216,7 +231,7 @@ func _run() -> void:
 	await _talk("zorp", "zorp_parcel", [3, 4])
 	_ok(GameState.flag(FirstHour.PARCEL_DONE_FLAG) and not FirstHour.parcel_held(), "parcel delivered")
 	_ok(_seen("Glow bulbs! Thank you for carrying them so far!"), "Zorp's delivery lines played")
-	_ok(_seen("Oh no, oh no! My rivers are going dark!"), "Zorp's own project intro followed in the same talk")
+	_ok(_seen("My rivers are going dark. Little by little."), "Zorp's own project intro followed in the same talk")
 	_ok(GameState.projects.has("zorp") and bool((GameState.projects["zorp"] as Dictionary).get("asked", false)),
 		"Zorp's project started and step 0 asked: %s" % str(GameState.projects.get("zorp", {})))
 	player = _player()
@@ -240,6 +255,78 @@ func _run() -> void:
 	print("FHPASS direct_interact_fallbacks=%d" % _direct)
 	print("FHPASS RESULT checks=%d fail=%d" % [_checks, _fail])
 	get_tree().quit(1 if _fail > 0 else 0)
+
+
+## STORY_FIT_REVIEW B2 and A3 (2026-10-18 words pass), in the real hub, one process:
+##   1 first meeting in the new flow (FirstHour.handles): greeted by the chosen name, no stranger intro
+##   2 a second talk: no name greeting again, today's progress line
+##   3 the Town Hall door before the patch: reaches his errand talk (progress line), not the telescope
+##   4 the door after the patch at 0 parts, task closed: the telescope says the patch holds
+##   5 a first meeting after the patch (task open): today's stranger intro and radio reveal
+##   6 a first meeting in an old, gates-off save: today's stranger intro
+## SYNTHESISED, DISCLOSED: the door is opened by calling TownHall._on_door(player) directly (no walk to
+## it, no press); states 4-6 are set straight in GameState between talks.
+func _meet() -> void:
+	var who := str(GameState.player_style.get("name", "Astro"))
+	var named := ProfessorAsk.MEET_BY_NAME % who
+	var stranger := "Oh! Hello! Sorry, I was counting meteors."
+	var reveal := "That crackly voice on the radio? That was me!"
+	print("FHPASS meet armed name=%s handles=%s" % [who, str(FirstHour.handles("mayor_orbit"))])
+	# 1
+	await _talk("mayor_orbit", "meet1_first", [0])
+	_ok(_seen(named) and not _seen(stranger) and not _seen(reveal), "1 first meeting: '%s', no stranger intro" % named)
+	# 2
+	_seen_lines.clear()
+	await _talk("mayor_orbit", "meet2_again", [])
+	_ok(not _seen(named) and _seen(FirstHour.PROGRESS_NONE), "2 second talk: no name greeting, today's progress line")
+	# 3
+	_seen_lines.clear()
+	await _door("door_before_patch", [0])
+	_ok(_seen(FirstHour.PROGRESS_NONE) and not _seen("Oh! Come in, out of the starlight."),
+		"3 door before the patch: his errand talk, not the telescope")
+	# 4
+	GameState.set_flag(FirstHour.PATCH_FLAG)
+	GameState.set_flag(FirstHour.PARCEL_DONE_FLAG)
+	GameState.set_flag(ProfessorAsk.OPEN_FLAG, false)
+	GameState.set_flag(ProfessorAsk.DONE_FLAG)
+	_seen_lines.clear()
+	_choice_plan = [0, 1]
+	await _door("door_after_patch", [2])
+	_choice_plan = []
+	_ok(_seen("Oh! Come in, out of the starlight.") and _seen("Your patch holds! Zorp and Bolt are in reach.")
+		and GameState.rocket_part_count() == 0, "4 door after the patch, 0 parts: the telescope says the patch holds")
+	# 5
+	GameState.set_flag(ProfessorAsk.DONE_FLAG, false)
+	ProfessorAsk.open_task()
+	GameState.set_flag("met_mayor_orbit", false)
+	_seen_lines.clear()
+	await _talk("mayor_orbit", "meet5_after_patch", [])
+	_ok(not FirstHour.handles("mayor_orbit") and _seen(stranger) and _seen(reveal) and not _seen(named),
+		"5 first meeting after the patch: today's stranger intro and radio reveal")
+	# 6
+	GameState.campaign_active = false
+	GameState.set_flag("met_mayor_orbit", false)
+	_seen_lines.clear()
+	await _talk("mayor_orbit", "meet6_old_save", [])
+	_ok(not CampaignData.gates_on() and _seen(stranger) and not _seen(named), "6 old gates-off save: today's stranger intro")
+	print("FHPASS RESULT checks=%d fail=%d" % [_checks, _fail])
+	get_tree().quit(1 if _fail > 0 else 0)
+
+
+func _door(tag: String, capture_at: Array) -> void:
+	var hall: Node = null
+	for n: Node in get_tree().root.find_children("*", "Node3D", true, false):
+		if n.has_method("_on_door") and str(n.get("building_id")) == "town_hall":
+			hall = n
+			break
+	_ok(hall != null, "%s: Town Hall found" % tag)
+	if hall == null:
+		return
+	await _go_to((hall as Node3D).global_position, 5.0)
+	print("FHPASS %s: calling TownHall._on_door directly (synthesised)" % tag)
+	hall.call("_on_door", _player())
+	await _wait(0.3)
+	await _drive(tag, capture_at)
 
 
 ## ROUND 2 proof frames: Pop's bit seen from beside Pop (facing the stage) and from the stage front
@@ -429,6 +516,13 @@ func _talk(id: String, tag: String, capture_at: Array) -> void:
 			str(_player().call("get_interact_target"))])
 		npc.call("start_conversation", _player())
 		await _wait(0.3)
+	await _drive(tag, capture_at)
+
+
+## Reads and taps every box of the talk that is open now, logging each one; a CHOICE takes the next
+## index from `_choice_plan` (0 once it is empty).
+func _drive(tag: String, capture_at: Array) -> void:
+	var runner := DialogueRunner.get_or_create(self)
 	var box: Node = runner.call("_ensure_box")
 	var idx := 0
 	var last_key := ""
@@ -463,8 +557,14 @@ func _talk(id: String, tag: String, capture_at: Array) -> void:
 				_boxes += 1
 			box.call("debug_tap")
 		elif state == 2:  # CHOICE
-			print("FHPASS %s CHOICE shown: %s - taking option 0" % [tag, str(box.get("_options"))])
-			box.call("debug_tap")
+			# debug_tap does nothing on a CHOICE (dialogue_box.gd), so the box's own _choose is called -
+			# the path every button tap ends in; it refuses while the choice is still arming, so retry.
+			var pick := 0 if _choice_plan.is_empty() else _choice_plan[0]
+			box.call("_choose", pick)
+			if int(box.get("_state")) != 2:
+				if not _choice_plan.is_empty():
+					_choice_plan.pop_front()
+				print("FHPASS %s CHOICE shown: %s - took option %d" % [tag, str(box.get("_options")), pick])
 		else:
 			if not runner.is_active():
 				idle += TAP_S

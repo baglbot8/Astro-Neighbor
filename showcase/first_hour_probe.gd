@@ -204,6 +204,18 @@ func _check_handles() -> void:
 	var lines := ProfessorAsk.first_meeting_lines(false)
 	_ok(lines.size() == 5 and str(lines[0]) == "That crackly voice on the radio? That was me!",
 		"first-meeting lines intact (5 boxes, radio reveal first)")
+	# Polish 2026-10-18: a blank or all-space name falls back to "Astro" (no "Now then, .").
+	var keep_name: Variant = GameState.player_style.get("name", "Astro")
+	GameState.player_style["name"] = ""
+	var blank_ok := FirstHour._player_name() == "Astro"
+	GameState.player_style["name"] = "   "
+	var spaces_ok := FirstHour._player_name() == "Astro"
+	GameState.player_style["name"] = keep_name
+	_ok(blank_ok and spaces_ok, "blank and all-space names read 'Astro'")
+	# STORY_FIT_REVIEW B2: the first hour's meeting greets by name instead; the meteor lines follow as before.
+	var named := ProfessorAsk.first_meeting_lines(false, "Sprout")
+	_ok(named.size() == 5 and str(named[0]) == "There you are, Sprout! Professor Comet, in person."
+		and str(named[1]) == str(lines[1]), "first-hour meeting greets by name (5 boxes, name line first)")
 
 
 # ----------------------------------------------------------------------------------------- callers

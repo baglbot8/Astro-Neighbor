@@ -28,6 +28,14 @@ const IDLE_GREET := [
 	"I like a good clear photo. Very good.",
 ]
 
+## STORY FIT (docs/STORY_FIT_REVIEW.md B11). Both lines below are reachable (print_table.gd `_idle_chat`
+## draws SMALL_TALK, `_payout` draws BUYERS). Only the Professor is not packing, so Gloop packs too; once
+## the story is done (GameState.story_done) everyone has unpacked and nobody takes anything with them, so
+## `_story_fit` swaps the first line for UNPACKED_LINE and drops Grig's buyer line, inside `any`/`pick`.
+const PACKING_LINE := "Everyone is packing. My boxes keep going soggy."
+const UNPACKED_LINE := "Everyone unpacked. Good. Fewer soggy boxes."
+const GRIG_TAKES_ONE := ["Grig", "He bought one to take with him. Then another."]
+
 ## Small talk, when there is nothing to trade.
 const SMALL_TALK := [
 	"Night is long here. Good. More to look at.",
@@ -36,7 +44,7 @@ const SMALL_TALK := [
 	"I have a little star inside me. It's my pet.",
 	"Morning light is thin. Soft, like fog.",
 	"Slow down. The sky is not going anywhere.",
-	"Everyone is packing. Not me. I am too wet.",
+	PACKING_LINE,
 ]
 
 ## What Gloop says about a print as it takes it, keyed by how good it is.
@@ -88,13 +96,27 @@ const BUYERS := [
 	["Vela", "He said the focus was honest. Whatever that is."],
 	["Bolt", "He measured it first. Then bought it."],
 	["The Professor", "He wants more of the same, but sharper."],
-	["Grig", "He bought one to take with him. Then another."],
+	GRIG_TAKES_ONE,
 	["Vela", "He held it a long time. Then said nothing."],
 ]
 
 
+## `list` as it fits the story right now: unchanged before the finale; after it, PACKING_LINE reads
+## UNPACKED_LINE and GRIG_TAKES_ONE is left out (B11). Other lists pass through untouched.
+static func _story_fit(list: Array) -> Array:
+	if not GameState.story_done:
+		return list
+	var out: Array = []
+	for e: Variant in list:
+		if e is Array and e == GRIG_TAKES_ONE:
+			continue
+		out.append(UNPACKED_LINE if (e is String and e == PACKING_LINE) else e)
+	return out
+
+
 ## A stable pick from a list, seeded so the same print always gets the same buyer.
 static func pick(list: Array, seed_text: String) -> Variant:
+	list = _story_fit(list)
 	if list.is_empty():
 		return ""
 	return list[absi(hash(seed_text)) % list.size()]
@@ -102,6 +124,7 @@ static func pick(list: Array, seed_text: String) -> Variant:
 
 ## A random pick, for lines with no reason to be stable.
 static func any(list: Array) -> String:
+	list = _story_fit(list)
 	if list.is_empty():
 		return ""
 	return str(list[randi() % list.size()])

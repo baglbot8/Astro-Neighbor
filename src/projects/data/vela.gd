@@ -192,7 +192,7 @@ static func definition() -> Dictionary:
 		"part_lines": [
 			"Every dish and mast is working. Listen!",
 			"Please take this core. It kept me warm.",
-			"Good luck finding a new home. I'll think of you.",
+			"Safe flying. I'll think of you.",
 		],
 		"part_again": [
 			"Lost the core? That's okay. I had a spare.",

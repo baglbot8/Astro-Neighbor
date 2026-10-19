@@ -41,7 +41,7 @@ extends RefCounted
 const CALL: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": [
 		"Professor Comet here. Oh my. She's GOLD!",
-		"You could fly all the way home now.",
+		"You could fly on to the Station now.",
 	]},
 	{"speaker": "mayor_orbit", "lines": [
 		"Well. That's the last ship ready to go.",
@@ -89,6 +89,7 @@ const MOSS_ARRIVE: Array[Dictionary] = [
 	{"speaker": "moss", "lines": [
 		"The swamp told me there was a party.",
 		"So I brought glow pods. They shine all night.",
+		"And you take pictures too. I can always tell.",
 	]},
 ]
 const MOSS_LEAVE: Array[Dictionary] = [
@@ -143,7 +144,7 @@ const MEETING: Array[Dictionary] = [
 	{"speaker": "mayor_orbit", "lines": ["Then... everyone is staying?"]},
 	{"action": "everyone agrees: a cheer, each at its own moment", "id": "cheer"},
 	# The reminder, looking up at the meteor.
-	{"speaker": "dj_nova", "camera": "U", "lines": ["Uh... just a reminder that METEOR'S still coming for us!"]},
+	{"speaker": "dj_nova", "camera": "U", "lines": ["Uh... reminder? The METEOR is still coming for us!"]},
 	{"action": "silence; nobody moves", "id": "silence"},
 	# Vela's idea; everyone offers their ship.
 	{"speaker": "vela", "lines": [
@@ -233,7 +234,8 @@ const HOME: Array[Dictionary] = [
 	{"action": "the player takes the group photo; it becomes the scrapbook's last page", "id": "photo"},
 	{"speaker": "mayor_orbit", "lines": [
 		"Your ship still flies. You could go anywhere.",
-		"But I think you're home. Welcome home.",
+		# %s is the player's chosen name, filled by finale_gift.gd `_named` (fallback "Astro").
+		"But I think you're home. Welcome home, %s.",
 	]},
 	{"toast": "Every world is open. Planet stats are back."},
 ]

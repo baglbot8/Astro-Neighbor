@@ -100,14 +100,14 @@ static func definition() -> Dictionary:
 		"part": "part_bolt",
 		"part_fit_scrap": 60,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
-			"Hello. I have a problem. 3 machines are broken.",
-			"We leave soon. I will not leave them broken.",
+			"I have a problem. 3 machines are broken.",
+			"Before we go, I will not leave them broken.",
 			"Please find them. I will count while you walk.",
 		],
 		"part_lines": [
 			"The yard is fixed. I checked twice. All good.",
 			"Take this gear. I have 3,000 more.",
-			"Good luck finding a new home. I think you will.",
+			"Good luck out there. Your odds are good.",
 			"You are an excellent friend. That is my answer.",
 		],
 		"part_again": [

@@ -211,7 +211,10 @@ func _complete_fly_on_arrival() -> void:
 		return
 	_set_beat(Beat.FLY, true)
 	var where := Journal.planet_name(GameState.current_planet_id)
-	if _campaign:
+	if _campaign and GameState.current_planet_id == "hub":
+		# The campaign's first flight is to the Commons, where he said to meet (STORY_FIT_REVIEW B4).
+		_request_hint("intro_flew", "You made it to %s! Go find the Professor." % where, "check", 1.2)
+	elif _campaign:
 		_request_hint("intro_flew", "You made it to %s! Ask around for help." % where, "check", 1.2)
 	else:
 		_request_hint("intro_flew", "You flew! %s is all yours to poke about." % where, "check", 1.2)
@@ -742,7 +745,8 @@ func _hang_campaign_radio(radio: Node3D, player: Node3D) -> void:
 const CALL_HURT := "You're not hurt, are you? No? Tough as old boots!"
 const CALL_ASK_NAME := "What shall I call you, pilot?"
 const CALL_WELCOME := "Welcome to the neighbourhood, %s!"
-const CALL_SHIP := "Your ship is hurt. It can hop to the Commons, no more."
+## Names the patch before the pad's picker says "Needs a patch" (docs/STORY_FIT_REVIEW.md B1).
+const CALL_SHIP := "Your ship needs a patch. Till then, only the Commons."
 const CALL_BUSY := "Everyone's busy getting ready to go. Few can spare a hand."
 const CALL_MEET := "Meet me on the Commons. I will explain there."
 const CALL_HOP := "Then hop over to the Commons. I'll put the kettle on."
@@ -768,9 +772,10 @@ func _campaign_call(runner: DialogueRunner, radio: Node3D, replay: bool = false)
 	await runner.say(radio, [
 		CALL_WELCOME % who,
 		CALL_SHIP,
-		# THE METEOR (docs/STORY_HOME_SPEC.md 5.1): the story's very first mention of it, right after
-		# the crash, in the same unworried tone as the rest of this call - "not soon", never a countdown.
-		"Bad timing, I'm afraid. There's a meteor coming.",
+		# THE METEOR (docs/STORY_HOME_SPEC.md 5.1), in the same unworried tone as the rest of this call -
+		# "not soon", never a countdown. The player just grazed it in the cockpit, so it is the meteor
+		# they clipped, not news (docs/STORY_FIT_REVIEW.md A1).
+		"That meteor you clipped? It's heading our way.",
 		"Oh, not today! Not for ages. But folks are packing.",
 		CALL_BUSY,
 		CALL_MEET,

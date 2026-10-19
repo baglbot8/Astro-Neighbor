@@ -357,11 +357,19 @@ func _on_mail(player: Node3D) -> void:
 		# which opens with your ship crash-landing here, so the letter is his note that he saw it come
 		# down. Changed by the lead after Phase 1 builder C listed this string but did not own the file.
 		# Lines kept to 60 characters or fewer (STYLE_GUIDE "Writing"); the longest is 51.
+		# STORY FIT (docs/STORY_FIT_REVIEW.md B12): addressed to the chosen name (`_who()`); the hop line
+		# is only true before the Commons patch, so a letter read after it says the patch is holding
+		# (FirstHour.PATCH_FLAG itself, not the legacy heuristic: an old save never had a patch); and a
+		# P.S. about the cabin (he cannot know about the plant). showcase/name_picker_lines.gd reads these literals.
+		var ship_line := "Your rocket can still make one hop: to the Commons."
+		if GameState.flag(FirstHour.PATCH_FLAG):
+			ship_line = "Glad that patch is holding!"
 		await say("A letter from Professor Comet", [
-			"Dear neighbour,",
+			"Dear %s," % _who(),
 			"I saw your ship come down on my telescope.",
 			"Nobody hurt - that is what matters!",
-			"Your rocket can still make one hop: to the Commons.",
+			ship_line,
+			"P.S. Hope everything in your cabin survived the bump!",
 			"  - Professor Comet",
 		], "elder", Color("#6fc3ff"))
 		_refresh_flag()

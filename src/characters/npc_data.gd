@@ -445,7 +445,7 @@ const DATA := {
 			"done": [
 				"Perfect numbers. Snip, snip... there!",
 				"Cut to fit, and in a decent colour.",
-				"Is that a camera on your belt? So cool, darling!",
+				"Do I spy a camera, darling? How lovely!",
 			],
 			"after": ["Off you go, darling. Love the boots!"],
 		},

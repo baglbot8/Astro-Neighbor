@@ -164,7 +164,9 @@ const QUESTIONS: Array[Dictionary] = [
 		"answers": [], "needs": {}, "dynamic": "part_of:grig"},
 	{"id": "part_name_vela", "q": "Fellow human, what is the last ship part called?",
 		"answers": [], "needs": {}, "dynamic": "part_of:vela"},
-	{"id": "part_order_first", "q": "Fellow human, which ship part gets fitted first?",
+	# "neighbour's part", not "ship part": the Commons patch is fitted before any part and is not one of
+	# the answers (docs/STORY_FIT_REVIEW.md B13).
+	{"id": "part_order_first", "q": "Fellow human, which neighbour's part got fitted first?",
 		"answers": [], "needs": {}, "dynamic": "order_first"},
 	{"id": "part_order_last", "q": "Fellow human, which ship part gets fitted last?",
 		"answers": [], "needs": {}, "dynamic": "order_last"},
@@ -205,6 +207,12 @@ const QUESTIONS: Array[Dictionary] = [
 		"answers": ["His telescope", "His scissors", "His radio"], "needs": {"met": ["mayor_orbit"]}},
 	# ND mayor_orbit.small_talk: "I oil my telescope on Sundays. Tradition." / "A good telescope is
 	# worth two maps."
+
+	# ---- the opening (docs/INTRO_SPEC.md 4, docs/STORY_FIT_REVIEW.md C7) ---------------------------
+	{"id": "opening_job", "q": "Fellow human, what was your new job going to be?",
+		"answers": ["Mineral photos", "Moon farming", "Being human"], "needs": {}},
+	# src/onboarding/cockpit_intro.gd ITEM_LINES "letter": "Almost day one of the new job at the
+	# Intergalactic Station!" / "If only it wasn't just photographing mineral samples..."
 
 	# ---- the fleet, after the story only (docs/STORY_HOME_SPEC.md §5.6, replacing skiff_gift and skiff_replaces)
 	{"id": "fleet", "q": "Fellow human, what broke the meteor into a shower?",

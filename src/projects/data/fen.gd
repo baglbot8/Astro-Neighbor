@@ -158,7 +158,7 @@ static func definition() -> Dictionary:
 		"part_lines": [
 			"The pools are glowing again. It feels so warm.",
 			"Take this cell. I kept it safe by my roots.",
-			"Find a good home out there. One with lots of sun.",
+			"Safe flying out there. Find lots of sun.",
 			"You're a real friend. I mean it. Thank you.",
 		],
 		"part_again": [

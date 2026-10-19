@@ -127,7 +127,7 @@ static func definition() -> Dictionary:
 		"part": "part_zorp",
 		"part_fit_scrap": 30,  # ECON 2026-09-29: the fit ladder's step in the usual fit order; the bench charges GameState.part_fit_scrap() (by parts already fitted)
 		"intro": [
-			"Oh no, oh no! My rivers are going dark!",
+			"My rivers are going dark. Little by little.",
 			"They used to glow all night long. Now, barely.",
 			"I can't leave them dark. Not before I go!",
 			"You have a jetpack! Please, come and look!",
@@ -135,7 +135,7 @@ static func definition() -> Dictionary:
 		"part_lines": [
 			"The river hums again! Can you hear it? Listen!",
 			"Take this coil. I wound it from river light!",
-			"Good luck out there! Find a home that sings!",
+			"Good luck out there! Snap something that sings!",
 			"You're my best friend now. My moustache says so!",
 		],
 		"part_again": [
