@@ -133,3 +133,9 @@ needs every finale gate re-run. Lead pick: (1).
 
 **Unproven:** whether a neighbour offers "Photo safari?" in the first plain talk after Zorp's project talk (needs real play);
 the Day-1 letter variants and the finale photo card were never opened in a running game, only checked as text; no real finger.
+
+**A7 update (2026-10-19).** The night-light exemption was built, measured and removed (OPEN_ISSUES 75). The shipped fix is an
+albedo pre-compensation solved against the real renderer: at 21:00 the finale rock's mean on-screen colour is within 2/255 of the
+cockpit rock's in the solve framing and 10-14/255 lighter in real finale shots, a brown rock lit by the moon with peach tops and
+mauve shade, no glow. An independent critic passed it. Still open: it is much smaller than the cockpit rock and knitted where the
+cockpit rock is smooth.

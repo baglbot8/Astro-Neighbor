@@ -2184,3 +2184,26 @@ the desktop `--draw-saver` stand-in. On the phone read the Perf overlay's "draw 
 If that is not enough, a second level that also caps walking at 30 is a design change with a real smoothness cost.
 Also: the choice lives inside the save, so Reload + New Game starts with it off (as music volume does); a non-bool value in a
 save reads as OFF (`typeof(raw) == TYPE_BOOL and raw`; `bool("yes")` throws a script error every tick).
+
+## 75. [2026-10-19] The finale meteor at night: light cannot fix it, and the model of the renderer was wrong
+
+The finale meteor (`GiantAsteroid`) read navy blue-grey at 21:00 even with the cockpit's grey-brown palette. A rock-only key light
+(the cockpit's light-layer trick, a DirectionalLight on layer 20 with the noon colour and the energy the night sun lacks) was
+BUILT AND MEASURED and did not help: night colour grade (`environment.gd` GRADE_NIGHT, a per-channel lookup on on-screen values)
+turns even a rock lit exactly like noon into a cool neutral grey (112,116,116), and an added light can only add blue, never
+remove it. Removed. The fix is an albedo pre-compensation: per-channel linear gains `NIGHT_GAIN_R/G/B` 2.4651 / 1.5053 / 0.2682 on
+the rock's vertex colours, SOLVED AGAINST THE REAL RENDERER (`showcase/finale_l1_probe.gd --l1-mode=solve`, Newton steps, one
+render per channel, toward the cockpit rock's masked on-screen mean rgb(97.7,78.2,75.3) from `showcase/a7_cockpit_mask.tscn`).
+* **An analytic inversion failed.** A model of the Godot 4.7.1 GLES3 post chain (ACES white 6, contrast 1.04, saturation 0.78, the
+  lookup) round-trips to 0.33/255, but assuming radiance linear in albedo it asked for R x4.64 (out of gamut) and missed by 18/255
+  in red when rendered: the real response to an albedo gain is about 2x steeper than linear on Compatibility. Cause not found.
+* **What it costs:** the rock is orange at noon (only probes see noon; the finale clock is held at 21:00); the lit tops read peach
+  (lit quarter rgb(165,128,106)) and the shade mauve (59,46,59) against the cockpit's flatter taupe, because a single per-channel
+  gain cannot correct two differently coloured lights (moon on the lit side, blue ambient on the shade); the mean matches the
+  target to 2/255 in the solve framing but sits 10-14/255 lighter in real finale shots (the fleet's lights are in the mask).
+  A less saturated `--a7-target` is the cheapest next step; it would trade peach for grey-mauve.
+* **Still true:** the finale rock is far smaller on screen than the cockpit rock (about 10-15 degrees vs filling the window), and
+  it is knitted where the cockpit rock is smooth. A rescale needs an exact ratio on the radius AND every camera distance and the
+  finale's measured framing gates re-run.
+* **Rule:** the gains are measured, not derived. Re-solve if GRADE_NIGHT, the night ambient, the moon, the rock material or the
+  finale hour change.

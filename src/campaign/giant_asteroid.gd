@@ -7,7 +7,8 @@ extends Node3D
 ##
 ## FRIENDLY, NOT MENACING. It is CrashAsteroid's lumpy space potato grown up - the same recipe, in
 ## the cockpit meteor's grey-brown (CockpitProps.METEOR_BODY #82786d, S ~0.16; was CrashAsteroid's
-## lavender #8a839b until STORY_FIT_REVIEW A7), matte stone microsurface - hanging still and turning
+## lavender #8a839b until STORY_FIT_REVIEW A7; stored night-compensated, see night_colour(), so it shows
+## that grey-brown under the finale's 21:00 light), matte stone microsurface - hanging still and turning
 ## slowly. No fire, no glowing cracks, no spikes, no red. When it breaks it does not explode: ten
 ## pieces part a hand's width over a warm gold core, warm up and shrink (scale, never fade) into
 ## streak heads for the meteor shower.
@@ -373,13 +374,15 @@ static func _rock_kit() -> PlanetMeshKit:
 	# RECOLOURED (docs/STORY_FIT_REVIEW.md A7, 2026-10-18): the cockpit's meteor palette, so the rock over
 	# the Commons reads as the one the player grazed in the opening. Colours only - the recipe, radius
 	# and facets are unchanged (a rescale is a separate decision, ruling 2).
-	var body := CockpitProps.METEOR_BODY
-	var light := CockpitProps.METEOR_LIGHT
-	var dark := CockpitProps.METEOR_DARK
+	# NIGHT-GRADED (A7 option 1 as rebuilt, 2026-10-18): every colour goes through night_colour(), see there.
+	var body := night_colour(CockpitProps.METEOR_BODY)
+	var light := night_colour(CockpitProps.METEOR_LIGHT)
+	var dark := night_colour(CockpitProps.METEOR_DARK)
 	var sq := CrashAsteroid.SQUASH
 	var kit := PlanetMeshKit.new()
 	kit.faceted_blob(Vector3.ZERO, RADIUS, body, sq, 2, 0.26, 3.7)
-	kit.faceted_blob(Vector3(0.40, -0.16, 0.20) * k, RADIUS * 0.50, body.lerp(dark, 0.35),
+	kit.faceted_blob(Vector3(0.40, -0.16, 0.20) * k, RADIUS * 0.50,
+		night_colour(CockpitProps.METEOR_BODY.lerp(CockpitProps.METEOR_DARK, 0.35)),
 		Vector3(1.0, 0.82, 0.92), 1, 0.22, 9.1)
 	kit.faceted_blob(Vector3(-0.34, 0.20, -0.26) * k, RADIUS * 0.38, light, Vector3.ONE, 1, 0.24, 17.3)
 	var craters := [
@@ -397,6 +400,46 @@ static func _rock_kit() -> PlanetMeshKit:
 		kit.lathe(PackedVector2Array([Vector2(r, 0.05), Vector2(r * 1.22, 0.10),
 			Vector2(r * 1.30, 0.0)]), 10, Transform3D(bs, p), light)
 	return kit
+
+
+## NIGHT RECOLOUR (docs/STORY_FIT_REVIEW.md A7, option 1 as rebuilt by the lead, 2026-10-18). The finale
+## always plays at 21:00 (FinaleMeeting holds the clock at NIGHT_HOUR), and there the cockpit palette
+## alone read navy, rgb(53,58,94): the night ambient #4a5cd0 x0.70 and the moon #9db0e8 x0.90 light it
+## blue, and the night colour grade (environment.gd GRADE_NIGHT, a per-channel LUT on the on-screen
+## value) lifts blue mid-tones further. So the albedo is pre-compensated by inverting that chain: one
+## linear gain per channel on every vertex colour (body, light, dark keep their per-channel ratios), so
+## the rock lands on the cockpit rock's own on-screen colour at night. No light, no emission, same
+## material. At noon it reads orange, rgb(188,126,56); accepted, the finale never runs at noon.
+##
+## Derivation, all measured (Compatibility, hub, 2556x1180, 21:00, the probe's "u" crowd-eye framing):
+## * TARGET: the cockpit rock at the meteor beat's tau 5.81 (showcase/a7_cockpit_mask.gd: clock frozen,
+##   HUD hidden, the Rock drawn magenta for a 523,372-px mask): mean on-screen rgb(97.7,78.2,75.3),
+##   H 7.8, S 0.229, V 0.383.
+## * START: this rock in the plain cockpit palette at 21:00: mean rgb(52.7,58.1,93.7) over 31,574 px.
+## * SOLVE: showcase/finale_l1_probe.gd --l1-mode=solve sets the vertex colours to (cockpit palette,
+##   linear) x g, renders, reads the mean over the rock's own magenta mask, and Newton-steps g (one
+##   render per channel) until that mean equals the target. The engine is the inverse; no model, no
+##   fitted knob. Converged to within 1/255 per channel in 6 steps; the 8-bit vertex colours make it
+##   step about +-1.5/255 around that, and the step with the smallest residual is kept (+0.0, +0.9,
+##   +0.2 /255).
+## * GAMUT: METEOR_LIGHT lands at linear (0.797, 0.407, 0.058): no channel at the 1.0 ceiling. (An analytic
+##   model of the post chain - ACES, contrast 1.04, saturation 0.78, the LUT, read from the engine's GLES3
+##   source - with radiance linear in albedo asked for R x4.64 and missed by 18/255 in red when rendered:
+##   the real response to an albedo gain is steeper than linear on Compatibility. Not diagnosed; the
+##   solve above does not depend on it.)
+## Not compensated: the toon rim/spec and the sky reflection do not scale with albedo (small, cool).
+## RE-SOLVE (`--l1-mode=solve`) if any of these change: GRADE_NIGHT, the night ambient or moon colour/energy, this rock's
+## material or stitch scale, or the finale hour. The gains are measured against today's renderer, not derived from it.
+const NIGHT_GAIN_R := 2.4651
+const NIGHT_GAIN_G := 1.5053
+const NIGHT_GAIN_B := 0.2682
+
+
+## A cockpit palette colour as this rock stores it (see NIGHT RECOLOUR). Linear per-channel gains.
+static func night_colour(c: Color) -> Color:
+	var l := c.srgb_to_linear()
+	return Color(minf(l.r * NIGHT_GAIN_R, 1.0), minf(l.g * NIGHT_GAIN_G, 1.0), minf(l.b * NIGHT_GAIN_B, 1.0),
+		c.a).linear_to_srgb()
 
 
 func _build_core() -> void:
