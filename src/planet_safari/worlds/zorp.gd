@@ -2857,3 +2857,60 @@ func debug_places() -> Dictionary:
 		"moon_dir": _moon_dir, "moon_to": _moon_to.duplicate(), "moon_now": _moon_now.duplicate(),
 		"scrapbook": _scrap_nodes.duplicate(), "great_ring": _great_ring_dir,
 	}
+
+
+# ======================================================================================== THE SAFARI INTRO'S TOUR
+## Prototype B of the safari start cutscene (src/planet_safari/safari_intro.gd, builder SINTRO, 2026-10-19):
+## the black lifts on the planet's name and this subtitle, two scenes of the garden, then a glide in to the start
+## that settles into the first-person view. Data only - SafariIntro plays it; nothing here runs in the safari.
+const INTRO_SUBTITLE := "The Glowing Garden"
+
+
+func intro_subtitle() -> String:
+	return INTRO_SUBTITLE
+
+
+## The shots, in the header's PLACES terms. Each: "path" - the points the lens glides through, Vector2(degrees
+## round from the start, bearing from the start heading, + = right); "height" - metres above the ground at the
+## first and the last point; "secs"; "ease" - "linear", "out" (slows to a stop) or "inout"; "look_from" /
+## "look_to" - what it aims at as the shot starts and ends, Vector3(round, bearing, metres up), or "fp" (the
+## first-person view the safari starts with); "cast" (optional) - {"npc": "zorp", "at": the place, "emote"}: a
+## stand-in Zorp beside that place, facing the lens. The seconds add up to SafariIntro.TOTAL_SEC (4.5).
+func intro_shots() -> Array:
+	return [
+		# SCENE 1: low through the crystal field, a slow arc round Crystal2 about 3 m out, the floating glow-jelly and
+		# the pink crystal beside it. (A crystal 4 m away already sits on this little planet's horizon, so the lens
+		# passes close; nearer than 3 m its flat cyan face filled a third of the frame - the critic.)
+		{"path": [Vector2(92.0, 8.0), Vector2(82.0, -1.0), Vector2(72.0, 2.0)], "height": Vector2(1.2, 1.1),
+			"secs": 1.5, "ease": "linear", "look_from": Vector3(79.0, 16.0, 0.8), "look_to": Vector3(79.0, 16.0, 0.8)},
+		# SCENE 2: in to the bulb bed, where Zorp waters his plants - he waves.
+		{"path": [Vector2(59.0, -108.0), Vector2(53.0, -110.0)], "height": Vector2(1.6, 1.4),
+			"secs": 1.4, "ease": "linear", "look_from": Vector3(40.0, -113.0, 1.3), "look_to": Vector3(40.0, -113.0, 1.3),
+			"cast": {"npc": "zorp", "at": Vector2(40.0, -113.0), "emote": "wave", "out_m": 0.9}},
+		# THE START: a glide in from behind the start that settles into the first-person view.
+		{"path": [Vector2(-9.0, 0.0), Vector2(0.0, 0.0)], "height": Vector2(2.2, 1.15),
+			"secs": 1.6, "ease": "out", "look_from": Vector3(10.0, 0.0, 0.0), "look_to": "fp"},
+	]
+
+
+## THE INTRO'S TITLE LETTERING (prototype B; src/planet_safari/title_lettering.gd draws it). Zorp's lettering is
+## his tentacle plants: tall rounded strokes that bend a little more toward the top and sway out of step, each
+## upward tip ending in a glowing pink bulb, a soft crystal-cyan halo, spores drifting up. Every colour is one this
+## world already draws with (zorp_meshes.gd, and the planet's own crystal / bulb glow keys `_glow_cyan`,
+## `_glow_pink` in `build`); none is over S 0.60 (docs/STYLE_GUIDE.md). Lengths are in cap heights.
+func intro_title_style() -> Dictionary:
+	return {
+		"lines": ["ZORP'S VIOLET", "HOLLOW"],   # two lines: three stacked lines ran across Zorp in scene 2
+		"stroke": 0.15, "outline": 0.045, "halo": 0.26,
+		"slant": 0.05, "wobble": 0.04, "sway_deg": 4.0, "sway_hz": 0.32,
+		"tracking": 0.17, "line_gap": 0.5,
+		"core": Meshes.GNOME_BEARD,            # lilac cream, S 0.06 V 0.90: the letters' light body
+		"outline_col": Meshes.SHELL,           # deep violet, S 0.36 V 0.39: reads on sky and on the violet ground
+		"halo_col": Color("#7fd8c8"),          # the crystal / mushroom-spot cyan (planet_props.gd _violet), S 0.41
+		                                       # V 0.85: a light glow band (a deep teal greyed the picture when faded)
+		"bulb": Color("#d692c4"),              # the tentacle bulbs' pink (_glow_pink), S 0.36
+		"bulb_glow": Color("#d066ae", 0.8),    # their glow (S 0.51)
+		"bulb_r": 0.085, "bulb_min_y": 0.9,
+		"bulb_skip": "I",                      # a bulb on I read as a dotted lowercase i ("ViOLET")
+		"sparks": 14, "spark_cols": [Color("#7fd8c8"), Color("#d692c4"), Meshes.GNOME_BEARD],
+	}

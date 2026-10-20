@@ -2207,3 +2207,20 @@ render per channel, toward the cockpit rock's masked on-screen mean rgb(97.7,78.
   finale's measured framing gates re-run.
 * **Rule:** the gains are measured, not derived. Re-solve if GRADE_NIGHT, the night ambient, the moon, the rock material or the
   finale hour change.
+
+## 76. [2026-10-19] The safari start cutscene: traps that cost a round
+
+* **A half-screen object must not vanish in one frame.** Option A hid the astronaut when the near-plane rule said so; the helmet then
+  covered only about half the frame and he popped away. Hide only when the dome covers the frame DIAGONAL (derived distance), under a
+  short dip.
+* **A CanvasGroup on Compatibility costs a screen-sized back-buffer** (about 12 MB at 2556x1180) and the stroke title also cost +24.7
+  MB with a 1.0x atlas. Bake the lettering once into an atlas at 0.75x, draw each letter as sprites from it, and fade the sprites with a
+  PREMULTIPLIED modulate (`(a, a, a, a)`); a plain alpha made the letters brighten instead of thinning, and fading the strokes layer by
+  layer showed grey ghost outlines. Live Line2D lettering would be about +160 draw calls; the baked atlas is about +15.
+* **First draw of a baked sprite hitches (26 ms):** draw it once at strength 0.01 behind the black. Shaders hitch 126-150 ms on first
+  sight too: the warm-up renders one pose per shot behind the black (about 0.4-0.5 s of extra black). A probe's smoothed `frame_ms`
+  read exactly 16.67 on every frame and hid all of this: measure hitches with `Time.get_ticks_usec()` deltas.
+* **Big centred titles hide the shot.** A three-line centred title covered Zorp's face at the transparent stage; the two-line block
+  now sits in the upper part of the screen. If the user wants it dead centre, move the shot framing lower instead.
+* **`done` emitted from a child's `_exit_tree`** looks like "the parent is going away" but the parent is still in the tree, so the
+  awake bookkeeping ran on a dying scene. Set an `aborted` flag before emitting.

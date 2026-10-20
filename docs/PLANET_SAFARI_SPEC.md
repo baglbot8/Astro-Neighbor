@@ -881,3 +881,35 @@ Known small issues, left for after the user's play:
   campaign; Fen box colours reach S 0.64-0.67 in close-up (cap 0.60).
 * Vela snow mite ~0.37 (cap 0.35, within one photo of noise); Zorp side-on pose may read as a back view.
 * The careful test player hangs on the out-of-film card (it cannot tap it); the integrator's harness taps it.
+
+## 19. [2026-10-19] The safari start cutscene (prototype, Zorp only)
+
+The user asked for a mini cutscene at a safari's start, Pokemon-Snap style, and drafted two options: **A "the swoop"** (the astronaut
+walks holding his camera; the camera orbits to behind his head and slips into it, settling into first person) and **B "the tour"**
+(short glides over the planet under a big planet-name title, settling at the start point; "text fades out, you can move, then the
+timer starts"). The user cut B to about 4.5 s: two scenes plus the start point. Both are built as one runner, `SafariIntro`
+(`src/planet_safari/safari_intro.gd`), enabled only for Zorp (`PROTOTYPE_PLANETS`), picked by `GameState.settings["safari_intro"]`
+= "a" | "b" | "off" (default **"b"**; hidden dev-menu row "Safari start (Zorp)", World tab, read at the next safari start).
+* **Timer:** unchanged. The intro replaces the 0.45 s fade-in; `phase = AWAKE; elapsed = 0.0` still run exactly when the player gets
+  control (lift to control 4.5 s for A and B; "off" is today's start, 0.46 s). The world content is built behind black before the
+  intro and is NOT ticked during it (creatures stand still; the schedule's first events match "off" to a frame).
+* **Skip:** the first safari plays in full; later ones show a "Skip" pill (the cockpit's) that opens `SkipConfirm`; taps elsewhere do
+  nothing. A confirmed skip lands in the same end state as the full intro.
+* **Option A:** a double of the astronaut (render layer 18) walks 1.6 m in `carry_walk` holding a brass camera and ends exactly on the
+  real player's start; the camera orbits and pushes in; he is hidden when the helmet dome covers the frame diagonal (derived: radius /
+  sin(half-diagonal FOV) vs the near plane, 0.50 m), under a 3-frame navy "visor" dip; the last 0.8 s blend into the rig's first-person
+  lens. The final heading stays `start_fwd` (the safari always starts facing the same way), so the last frame is today's pose, mostly sky.
+* **Option B:** the title is a PROCEDURAL stroke font (`src/planet_safari/title_lettering.gd`; no font file; glyphs only for
+  "ZORP'S VIOLET HOLLOW"; a missing glyph falls back to Baloo 2 with a warning), baked once behind the black into an atlas
+  (baked at 0.75x) and faded as sprites (a CanvasGroup cost a screen-sized back-buffer and was removed). Two lines, "ZORP'S VIOLET" /
+  "HOLLOW", about 56% of the width and 8-48% of the height of a phone frame: the block sits in the UPPER part of the screen, not the exact
+  centre, because the centre is where the crystal and Zorp's wave are (a three-line, centred block covered his face; the user asked for
+  centre-middle, so this is a trade-off to judge on the phone). Schedule: in 0.5 s, hold to 1.5 s, drift down to 0.33 by 2.2 s, 0.22 at
+  3.6 s, gone at 4.4 s. Scene 1 is a 3 m arc round Crystal2; scene 2 is the bulb bed with a stand-in Zorp waving (the toadstool ring is
+  about 20 m from it, too far for one 1.4 s glide; no hoppers; he waves, he does not water).
+* **Measured on a Mac only:** about +11 MB texture memory while the title plays (freed afterwards); about +15 draw calls; CPU render
+  time within 0.3 ms of a normal safari frame; the black before the lift is 0.36-0.50 s longer than today's (shader warm-up).
+  Phone cost and WebKit memory are untested.
+* **Geometry rulings:** the start is only 0.65 m off the pad deck (deck radius 2.55 m, start 3.2 m from the pad centre), so A's walk
+  begins on the deck. To roll this out to other planets, B needs three camera paths and a subtitle per planet (data in the world
+  script: `intro_shots()`, `intro_subtitle()`, `intro_title_style()`) and glyphs for that planet's name; A is generic.

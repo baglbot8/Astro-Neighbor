@@ -166,6 +166,8 @@ var _story_toggle: ToggleSwitch
 var _board_all_toggle: ToggleSwitch
 ## The retired space safari's one switch (docs/PLANET_SAFARI_SPEC.md 15.1), World tab. Never saved.
 var _space_safari_toggle: ToggleSwitch
+## The safari start cutscene prototype (SafariIntro): A swoop / B tour / off, saved in GameState.settings.
+var _safari_intro_seg: SegmentedControl
 var _status_label: Label
 var _status_t := 0.0
 ## npc_id -> the status Label in that neighbour's Friends block.
@@ -1510,6 +1512,18 @@ func _build_world_tab(list: VBoxContainer) -> void:
 	_add_action_row(flights, "Re-arm first-safari tips", func() -> void:
 		PlanetSafari.debug_reset_tips()
 		_finish_action("The next planet safari teaches itself again."), "Reset")
+	# THE SAFARI START CUTSCENE PROTOTYPE (src/planet_safari/safari_intro.gd): which one plays at the next
+	# planet safari start (Zorp only for now). Saved with the settings.
+	var si_row := _row(flights, "Safari start (Zorp)")
+	_safari_intro_seg = SegmentedControl.new()
+	_safari_intro_seg.setup(PackedStringArray(["A swoop", "B tour", "Off"]), _safari_intro_index())
+	_safari_intro_seg.selected.connect(func(i: int) -> void:
+		var k: String = ["a", "b", "off"][clampi(i, 0, 2)]
+		GameState.settings[SafariIntro.SETTING] = k
+		print("[DevMenu] safari intro -> %s" % k)
+		_finish_action("Next safari start: %s" % ["A, the swoop", "B, the tour", "off (the old fade)"][clampi(i, 0, 2)]))
+	_safari_intro_seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	si_row.add_child(_safari_intro_seg)
 
 	var save_sec := _section("World", "save", "Save")
 	_add_action_row(save_sec, "Save game now (writes the save)", func() -> void:
@@ -1706,6 +1720,8 @@ func _refresh_values() -> void:
 		_space_safari_toggle.set_block_signals(true)
 		_space_safari_toggle.on = SafariTransit.SPACE_SAFARI
 		_space_safari_toggle.set_block_signals(false)
+	if _safari_intro_seg != null:
+		_safari_intro_seg.index = _safari_intro_index()
 	if _board_all_toggle != null and ResourceLoader.exists(REPLAY_BOARD_PATH):
 		_board_all_toggle.set_block_signals(true)
 		_board_all_toggle.on = bool(load(REPLAY_BOARD_PATH).call("dev_show_all"))
@@ -1983,3 +1999,7 @@ func debug_range_report(tag: String = "") -> void:
 		bits.append("%s=%s(need %d)" % [pid, str(CampaignData.planet_in_range(pid)), CampaignData.parts_needed_for(pid)])
 	print("DEVMENU_RANGE %s gates_on=%s parts=%d %s" % [
 		tag, str(CampaignData.gates_on()), GameState.rocket_part_count(), " ".join(bits)])
+
+
+func _safari_intro_index() -> int:
+	return maxi(["a", "b", "off"].find(str(GameState.settings.get(SafariIntro.SETTING, SafariIntro.DEFAULT_KIND))), 0)

@@ -517,8 +517,26 @@ func _run() -> void:
 		return
 	_begin_behind_black()
 	await _warm_up()
-	layer.show_awake_ui(true)
-	await layer.fade_to(0.0, FADE_SEC)
+	# THE START CUTSCENE (prototype, src/planet_safari/safari_intro.gd): on a planet that has one and with the
+	# dev switch on, it replaces the fade-in below and returns when control should; "off" (and every other
+	# planet) is today's fade-in, unchanged. Either way the timer starts on the next lines, at control.
+	var intro_kind := SafariIntro.kind_for(planet_id, _content)
+	if intro_kind != "":
+		var intro := SafariIntro.new()
+		intro.setup(self, intro_kind)
+		add_child(intro)
+		intro.start()
+		await intro.done
+		if not is_instance_valid(player):
+			return
+		if intro.aborted or not is_inside_tree() or is_queued_for_deletion() or _restored:
+			# This node is going away mid-intro (the intro's own _exit_tree said so): no safari starts, but the
+			# player is not left locked.
+			player.set_move_locked(false)
+			return
+	else:
+		layer.show_awake_ui(true)
+		await layer.fade_to(0.0, FADE_SEC)
 	player.set_move_locked(false)
 	phase = Phase.AWAKE
 	elapsed = 0.0
