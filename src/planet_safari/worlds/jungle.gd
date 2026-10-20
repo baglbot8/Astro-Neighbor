@@ -3096,3 +3096,62 @@ func debug_places() -> Dictionary:
 		"lily": _lily.global_position if _lily != null else Vector3.ZERO,
 		"eligible": _eligible.duplicate(),
 	}
+
+
+# ======================================================================================== THE START CUTSCENE
+## THE START CUTSCENE'S DATA (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder JUNGLE+METEOR intro,
+## 2026-10-20). Data only - SafariIntro plays it; nothing here runs in the safari or touches its random numbers.
+## SCENE 1 is ONE slow move over pool 7 (52, 31) - the nearest of the nine swamp pools to the start, lily pads and reeds,
+## a lily-hopper on its rim - starting low over the water looking across it into the trees, then craning UP and BACK
+## until the Tangle opens out behind it: the turquoise parasol tiers, a coral spire palm, a root arch, the planet's curve
+## and its two moons over the left. Chosen by looking at scout frames (showcase/safari_intro_meteor_scout.gd): on this
+## 14 m planet the far trees sit on the horizon from 1.1 m, so the move ends 5.5 m up; the pool stays in the lower
+## third, under the name. Polish round: the aim swung ~10 degrees right, so the coral spire palm and the root arch stand
+## LEFT of the name instead of behind it (the critic: the name covered the tree line). Scene 2 is the generic swoop with
+## one override (below).
+const INTRO_SUBTITLE := "Moss's Swamp Jungle"
+
+
+## The move starts at (45, 37.4) 2.2 m up, not a step lower and further out at (46, 37) 1.8 m: from there a 115-150 ms
+## frame was measured every run (3/3, both 2556x1179 and 1280x720) about 6% into the move (0.5 s in; 0.24 s with a linear ease) - a
+## draw the runner's 110-degree warm-up does not cover (with a 50-degree warm-up it is gone: 18.9 ms max). Started past
+## that point, the one slow frame falls on the frame the black is still fully up (see the builder report).
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(45.0, 37.4), Vector2(40.0, 39.0), Vector2(33.0, 42.0)], "height": Vector2(2.2, 5.5),
+		"ease": "inout", "look_from": Vector3(57.0, 35.0, 1.0), "look_to": Vector3(62.0, 35.0, 1.5),
+		# ambient life for the intro only: amber and magenta glows drifting up over the pool (SafariIntro's own). The
+		# sparkle material ADDS its colour, so over the bright turquoise water full-strength glows summed to near white
+		# (the critic: "a spore renders whitish"); these are the Tangle's glow hues at about half value, and teal (lost
+		# against the water) is left out.
+		"spores_at": Vector2(52.0, 31.0),
+		"spore_cols": [Color("#8c4a12"), Color("#7c2c58")]}
+
+
+## The Tangle's lettering (a DRAFT; titles/jungle_title.gd draws the crest and every letter): amber-gold letters with a
+## cream lit edge and a deep-teal outline over a lily pad on a fan of palm fronds; spores drift up in its glows.
+func intro_title_style() -> Dictionary:
+	return {
+		"title_file": "res://src/planet_safari/titles/jungle_title.gd",
+		"stroke": 0.17, "outline": 0.05, "halo": 0.24, "slant": 0.0, "wobble": 0.0,
+		"sway_deg": 1.5, "sway_hz": 0.28, "tracking": 0.15, "line_gap": 0.38,
+		"core": Color("#e6c27a"), "core_top": Color("#f2e2b6"), "outline_col": Color("#1f3a44"),
+		"shadow_col": Color("#1b2430", 0.55),
+		"tip_kind": "none", "bulb_r": 0.0, "backdrop_scale": 0.75,
+		"spark_kind": "rise", "sparks": 12,
+		"spark_cols": [Color("#e6a24a"), Color("#5cc8b0"), Color("#d8b0cc")],
+	}
+
+
+func intro_data() -> Dictionary:
+	return {
+		"title": "The Tangle",
+		"title_lines": ["THE", "TANGLE"],
+		"subtitle": INTRO_SUBTITLE,
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"total": 8.5,
+		"cut": 3.9,
+		# Scene 2 opens further behind him than the generic rear-left (128 deg): from there the pad's blue fuel tank and
+		# its yellow pump stood at the frame's right edge behind him (seen in the frames). The rest is the generic swoop.
+		"swoop": {"phi": [Vector3(0.0, 146.0, 0.0), Vector3(1.4, 158.0, 10.0), Vector3(3.0, 180.0, 0.0)]},
+	}

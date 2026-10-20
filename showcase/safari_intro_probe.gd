@@ -86,6 +86,10 @@ func _ready() -> void:
 	if not _args.has("--sip"):
 		return
 	if not persistent:
+		# --planet=meteor|cave: those outings run on the home world (their hosts are added in `_start`).
+		for a in _args:
+			if a == "--planet=meteor" or a == "--planet=cave":
+				GameState.current_planet_id = "home"
 		var p: Node = load("res://showcase/safari_intro_probe.gd").new()
 		p.persistent = true
 		p.name = "SafariIntroProbe"
@@ -221,6 +225,8 @@ func _process(delta: float) -> void:
 	var s := PlanetSafari.current
 	if s == null:
 		return
+	if _args.has("--sip-firstseen"):
+		_first_seen_step(s)
 	var now := Time.get_ticks_msec()
 	if s.phase != _last_phase:
 		print("SIP phase %d -> %d at %d ms (elapsed=%.3f)" % [_last_phase, s.phase, now - _req_ms, s.elapsed])
@@ -258,8 +264,15 @@ func _process(delta: float) -> void:
 
 var _last_t_was_set := false
 var _banner_was := false
+var _banner_txt := ""
+var _q_sent := false
+var _twice_n := 0
 var _prev_us := 0
+var _tex_peak := 0.0
+var _box_done := false
+var _stalled := false
 var _tex_marks: Array[float] = []
+var _mask_env: Environment
 ## --sip-shot-times=1.4,1.5,... : frames at these times instead of every 0.4 s.
 var _shot_times := PackedFloat32Array()
 
@@ -278,6 +291,7 @@ func _start() -> void:
 	if _args.has("--sip-seen"):
 		GameState.flags["safari_intro_seen_a"] = true
 		GameState.flags["safari_intro_seen_b"] = true
+		GameState.flags["safari_intro_seen_c"] = true
 	if _args.has("--sip-hover"):
 		GameState.flags["hover_learned"] = true
 	GameState.flags.erase(PlanetSafari.FLAG_DAY_PREFIX + pid)
@@ -286,7 +300,25 @@ func _start() -> void:
 	print("SIP request_start planet=%s mode=%s settings=%s seen_a=%s seen_b=%s" % [pid, _mode,
 		str(GameState.settings.get("safari_intro", "<unset>")), str(GameState.flags.get("safari_intro_seen_a", false)),
 		str(GameState.flags.get("safari_intro_seen_b", false))])
-	PlanetSafari.request_start(get_tree())
+	print("SIP modals before the outing starts: %s" % str(EventBus.open_modals()))
+	var case_n := int(_arg_val("--sip-case=", "0"))
+	if case_n > 0:
+		var d := _break_case(case_n)
+		Engine.set_meta("sip_case_data", d)
+		print("SIP data case %d: %s" % [case_n, str(d).left(160)])
+	var hosts := load("res://showcase/safari_intro_probe_hosts.gd")
+	if _args.has("--planet=meteor"):
+		var lvl: Node = hosts.ProbeMeteor.new()
+		lvl.name = "MeteorSurvey"
+		_world().add_child(lvl)
+		print("SIP outing: meteor (probe host, stub data)")
+	elif _args.has("--planet=cave"):
+		var cv: Node = hosts.ProbeCave.new()
+		cv.name = "CaveVisit"
+		_world().add_child(cv)
+		print("SIP outing: cave (probe host, stub data)")
+	else:
+		PlanetSafari.request_start(get_tree())
 
 
 func _fade_alpha(s: PlanetSafari) -> float:
@@ -311,8 +343,15 @@ func _frame(s: PlanetSafari, delta: float) -> void:
 		_prev_fwd = fwd
 		_have_prev = true
 		if _trace:
-			print("SIP cam t=%.3f %s pos=(%.3f,%.3f,%.3f) fwd=(%.3f,%.3f,%.3f) fov=%.2f phase=%d el=%.3f" % [t,
+			print("SIP cam t=%.4f %s pos=(%.5f,%.5f,%.5f) fwd=(%.6f,%.6f,%.6f) fov=%.3f phase=%d el=%.3f" % [t,
 				str(cam.name), pos.x, pos.y, pos.z, fwd.x, fwd.y, fwd.z, cam.fov, s.phase, s.elapsed])
+	# A SYNTHETIC slow frame (the main thread sleeps 150 ms once at this intro time): the clock clamp's test.
+	if _arg_val("--sip-stall-at=", "") != "" and in_intro and not _stalled and t >= float(_arg_val("--sip-stall-at=", "0")):
+		_stalled = true
+		print("SIP synthetic 150 ms stall at t=%.3f" % t)
+		OS.delay_msec(150)
+	if _args.has("--sip-pad") and cam != null:
+		_pad_step(s, cam, t, in_intro)
 	var now_us := Time.get_ticks_usec()
 	var real_ms := float(now_us - _prev_us) / 1000.0 if _prev_us > 0 else delta * 1000.0
 	_prev_us = now_us
@@ -334,10 +373,19 @@ func _frame(s: PlanetSafari, delta: float) -> void:
 	if not in_intro:
 		var bn: Variant = s.layer.get("_banner")
 		var vis := bn is Control and (bn as Control).visible
-		if vis != _banner_was:
+		var txt := str(s.layer.get("_banner_label").text) if vis else ""
+		if vis != _banner_was or txt != _banner_txt:
 			_banner_was = vis
+			_banner_txt = txt
 			if vis:
-				print("SIP banner shows at elapsed=%.2f: %s" % [s.elapsed, str(s.layer.get("_banner_label").text)])
+				print("SIP banner shows at elapsed=%.2f: %s" % [s.elapsed, txt])
+		if _args.has("--sip-q-after") and not _q_sent and t >= _t_awake + 1.0:
+			_q_sent = true
+			_key(KEY_Q, true)
+			_key(KEY_Q, false)
+			print("SIP sent Q at elapsed=%.2f (raise the camera: the first-safari tip should come now)" % s.elapsed)
+	if in_intro and (bool(s.get("tip_up")) or bool(s.get("_tip_pending"))):
+		print("SIP !!! a tip card is up or pending DURING the intro at t=%.2f" % t)
 	if in_intro:
 		# Nothing of the safari's own UI may show or arm before control (the opening line is the banner).
 		var ban: Variant = s.layer.get("_banner")
@@ -350,10 +398,60 @@ func _frame(s: PlanetSafari, delta: float) -> void:
 		if _tex_marks.find(mark) < 0 and in_intro and t >= mark:
 			_tex_marks.append(mark)
 			print("SIP texmem intro t=%.1f %.1f MB" % [mark, Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0])
+	if in_intro:
+		_tex_peak = maxf(_tex_peak, Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0)
 	if not in_intro and _tex_marks.find(-1.0) < 0 and t >= _t_awake + 1.0:
 		_tex_marks.append(-1.0)
 		print("SIP texmem after control+1s %.1f MB" % (Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0))
+		print("SIP texmem intro peak %.1f MB" % _tex_peak)
 	var intro0 := s.get_node_or_null("SafariIntro")
+	if _args.has("--sip-helmet-log") and intro0 != null and in_intro:
+		_helmet_log(intro0, t)
+	if _args.has("--sip-clearance") and intro0 != null and in_intro:
+		_clearance_step(intro0, t)
+	if _arg_val("--sip-mockup=", "") != "" and intro0 != null and in_intro:
+		_mockup_step(intro0, t)
+	if _args.has("--sip-mask") and intro0 != null and in_intro:
+		# DIAGNOSTIC ONLY: the intro lens draws the double alone on black, so its silhouette can be measured.
+		var icam := intro0.get("_cam") as Camera3D
+		if icam != null and is_instance_valid(icam):
+			icam.cull_mask = SafariIntro.DOUBLE_BIT
+			if _mask_env == null:
+				_mask_env = Environment.new()
+				_mask_env.background_mode = Environment.BG_COLOR
+				_mask_env.background_color = Color.BLACK
+				_mask_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+				_mask_env.ambient_light_color = Color(0.6, 0.6, 0.6)
+			icam.environment = _mask_env
+	# The visor dim, every frame of scene 2's push: the dome's share of the frame (SafariIntro._helmet_share; 0 for a
+	# runner without it), the black's strength, and the dome's UNDIMMED share = share x (1 - black).
+	if _args.has("--sip-dim-log") and intro0 != null and in_intro and t >= 6.5:
+		var blk := intro0.get("_black") as ColorRect
+		var ba := blk.color.a if blk != null else 0.0
+		var sh: Variant = intro0.get("_helmet_share")
+		var shv := float(sh) if sh != null else -1.0
+		var dlv: Variant = intro0.get("_dl")
+		print("SIP dim t=%.3f share=%.3f black=%.3f undimmed=%.3f hidden=%s light=%s" % [t, shv, ba, maxf(shv, 0.0) * (1.0 - ba),
+			str(intro0.get("_double_hidden")), ("%.3f" % (dlv as OmniLight3D).light_energy) if dlv is OmniLight3D else "-"])
+	# The title's box at its LARGEST (grown by TITLE_GROW), once at t = 1: the letter block and the planet backdrop
+	# (its "size" meta), as shares of the card's width/height from each edge (negative = past the edge).
+	if _args.has("--sip-title-box") and intro0 != null and in_intro and t >= 1.0 and not _box_done:
+		_box_done = true
+		var let := intro0.find_child("TitleLettering", true, false) as Node2D
+		var root := intro0.get("_card_root") as Control
+		if let != null and root != null:
+			var vp: Vector2 = root.size
+			var fit := float(intro0.get("_title_fit")) * (1.0 + SafariIntro.TITLE_GROW)
+			var bs: Vector2 = let.get("block_size")
+			var bk: Vector2 = let.get("_back_size")
+			for item: Array in [["block", bs], ["backdrop", bk]]:
+				var e: Vector2 = item[1]
+				if e == Vector2.ZERO:
+					continue
+				var c: Vector2 = let.position
+				print("SIP title box %s: top %.3f bottom %.3f left %.3f right %.3f (of the card %s; fit %.3f)" % [item[0],
+					(c.y - e.y * fit * 0.5) / vp.y, (c.y + e.y * fit * 0.5) / vp.y, (c.x - e.x * fit * 0.5) / vp.x,
+					1.0 - (c.x + e.x * fit * 0.5) / vp.x, str(vp), fit])
 	if _args.has("--sip-title-log"):
 		var dsx: Dictionary = intro0.call("debug_state") if intro0 != null else {}
 		print("SIP title t=%.3f alpha=%.3f drawn=%s in_intro=%s" % [t, float(dsx.get("title_alpha", 0.0)),
@@ -447,6 +545,180 @@ func _frame(s: PlanetSafari, delta: float) -> void:
 		s.queue_free()
 
 
+## Option A's double: lens-to-dome distance, FOV, the dome's world scale (root squash), the neck's rotation, the
+## dome centre on screen and its analytic projected radius (vertical px) - one line a frame.
+func _helmet_log(intro: Node, t: float) -> void:
+	var dbl := intro.get("_double") as Node3D
+	var cam := get_viewport().get_camera_3d()
+	if dbl == null or not is_instance_valid(dbl) or cam == null:
+		return
+	var helm := dbl.find_child("Helmet", true, false) as Node3D
+	var neck := dbl.find_child("Neck", true, false) as Node3D
+	if helm == null:
+		return
+	var c := helm.global_position
+	var d := cam.global_position.distance_to(c)
+	var b := helm.global_transform.basis
+	var sx := b.x.length()
+	var sy := b.y.length()
+	var r_world := AstronautModel.HELMET_R.y * AstronautModel.HELMET_SCALE * sy
+	var vp_h := get_viewport().get_visible_rect().size.y * get_tree().root.get_final_transform().get_scale().y
+	var focal := (vp_h * 0.5) / tan(deg_to_rad(cam.fov) * 0.5)
+	var r_px := focal * r_world / sqrt(maxf(d * d - r_world * r_world, 1e-6))
+	var sp := cam.unproject_position(c) * get_tree().root.get_final_transform().get_scale().y
+	var behind := cam.is_position_behind(c)
+	print("SIP helm t=%.4f d=%.4f fov=%.2f sx=%.4f sy=%.4f r_world=%.4f r_px=%.1f rpx_x_d=%.2f neck=(%.3f,%.3f,%.3f) scr=(%.0f,%.0f) behind=%s state=%s" % [
+		t, d, cam.fov, sx, sy, r_world, r_px, r_px * d, neck.rotation.x if neck else 0.0, neck.rotation.y if neck else 0.0,
+		neck.rotation.z if neck else 0.0, sp.x, sp.y, str(behind), str((dbl as AstronautModel).get_state())])
+
+
+## STILLS for the title choice: at --sip-mockup-at the live title is swapped for TitleMockups' M1/M2/M3; from
+## --sip-mockup-faint-at it is drawn at strength 0.3.
+var _mock: CanvasGroup
+func _mockup_step(intro: Node, t: float) -> void:
+	var at := float(_arg_val("--sip-mockup-at=", "1.5"))
+	var faint := float(_arg_val("--sip-mockup-faint-at=", "99"))
+	if _mock == null and t >= at:
+		var let := intro.get("_lettering") as Node
+		if let != null:
+			let.queue_free()
+			intro.set("_lettering", null)
+		var sub := intro.get("_sub") as Control
+		if sub != null:
+			sub.visible = false
+		var lines := PackedStringArray(["ZORP'S VIOLET", "HOLLOW"])
+		match _arg_val("--sip-mockup=", "M1"):
+			"M1": _mock = TitleMockups.crest(lines, "The Glowing Garden")
+			"M2": _mock = TitleMockups.mushroom_t(lines, "The Glowing Garden")
+			_: _mock = TitleMockups.plaque(lines, "The Glowing Garden")
+		var root := intro.get("_card_root") as Control
+		root.add_child(_mock)
+		root.move_child(_mock, 1)
+		var vp := root.size
+		var bs: Vector2 = _mock.get_meta("block_size")
+		var k := minf(vp.x * 0.74 / bs.x, vp.y * 0.56 / bs.y)
+		_mock.scale = Vector2.ONE * k
+		_mock.position = Vector2(vp.x * 0.5, vp.y * SafariIntro.C_TITLE_CENTER_Y)
+		print("SIP mockup %s scale %.3f block %s on %s" % [_arg_val("--sip-mockup=", ""), k, str(bs * k), str(vp)])
+	if _mock != null and t >= faint:
+		_mock.self_modulate.a = 0.3
+
+
+## DIAGNOSTIC: the first moment (ms since the intro node appeared) each mesh in the world enters the current
+## camera's frustum (AABB vs the six planes) on a layer that camera draws - warm-up frames included. Printed at the
+## end for everything first seen after the lift.
+var _fs_list: Array = []
+var _fs_first: Dictionary = {}
+var _fs_t0 := -1
+func _first_seen_step(s: PlanetSafari) -> void:
+	var intro := s.get_node_or_null("SafariIntro")
+	if intro == null and _fs_t0 < 0:
+		return
+	if _fs_t0 < 0:
+		_fs_t0 = Time.get_ticks_msec()
+		for g in _world().find_children("*", "GeometryInstance3D", true, false):
+			_fs_list.append(g)
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var planes := cam.get_frustum()
+	var tms := Time.get_ticks_msec() - _fs_t0
+	for gv in _fs_list:
+		if not is_instance_valid(gv):
+			continue
+		var g := gv as GeometryInstance3D
+		if _fs_first.has(g.get_instance_id()):
+			continue
+		if not g.is_visible_in_tree() or (g.layers & cam.cull_mask) == 0:
+			continue
+		var box := g.global_transform * g.get_aabb()
+		var inside := true
+		for pl: Plane in planes:
+			var out := true
+			for i in 8:
+				if not pl.is_point_over(box.get_endpoint(i)):
+					out = false
+					break
+			if out:
+				inside = false
+				break
+		if inside:
+			_fs_first[g.get_instance_id()] = [tms, str(g.get_path()), g.get_class(),
+				str((g as MeshInstance3D).mesh.resource_name if g is MeshInstance3D and (g as MeshInstance3D).mesh else ""),
+				str(g.material_override.resource_path if g.material_override else "-")]
+
+
+func _first_seen_report() -> void:
+	var rows: Array = _fs_first.values()
+	rows.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+	var lift_ms := (_lift_ms - _fs_t0) if _lift_ms >= 0 else 0
+	print("SIP firstseen: %d meshes tracked, %d ever in view, lift at %d ms" % [_fs_list.size(), rows.size(), lift_ms])
+	for r: Array in rows:
+		if int(r[0]) > lift_ms:
+			print("SIP firstseen t=%.3f %s %s mesh=%s mat=%s" % [float(int(r[0]) - lift_ms) / 1000.0, r[1], r[2], r[3], r[4]])
+
+
+## THE DATA-VALIDATION CASES (the critic's list, and more): each must end in today's start with ZERO script errors.
+## 1-16 broken data; 17-19 title files returning the wrong thing; 20 a local_path point underground (raised, plays).
+func _break_case(n: int) -> Dictionary:
+	var hosts := load("res://showcase/safari_intro_probe_hosts.gd")
+	var d: Dictionary = (hosts.STUB_METEOR as Dictionary).duplicate(true)
+	var sc: Dictionary = d["scene1"]
+	match n:
+		1: d["scene1"] = {}
+		2: d["scene1"] = "x"
+		3: d["scene1"] = {"path": [], "height": Vector2(1, 1)}
+		4: d["scene1"] = {"path": [Vector2(10, 0)], "height": Vector2(1, 1)}
+		5: d["scene1"] = {"path": [Vector3(1, 2, 3), Vector3(2, 3, 4)], "height": Vector2(1, 1)}
+		6: d["scene1"] = {"path": [Vector2(10, 0), Vector2(20, 0)]}
+		7: d["scene1"] = {"path": [Vector2(10, 0), Vector2(20, 0)], "height": 1.5}
+		8: sc["local_path"] = [Vector3(1, 1, 1)]
+		9: d["swoop"] = {"r": [Vector3(0, 1, 0)]}
+		10: d["swoop"] = {"phi": "abc"}
+		11: d["total"] = "abc"
+		12: d["cut"] = []
+		13: d["title_style"] = "red"
+		14: d["title_lines"] = 5
+		15: sc["look_from"] = Vector2(1, 2)
+		16: d["double_light"] = 3
+		17: d["title_style"] = {"title_file": "res://showcase/safari_intro_badtitle.gd"}
+		18: d["title_style"] = {"title_file": "res://showcase/no_such_title.gd"}
+		19: d["title_style"] = {"title_file": "res://showcase/safari_intro_badtitle2.gd"}
+		20: sc["local_path"] = [Vector3(6.0, -3.0, 2.0), Vector3(3.0, 3.0, 5.5)]
+		21: d["subtitle"] = ""
+		22: sc["local_spores_at"] = Vector2(1, 2)
+	return d
+
+
+## Item 1 (the cave builder): where the double starts relative to the real start, and the lens's clearance - a ray
+## from the double's helmet to the lens; a hit before the lens = the lens is behind rock (negative clearance).
+var _clr_min := INF
+var _clr_logged := false
+func _clearance_step(intro: Node, t: float) -> void:
+	var dbl := intro.get("_double") as Node3D
+	var cam := get_viewport().get_camera_3d()
+	if dbl == null or not is_instance_valid(dbl) or cam == null or not dbl.visible:
+		return
+	var s := PlanetSafari.current
+	if not _clr_logged:
+		_clr_logged = true
+		var d := dbl.global_position.distance_to(s.player.global_position)
+		var along := (dbl.global_position - s.player.global_position).dot(s.start_fwd.normalized())
+		print("SIP double at scene-2 start: %.3f m from the real start, %.3f m along the heading (negative = behind)" % [d, along])
+	var helm := dbl.global_position + s.planet.up_at(dbl.global_position) * AstronautModel.HELMET_CY
+	var space := get_viewport().world_3d.direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(helm, cam.global_position)
+	q.exclude = [s.player.get_rid()]
+	var hit := space.intersect_ray(q)
+	var lens_d := helm.distance_to(cam.global_position)
+	var clr := lens_d if hit.is_empty() else (helm.distance_to(hit["position"]) - lens_d)
+	if hit.is_empty():
+		clr = 9.9
+	_clr_min = minf(_clr_min, clr)
+	if not hit.is_empty():
+		print("SIP lens BLOCKED t=%.2f: rock %.2f m from the helmet, lens at %.2f m" % [t, helm.distance_to(hit["position"]), lens_d])
+
+
 func _key(code: Key, pressed: bool) -> void:
 	var k := InputEventKey.new()
 	k.physical_keycode = code
@@ -493,6 +765,29 @@ func _on_control(s: PlanetSafari) -> void:
 
 
 func _finish(s: PlanetSafari) -> void:
+	var runs := int(_arg_val("--sip-runs=", "2"))
+	if _args.has("--sip-twice") and _twice_n < runs - 1:
+		_twice_n += 1
+		_report_mem("after safari %d control+%.0fs" % [_twice_n, _after])
+		s.queue_free()
+		await get_tree().create_timer(1.0).timeout
+		_report_mem("safari %d freed" % _twice_n)
+		GameState.flags.erase(PlanetSafari.FLAG_DAY_PREFIX + GameState.current_planet_id)
+		_last_phase = -1
+		_fade_ms = -1
+		_lift_ms = -1
+		_awake_ms = -1
+		_seen_black = false
+		_t_lift = -1.0
+		_t_awake = -1.0
+		_last_t_was_set = false
+		_have_prev = false
+		_jumps.clear()
+		_req_ms = Time.get_ticks_msec()
+		PlanetSafari.request_start(get_tree())
+		return
+	if _args.has("--sip-twice"):
+		_report_mem("after safari %d control+%.0fs" % [_twice_n + 1, _after])
 	_done = true
 	# The hand-back window: the last 1.0 s of the intro and 0.3 s after.
 	var max_m := 0.0
@@ -523,8 +818,32 @@ func _finish(s: PlanetSafari) -> void:
 	if _perf:
 		print("SIP PERF cpu_ms intro %s | normal %s" % [_stats(_perf_intro), _stats(_perf_normal)])
 		print("SIP PERF frame_ms intro %s | normal %s" % [_stats(_delta_intro), _stats(_delta_normal)])
+	if _args.has("--sip-firstseen"):
+		_first_seen_report()
+	if _args.has("--sip-clearance"):
+		print("SIP clearance min over scene 2: %s" % ("clear (no rock between helmet and lens)" if _clr_min >= 9.0 else "%.2f m" % _clr_min))
+	if _args.has("--sip-pad"):
+		_pad_report()
+	print("SIP modals at the end: %s" % str(EventBus.open_modals()))
 	print("SIP DONE")
 	get_tree().quit()
+
+
+func _report_mem(tag: String) -> void:
+	print("SIP MEM %s: texmem=%.2f MB nodes=%d objects=%d subviewports=%d intro_nodes=%d title_nodes=%d" % [tag,
+		Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0,
+		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), int(Performance.get_monitor(Performance.OBJECT_COUNT)),
+		_count_class(get_tree().root, "SubViewport"), _count_named(get_tree().root, "SafariIntro"),
+		_count_named(get_tree().root, "TitleLettering")])
+
+
+func _count_class(n: Node, cls: String) -> int:
+	var k := 0
+	for c in n.get_children():
+		if c.is_class(cls):
+			k += 1
+		k += _count_class(c, cls)
+	return k
 
 
 func _stats(a: PackedFloat64Array) -> String:
@@ -639,3 +958,98 @@ func _capture(name_: String) -> void:
 	var path := _shots_dir.path_join(name_ + ".png")
 	img.save_png(path)
 	print("SIP shot %s %dx%d" % [path, img.get_width(), img.get_height()])
+
+
+# ---------------------------------------------------------------------------------------------- --sip-pad
+## THE PAD FIXTURES in the intro's view (scene 2): each fixture's sample points (foot, middle, top of a post) in
+## the start frame once, then every scene-2 frame whether any is inside the current camera's frustum and how far
+## inside the frame's edge (0 = the edge, 0.5 = the centre). Report: the scene-2 seconds each is on screen.
+const PAD_FIX := {"ControlPost": [0.0, 0.6, 1.2], "Post-1": [-1.4, 0.0, 1.4], "Post1": [-1.4, 0.0, 1.4],
+	"FuelHose": [0.0], "BeaconMast": [0.0, 1.5, 3.0], "Rocket": [0.0, 1.5, 3.0]}
+var _pad_nodes := {}
+var _pad_on := {}
+var _pad_logged := false
+var _pad_last_hidden := {}
+var _pad_restore_logged := false
+
+## Drawn by no camera (SafariIntro hides a fixture with layers = 0).
+func _pad_hidden(n: Node3D) -> bool:
+	var parts: Array[Node] = [n]
+	parts.append_array(n.find_children("*", "GeometryInstance3D", true, false))
+	for g: Node in parts:
+		if g is GeometryInstance3D and (g as GeometryInstance3D).layers != 0:
+			return false
+	return true
+
+func _pad_points(n: Node3D, key: String) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for h: float in PAD_FIX[key]:
+		out.append(n.global_transform * Vector3(0.0, h, 0.0) if key != "ControlPost" and key != "BeaconMast" and key != "Rocket" else n.global_position + n.global_transform.basis.y.normalized() * h)
+	return out
+
+func _pad_step(s: Node, cam: Camera3D, t: float, in_intro: bool) -> void:
+	if _pad_nodes.is_empty():
+		for key: String in PAD_FIX:
+			var n := get_tree().root.find_child(key, true, false) as Node3D
+			if n != null:
+				_pad_nodes[key] = n
+				_pad_on[key] = []
+	if not in_intro:
+		# The first first-person frames after control: is a fixture in view (it must not have been hidden then).
+		if not _pad_restore_logged:
+			_pad_restore_logged = true
+			var still: Array = []
+			for key: String in _pad_nodes:
+				if _pad_hidden(_pad_nodes[key] as Node3D) and key != "Rocket":
+					still.append(key)
+			print("SIP pad after control: still hidden %s (layers/shadow restored on the rest)" % str(still))
+		if t < _t_awake + 0.2:
+			for key: String in _pad_nodes:
+				for q in _pad_points(_pad_nodes[key] as Node3D, key):
+					if not cam.is_position_behind(q) and cam.is_position_in_frustum(q):
+						print("SIP pad %s IN the first-person view at control+%.2f (hidden on the intro's last frame: %s)" % [
+							key, t - _t_awake, str(_pad_last_hidden.get(key, false))])
+						break
+		return
+	for key: String in _pad_nodes:
+		_pad_last_hidden[key] = _pad_hidden(_pad_nodes[key] as Node3D)
+	if t < 3.9:
+		return
+	var sxf: Transform3D = (s.get("player") as Node3D).global_transform
+	if not _pad_logged:
+		_pad_logged = true
+		var sf: Vector3 = s.get("start_fwd")
+		var sd: Vector3 = s.get("start_dir")
+		print("SIP pad frame check: start_fwd . -basis.z = %.3f, start_fwd . basis.x = %.3f, start_dir . basis.y = %.3f" % [
+			sf.dot(-sxf.basis.z.normalized()), sf.dot(sxf.basis.x.normalized()), sd.dot(sxf.basis.y.normalized())])
+		# The HEADING frame (start_fwd, start_dir): the player's body basis is not aligned with the heading (above).
+		var up := sd.normalized()
+		var fw := (sf - up * sf.dot(up)).normalized()
+		var rt := fw.cross(up)
+		for key: String in _pad_nodes:
+			var dv: Vector3 = (_pad_nodes[key] as Node3D).global_position - sxf.origin
+			print("SIP pad %s at the start, heading frame (x right, y up, z back) (%.2f, %.2f, %.2f)" % [key, dv.dot(rt),
+				dv.dot(up), -dv.dot(fw)])
+	var vp := get_viewport().get_visible_rect().size
+	for key: String in _pad_nodes:
+		var n := _pad_nodes[key] as Node3D
+		var inside := -1.0
+		for q in _pad_points(n, key):
+			if cam.is_position_behind(q) or not cam.is_position_in_frustum(q):
+				continue
+			var sp := cam.unproject_position(q)
+			inside = maxf(inside, minf(minf(sp.x, vp.x - sp.x) / vp.x, minf(sp.y, vp.y - sp.y) / vp.y))
+		if inside >= 0.0 and not _pad_hidden(n):
+			(_pad_on[key] as Array).append([t, inside])
+
+func _pad_report() -> void:
+	for key: String in _pad_on:
+		var arr: Array = _pad_on[key]
+		if arr.is_empty():
+			print("SIP pad %s: never seen in scene 2 (out of view or hidden)" % key)
+			continue
+		var deepest := 0.0
+		for e: Array in arr:
+			deepest = maxf(deepest, float(e[1]))
+		print("SIP pad %s: in view %d frames, t=%.2f..%.2f, deepest %.2f of the frame in from the edge" % [key,
+			arr.size(), float(arr[0][0]), float(arr[arr.size() - 1][0]), deepest])

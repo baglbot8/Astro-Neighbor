@@ -2893,24 +2893,87 @@ func intro_shots() -> Array:
 	]
 
 
-## THE INTRO'S TITLE LETTERING (prototype B; src/planet_safari/title_lettering.gd draws it). Zorp's lettering is
-## his tentacle plants: tall rounded strokes that bend a little more toward the top and sway out of step, each
-## upward tip ending in a glowing pink bulb, a soft crystal-cyan halo, spores drifting up. Every colour is one this
-## world already draws with (zorp_meshes.gd, and the planet's own crystal / bulb glow keys `_glow_cyan`,
-## `_glow_pink` in `build`); none is over S 0.60 (docs/STYLE_GUIDE.md). Lengths are in cap heights.
+## WHICH TITLE LOOK Zorp's name card uses (the three stills in src/planet_safari/title_mockups.gd). TO SWITCH, CHANGE
+## THIS ONE VALUE: "crest" (M1, the default: a violet mushroom crest behind cream-gold letters), "mushroom_t" (M2: the
+## T in VIOLET is a little mushroom, lilac letters with amber tip bulbs), "plaque" (M3: gold letters on a deep-violet
+## location plaque) or "plain" (the lettering alone, as before 2026-10-20). The shapes are in titles/zorp_title.gd.
+const TITLE_PRESET := "crest"
+
+
+## THE INTRO'S TITLE LETTERING (src/planet_safari/title_lettering.gd draws it; THE PLANET INTERFACE there). Shared
+## shape: tall rounded strokes that lean a little and sway out of step, spores drifting up; the colours per look
+## below. Every colour is one this world already draws with (zorp_meshes.gd and the planet's glow keys); none is over
+## S 0.60 (docs/STYLE_GUIDE.md). Lengths are in cap heights.
 func intro_title_style() -> Dictionary:
-	return {
+	var st := {
 		"lines": ["ZORP'S VIOLET", "HOLLOW"],   # two lines: three stacked lines ran across Zorp in scene 2
 		"stroke": 0.15, "outline": 0.045, "halo": 0.26,
 		"slant": 0.05, "wobble": 0.04, "sway_deg": 4.0, "sway_hz": 0.32,
 		"tracking": 0.17, "line_gap": 0.5,
-		"core": Meshes.GNOME_BEARD,            # lilac cream, S 0.06 V 0.90: the letters' light body
-		"outline_col": Meshes.SHELL,           # deep violet, S 0.36 V 0.39: reads on sky and on the violet ground
-		"halo_col": Color("#7fd8c8"),          # the crystal / mushroom-spot cyan (planet_props.gd _violet), S 0.41
-		                                       # V 0.85: a light glow band (a deep teal greyed the picture when faded)
-		"bulb": Color("#d692c4"),              # the tentacle bulbs' pink (_glow_pink), S 0.36
-		"bulb_glow": Color("#d066ae", 0.8),    # their glow (S 0.51)
-		"bulb_r": 0.085, "bulb_min_y": 0.9,
-		"bulb_skip": "I",                      # a bulb on I read as a dotted lowercase i ("ViOLET")
-		"sparks": 14, "spark_cols": [Color("#7fd8c8"), Color("#d692c4"), Meshes.GNOME_BEARD],
+		# amber spore glow (the lantern-beetles' warm key), bulb pink, frill lilac
+		"sparks": 14, "spark_cols": [Color("#e8bf72"), Color("#d692c4"), Meshes.FRILL],
+		"title_file": "res://src/planet_safari/titles/zorp_title.gd",
+		"title_preset": TITLE_PRESET,
 	}
+	match TITLE_PRESET:
+		"crest":
+			st.merge({
+				"slant": 0.03, "wobble": 0.02,          # steadier than "plain": the crest carries the personality
+				"core": Color("#e9cf96"),               # cream-gold (S 0.36 V 0.91), M1's letter colour
+				"outline_col": Meshes.SHELL,            # plum-violet outline (S 0.36 V 0.39)
+				"halo_col": Meshes.CAP,                 # mauve band: parts the letters from the crest's darker violet
+				"halo": 0.2,                            # a narrower band than "plain" (0.26): the atlas budget (+11 MB)
+				"tip_kind": "none",
+			}, true)
+		"mushroom_t":
+			st.merge({
+				"core": Meshes.FRILL,                   # lilac (S 0.23)
+				"outline_col": Meshes.SHELL,
+				"halo_col": Meshes.CAP,
+				"bulb": Color("#e8bf72"), "bulb_glow": Color("#e8bf72", 0.45),   # amber bulbs, M2
+				"bulb_r": 0.085, "bulb_min_y": 0.9, "bulb_skip": "I",
+			}, true)
+		"plaque":
+			st.merge({
+				"slant": 0.0, "wobble": 0.0, "sway_deg": 1.5,   # engraved letters barely move
+				"core": Color("#e8bf72"),               # amber gold, M3
+				"outline_col": Color("#6b4f2e"),        # a dark gold-brown cut line
+				"halo": 0.06, "halo_col": Color("#2e2440"),   # the plaque's own face colour: no visible band
+				"tip_kind": "none",
+			}, true)
+		_:   # "plain": the lettering as it was before the crest (2026-10-19)
+			st.merge({
+				"core": Meshes.RING_STEM,              # warm stem cream (S 0.15 V 0.87): no pure white (the user, 2026-10-19)
+				"outline_col": Meshes.SHELL,           # deep violet, S 0.36 V 0.39: reads on sky and on the violet ground
+				"halo_col": Meshes.CAP,                # the mushroom caps' mauve (S 0.29): a violet glow band, not light blue
+				"bulb": Color("#d692c4"),              # the tentacle bulbs' pink (_glow_pink), S 0.36
+				"bulb_glow": Color("#d066ae", 0.8),    # their glow (S 0.51)
+				"bulb_r": 0.085, "bulb_min_y": 0.9,
+				"bulb_skip": "I",                      # a bulb on I read as a dotted lowercase i ("ViOLET")
+			}, true)
+	return st
+
+
+## THE COMBINED START's scene 1 ("c", src/planet_safari/safari_intro.gd): ONE slow move over the thing this world is
+## known for - the toadstool ring (Ring A) with its big violet mushrooms close in front - pulling back and rising so
+## the garden comes into view, the name in and out over it. The same shot format as `intro_shots()` (its seconds
+## are set by SafariIntro.C_CUT).
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(67.0, 104.0), Vector2(63.0, 111.0), Vector2(60.0, 117.0)], "height": Vector2(0.8, 2.6),
+		"ease": "inout", "look_from": Vector3(70.3, 91.1, 0.4), "look_to": Vector3(73.0, 82.0, 0.9),
+		# ambient life for the intro only: a slow drift of spores over the ring (SafariIntro's own particles)
+		"spores_at": Vector2(70.3, 91.1), "spore_cols": [Color("#e3b6dc"), Color("#e8bf72")]}
+
+
+## THE START CUTSCENE'S DATA (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER): everything above, in the one
+## shape the runner reads. Zorp is the worked example for the other worlds.
+func intro_data() -> Dictionary:
+	return {
+		"subtitle": INTRO_SUBTITLE,
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"total": 8.5,
+		"cut": 3.9,
+		"tour": intro_shots(),
+	}
+

@@ -3924,3 +3924,62 @@ func debug_places() -> Dictionary:
 		"smiley": _smiley.global_position if _smiley != null else Vector3.ZERO,
 		"eligible": _eligible.duplicate(),
 	}
+
+
+# ======================================================================================== THE SAFARI START CUTSCENE
+## The start cutscene's data (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder BOLT-FEN intro,
+## 2026-10-20). Data only: SafariIntro plays it behind its own modal before control; nothing here runs in the safari,
+## touches the content's random numbers or moves anything of the yard. Zorp's `intro_data()` is the worked example.
+const INTRO_SUBTITLE := "Under the Ring"
+
+
+## SCENE 1 ("c"): ONE slow crane over the GEAR GROVE - the yard's tallest machines, GearTree1 (61, 140) with its
+## stacked cogs and GearTree6 (64, 155) behind it, the gantry crane (80, 132) - under the RING, which passes straight
+## overhead there (Ring Rain's first spot, (83, 145)). It opens low among the cogs with the gear crowns against the
+## ring's band and rises and pulls back until the little planet's curve, the grove, the gantry and the ring's arc
+## fill the frame. Places from the probe's `--sip-layout` (Bolt's seed-37 props); chosen from frames (report).
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(40.0, 135.0), Vector2(34.0, 130.0)], "height": Vector2(1.4, 3.2),
+		"ease": "inout", "look_from": Vector3(62.0, 140.0, 2.4), "look_to": Vector3(64.0, 140.0, 1.9),
+		"spores_at": Vector2(62.0, 140.0), "spore_cols": [Color("#e8c48a"), Meshes.BRASS]}
+
+
+## THE TITLE'S STYLE (TitleLettering, THE PLANET INTERFACE): cast-brass lettering; the shapes (the gear-and-ring crest,
+## every letter, the cog O) are in titles/bolt_title.gd, named by PATH so a missing or broken title file falls back to
+## plain lettering in these colours with one warning instead of breaking this script (critic, 2026-10-20). Colours are
+## the title file's (brass core, dark steel outline, the gear's deep blue); "halo" only reserves atlas room there.
+func intro_title_style() -> Dictionary:
+	return {
+		"title_file": "res://src/planet_safari/titles/bolt_title.gd",
+		"stroke": 0.17, "outline": 0.045, "halo": 0.40,
+		"slant": 0.0, "wobble": 0.0, "sway_deg": 0.0, "sway_hz": 0.2,
+		"tracking": 0.15, "line_gap": 0.42,
+		"core": Color("#d4ae6a"), "outline_col": Color("#232838"), "halo_col": Color("#4b5a72"),
+		"tip_kind": "none", "bulb_r": 0.0,
+		# welding sparks rising off the letters: orange, ring-gold, pale brass
+		"spark_kind": "rise", "sparks": 12, "spark_cols": [Meshes.ORANGE, Color("#e0b779"), Color("#ead09a")],
+		"backdrop_scale": 0.4,
+		"cog_at": 9,   # B O L T ' S C H R [O] M E
+	}
+
+
+func intro_data() -> Dictionary:
+	return {
+		"subtitle": INTRO_SUBTITLE,
+		"title_lines": ["BOLT'S CHROME", "YARD"],
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"total": 8.5,
+		"cut": 3.9,
+		"swoop": intro_swoop(),
+	}
+
+
+## Scene 2 (the generic swoop, `SafariIntro._path_c`): only its `lead` - how far ahead of him the lens aims - changes.
+## On Bolt the pad's fuel pillar stands ~1 m right of the walk and ~1.5 m behind the start (measured in the start frame),
+## so the default opening (lead 0.5 m) had the pillar down the right edge of the first ~1.5 s (seen in the frames).
+## Aiming 1.1 m ahead at the opening puts it outside the frame; the lead is back on the default's 0.7 m by 1.1 s,
+## because holding the extra lead to 1.4 s brought something new into view that the runner's warm-up poses do not
+## cover: a 165-173 ms first-draw hitch at 1.46 s into scene 2, twice; gone with this curve (max 20-26 ms, 3 runs).
+func intro_swoop() -> Dictionary:
+	return {"lead": [Vector3(0.0, 1.6, 0.0), Vector3(1.2, 0.8, 0.0), Vector3(3.0, 0.0, 0.0)]}

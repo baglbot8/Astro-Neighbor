@@ -882,7 +882,7 @@ Known small issues, left for after the user's play:
 * Vela snow mite ~0.37 (cap 0.35, within one photo of noise); Zorp side-on pose may read as a back view.
 * The careful test player hangs on the out-of-film card (it cannot tap it); the integrator's harness taps it.
 
-## 19. [2026-10-19] The safari start cutscene (prototype, Zorp only)
+## 19. [2026-10-19] The safari start cutscene (prototype, Zorp only; rolled out to all eight outings in §20)
 
 The user asked for a mini cutscene at a safari's start, Pokemon-Snap style, and drafted two options: **A "the swoop"** (the astronaut
 walks holding his camera; the camera orbits to behind his head and slips into it, settling into first person) and **B "the tour"**
@@ -913,3 +913,46 @@ timer starts"). The user cut B to about 4.5 s: two scenes plus the start point. 
 * **Geometry rulings:** the start is only 0.65 m off the pad deck (deck radius 2.55 m, start 3.2 m from the pad centre), so A's walk
   begins on the deck. To roll this out to other planets, B needs three camera paths and a subtitle per planet (data in the world
   script: `intro_shots()`, `intro_subtitle()`, `intro_title_style()`) and glyphs for that planet's name; A is generic.
+
+## 20. [2026-10-20] The safari start cutscene, rolled out to all eight outings
+
+The user's ruling (2026-10-19, night): combine A and B into ONE slower sequence, 8-10 s, skippable. Scene 1 is ONE slow view of
+something worth looking at, with the planet's name appearing and fading; scene 2 pans out, the astronaut walks holding the camera,
+the camera slips behind his head into first person. "The meteor and the caves and the jungle planet have safaris as well", so all
+eight outings have it. This section replaces §19 where they disagree (§19 still describes the A and B shots).
+* **Runner:** `SafariIntro` (`src/planet_safari/safari_intro.gd`). Mode `GameState.settings["safari_intro"]` = "c" (both, the DEFAULT)
+  | "a" | "b" | "off"; any junk value plays "c", only an explicit "off" turns it off (dev menu, World tab, "Safari start intro").
+  The timer, the schedule and the opening line start when control returns, exactly as before. Lift to control 8.4-8.5 s on all
+  seven safaris, 9.4 s in the Crystal Cave. The first safari plays in full; later ones show the Skip pill.
+* **Outings and hooks:** Zorp, Bolt, Fen, Grig, Vela and the Tangle (jungle) are `PlanetSafari`s: the world script adds
+  `intro_data()` (worlds/<planet>.gd). `MeteorSurveyLevel._start` calls `SafariIntro.lift` on the FIRST attempt only (a retry
+  starts as before; the survey clock 2:15 starts at control; the hub is hidden and restored identically, the hub's visible/process
+  snapshot matches "off"; the HUD shows "Film 12" during the fade). `CaveVisit._run` calls it with `terrain_follow:false` and a
+  `double_light` (the cave's light is baked into vertex colours); the day flag is spent at the start, as before.
+* **Fail-safe:** no `intro_data`, bad data, or a missing/broken title file never breaks a start. No data or invalid data = today's
+  start (one `push_warning` for invalid data); a missing title file = plain stroke lettering and ONE warning. World scripts name
+  their title file by PATH (`"title_file"`), never `preload` it: a `preload` of a missing file breaks the whole world script.
+* **Scene 1 per outing** is data in the world script (`intro_scene_c()` and its comments say what it shows and why); each has the
+  intro's own drifting particles (`spores_at`), never the world's. Two worth knowing: the Meteor pushes in on the first glowing
+  crack (beacons hidden, marked 0/5, film 12, clock 2:15 at control); the Tangle cranes over the pool, aimed about 10 degrees so the
+  name does not sit on the coral palm. Grig and Vela walk the swoop round his RIGHT side (their pads are laid out mirrored to Zorp's).
+* **Titles (drafts, "refine the logos over time"):** each planet has a crest drawn in code (`src/planet_safari/titles/<id>_title.gd`:
+  `backdrop()` = the crest, `glyph()` = replaced letters) and the stroke font (`title_lettering.gd`). Zorp has four presets
+  (`TITLE_PRESET` in worlds/zorp.gd: "crest" default, "mushroom_t", "plaque", "plain"): the user still has to pick. The runner
+  fits the LARGER of the letter block and the crest's `size` meta, grown by `TITLE_GROW`, inside `TITLE_EDGE` (3% of the height)
+  of the top and sides, so letters shrink for tall crests (fit 0.84 Bolt, 0.80 Fen, 0.78 Grig, 0.76 Vela, 0.81 Tangle, 0.67
+  Meteor; Zorp and the cave about 1.0).
+* **Visor dim follows the screen, not the clock.** The double is hidden when the dome covers the frame diagonal, under a navy dip.
+  Each frame the runner casts a 48x24 ray grid at the dome and sets the navy to at least `1 - VISOR_SHARE / share`
+  (`VISOR_SHARE` = 0.30): the undimmed helmet never covers more than 30% of the frame. Cave peak mean luma 174 -> 109; planets 114-117 -> 90-112.
+* **Measured on a Mac (Compatibility, 2556x1180), two critics:** zero frames over 50 ms in every run (worst intro frame 18.5-22 ms);
+  texture memory added at the peak: Zorp +10.5 MB, Bolt +4.8, Fen +4.2, Grig +3.9, Vela +3.9, Tangle +5.6, Meteor +4.4, Cave +5.9
+  (budget +11); about 1.5 MB stays resident after the first intro (Baloo glyph cache for the subtitle and the Skip pill); the
+  ray grid costs about 0.37 ms per frame on the Mac for about 4.4 s.
+* **NOT proven:** nothing was run on an iPhone (frame cost, WebKit memory, heat); every tap and skip was synthesised; two intros in
+  a row were checked only in round 1. The runner clamps its clock step to 50 ms, so on a device that runs under 20 fps the
+  cutscene stretches (seen at about 2x when the Mac was slowed on purpose); the timer still starts at control.
+* **Known small issues:** Grig and Vela scenes mirror the pad compared with Zorp, so the fly-sign post shows at the right edge of
+  scene 2 for about 2 s; Vela's helmet texture seam is dimmed, not gone; Fen and Bolt letters are faint when the title is almost
+  transparent; the Tangle's letters merge into the jungle at 0.3 strength; the Meteor title is the smallest after the fit; the
+  meteor "off" start still shows a red "Film 0" (old HUD bug, left alone on purpose).

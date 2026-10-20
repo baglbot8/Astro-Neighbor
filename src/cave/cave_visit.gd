@@ -115,8 +115,11 @@ func _run() -> void:
 		return
 	_begin_behind_black()
 	await _warm_up()
-	layer.show_awake_ui(true)
-	await layer.fade_to(0.0, FADE_SEC)
+	# The start cutscene (src/planet_safari/safari_intro.gd; its data is CaveWorld.intro_data()). With the dev switch
+	# "off" this is exactly the old two lines (show the controls, fade the black away). False: the visit is going
+	# away mid-intro - no control, no clock.
+	if not await SafariIntro.lift(self, (_content as CaveWorld).intro_data()):
+		return
 	player.set_move_locked(false)
 	phase = Phase.AWAKE
 	elapsed = 0.0

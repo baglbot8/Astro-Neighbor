@@ -1513,15 +1513,15 @@ func _build_world_tab(list: VBoxContainer) -> void:
 		PlanetSafari.debug_reset_tips()
 		_finish_action("The next planet safari teaches itself again."), "Reset")
 	# THE SAFARI START CUTSCENE PROTOTYPE (src/planet_safari/safari_intro.gd): which one plays at the next
-	# planet safari start (Zorp only for now). Saved with the settings.
-	var si_row := _row(flights, "Safari start (Zorp)")
+	# outing start, for every outing that has intro data (the others start the old way). Saved with the settings.
+	var si_row := _row(flights, "Safari start intro")
 	_safari_intro_seg = SegmentedControl.new()
-	_safari_intro_seg.setup(PackedStringArray(["A swoop", "B tour", "Off"]), _safari_intro_index())
+	_safari_intro_seg.setup(PackedStringArray(["C both", "A swoop", "B tour", "Off"]), _safari_intro_index())
 	_safari_intro_seg.selected.connect(func(i: int) -> void:
-		var k: String = ["a", "b", "off"][clampi(i, 0, 2)]
+		var k: String = ["c", "a", "b", "off"][clampi(i, 0, 3)]
 		GameState.settings[SafariIntro.SETTING] = k
 		print("[DevMenu] safari intro -> %s" % k)
-		_finish_action("Next safari start: %s" % ["A, the swoop", "B, the tour", "off (the old fade)"][clampi(i, 0, 2)]))
+		_finish_action("Next safari start: %s" % ["C, both", "A, the swoop", "B, the tour", "off (the old fade)"][clampi(i, 0, 3)]))
 	_safari_intro_seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	si_row.add_child(_safari_intro_seg)
 
@@ -2002,4 +2002,4 @@ func debug_range_report(tag: String = "") -> void:
 
 
 func _safari_intro_index() -> int:
-	return maxi(["a", "b", "off"].find(str(GameState.settings.get(SafariIntro.SETTING, SafariIntro.DEFAULT_KIND))), 0)
+	return maxi(["c", "a", "b", "off"].find(str(GameState.settings.get(SafariIntro.SETTING, SafariIntro.DEFAULT_KIND))), 0)

@@ -2965,3 +2965,58 @@ func debug_places() -> Dictionary:
 		"wisp_dirs": _wisps.map(func(w: Dictionary) -> Vector3: return w["dir"]),
 		"eligible": _eligible.duplicate(),
 	}
+
+
+# ======================================================================================== THE SAFARI START CUTSCENE
+## The start cutscene's data (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder BOLT-FEN intro,
+## 2026-10-20). Data only: SafariIntro plays it behind its own modal before control; nothing here runs in the safari,
+## touches the content's random numbers or moves anything on the pan. Zorp's `intro_data()` is the worked example.
+const INTRO_SUBTITLE := "The Misty Ruins"
+
+
+## SCENE 1 ("c"): ONE slow drift round THE RUINS - the Old Arch (34.6, 131.3) with its vine, and the colonnade's
+## standing stones running off to the right against the dusk band - seen from the pan beside the avenue, the side
+## where the pad and its FLY sign stay out of frame (the avenue runs from the arch to the pad, so every view THROUGH
+## the arch shows the rocket). It drifts round the stones and rises a little. Places from `--sip-layout` (Fen's
+## seed-61 props); chosen from frames (report).
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(38.2, 167.5), Vector2(43.9, 167.4)], "height": Vector2(1.5, 2.1),
+		"ease": "inout", "look_from": Vector3(47.0, 128.5, 1.6), "look_to": Vector3(48.5, 131.0, 1.3),
+		"spores_at": Vector2(44.0, 135.0), "spore_cols": [Color("#e8c48a"), Meshes.MOTH_WING]}
+
+
+## THE TITLE'S STYLE (TitleLettering, THE PLANET INTERFACE): carved-stone lettering; the shapes (the arch-and-dusk
+## crest, every letter, the sunset O) are in titles/fen_title.gd, named by PATH so a missing or broken title file falls
+## back to plain lettering in these colours with one warning instead of breaking this script (critic, 2026-10-20).
+func intro_title_style() -> Dictionary:
+	return {
+		"title_file": "res://src/planet_safari/titles/fen_title.gd",
+		"stroke": 0.17, "outline": 0.045, "halo": 0.42,
+		"slant": 0.0, "wobble": 0.0, "sway_deg": 0.6, "sway_hz": 0.18,
+		"tracking": 0.16, "line_gap": 0.42,
+		"core": Color("#d8c7a6"), "outline_col": Color("#2e2640"), "halo_col": Color("#3a3358"),
+		"tip_kind": "none", "bulb_r": 0.0,
+		# glow moths hanging in the dusk: still glints that brighten and fade
+		"spark_kind": "twinkle", "sparks": 10, "spark_cols": [Meshes.MOTH_WING, Color("#e6b977"), Meshes.PETAL_A],
+		"backdrop_scale": 0.5,
+		"sun_at": 6,   # F E N ' S L [O] N G
+	}
+
+
+func intro_data() -> Dictionary:
+	return {
+		"subtitle": INTRO_SUBTITLE,
+		"title_lines": ["FEN'S LONG", "DUSK"],
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"total": 8.5,
+		"cut": 3.9,
+		"swoop": intro_swoop(),
+	}
+
+
+## Scene 2 (the generic swoop): its opening aims a little further ahead of him than the default (`lead` 0.5 m), so the
+## corner of the pad's deck and lamp post at his right-back stay out of the first frames - the same keys as Bolt's
+## (worlds/bolt.gd `intro_swoop`, which says why the curve is back on the default by 1.1 s).
+func intro_swoop() -> Dictionary:
+	return {"lead": [Vector3(0.0, 1.1, 0.0), Vector3(1.1, 0.7, 0.0), Vector3(3.0, 0.0, 0.0)]}

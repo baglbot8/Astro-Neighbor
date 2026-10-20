@@ -2224,3 +2224,26 @@ render per channel, toward the cockpit rock's masked on-screen mean rgb(97.7,78.
   now sits in the upper part of the screen. If the user wants it dead centre, move the shot framing lower instead.
 * **`done` emitted from a child's `_exit_tree`** looks like "the parent is going away" but the parent is still in the tree, so the
   awake bookkeeping ran on a dying scene. Set an `aborted` flag before emitting.
+
+## 77. [2026-10-20] Rolling the safari cutscene out to eight outings: traps that cost a round
+
+* **A warm-up at one lens misses another lens's first draw.** The runner warmed the poses at a 110 degree lens; Bolt (62-69 ms) and
+  the Tangle (109-113 ms) still hitched on the first frame at the intro's own 50 degree lens. Warm every pose that matters at BOTH lenses behind the black. A probe that
+  starts timing at the lift cannot see the frames under the black, so it missed this; log from the first frame.
+* **Dim by what is on screen, not by time.** A fixed 0.14 s ramp left the cave's cream helmet at 62% of the frame undimmed: a white
+  flash (mean luma 174). Cap the undimmed share (black >= 1 - share_cap / share); it is an exact inversion with one limit and no fitted curve.
+* **`const X := preload(title_file)` in a world script breaks the whole world** when the file is missing or fails to compile (Bolt
+  and Fen did this; Grig and Zorp passed a path and were safe). Name optional files by PATH and `load()` them at run time with a null check.
+* **Fit the crest, not only the letters.** The title layout sized the letter block and ignored the crest's own `size` meta (2.3-3.6x
+  the block), so the crests of Bolt, Fen, Grig, Vela, Tangle and Meteor ran off the top. Fit the larger of the two inside a safe edge, at four phone/desktop sizes.
+* **Real-time intro tests must not run under `taskpolicy`.** The 50 ms clock clamp turns slow frames into slow motion, so a "scene 2"
+  skip at t = 5.5 s landed in scene 1. Batch runs with `taskpolicy -b` are for frame sheets only, not for timing or skip tests.
+* **A junk setting value must not turn a feature off.** `kind_for_data` returned "" for "zzz", 1 or null, so a corrupted setting
+  silently disabled the cutscene. Only an explicit "off" disables it now.
+* **Baloo's glyph cache is per (size, outline) pair.** The subtitle's shadow used an outline of 1 beside the outline of 7: a second
+  cache, +1.5 MB left behind after the intro. The Skip pill's size-26 font adds about 0.5 MB more. Keep one outline per size.
+* **Builder copies start from stale bases.** The merge worked this time by taking each builder's OWN files from its copy, the runner
+  files from the runner owner's copy, and everything shared from the newest shared copy, then diffing the result against main (only the expected files differed).
+* **The builders' memory figures used the older planet files.** Tangle was +3.4 MB by the builder and +5.6 MB by the critic with the new
+  files; always re-measure in the merged tree.
+

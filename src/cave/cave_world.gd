@@ -3384,3 +3384,59 @@ func debug_chest_world() -> Vector3:
 
 func debug_chest_state() -> int:
 	return _chest_state
+
+
+# ============================================================================== THE START CUTSCENE'S DATA
+## The safari start cutscene ("c", src/planet_safari/safari_intro.gd FOR A PLANET BUILDER; builder CAVE-INTRO
+## 2026-10-19). CaveVisit hands this to `SafariIntro.lift`. Data only: nothing here builds or changes the cave.
+## Every point is in the START FRAME (the player's transform at the landing: x right, y up from his feet, z back;
+## the hall runs ahead along -z).
+## The title's look (a DRAFT; src/planet_safari/title_lettering.gd THE PLANET INTERFACE). The shapes - a fan of
+## faceted teal crystals on a stone ledge behind the words, and every letter drawn in depth (glow, shadow, warm
+## outline, bevel, lit top) - are in titles/cave_title.gd. No sway (crystal letters stand still); a few motes drift up in
+## the cave's teal, its gold and its prism lilac (C_TEAL_LIGHT, C_GOLD, C_LILAC).
+func intro_title_style() -> Dictionary:
+	return {
+		"title_file": "res://src/planet_safari/titles/cave_title.gd",
+		"stroke": 0.17, "outline": 0.05, "halo": 0.16,
+		"slant": 0.0, "wobble": 0.0, "sway_deg": 0.0, "sway_hz": 0.3,
+		"tracking": 0.16, "line_gap": 0.42,
+		"core": Color("#e7c98c"), "outline_col": Color("#4b3424"), "halo_col": Color("#1e6a6a"),
+		"bulb_r": 0.0, "tip_kind": "none",
+		"spark_kind": "rise", "sparks": 12, "spark_cols": [C_TEAL_LIGHT, C_GOLD, C_LILAC],
+		"backdrop_scale": 0.6,
+	}
+
+
+## SCENE 1 (3.7 s): FORK 1, 12-15 m down the hall - a slow pull-back and crane-up from the two mouths' crystal clusters
+## (the prism one on the left, the gold one on the right), the glowing lantern worms in the up road's mouth and a rainbow
+## wall crystal beyond, teal and gold motes drifting (the intro's own particles). Warm brown stone, not the landing's hall,
+## so it is not the first-person view again (camera turns <= 3.5 deg/s, stone >= 1.17 m away).
+## SCENE 2 (5.7 s): the astronaut swoop on the landing. He WALKS the last 0.6 m out of the landing's dead end (it ends
+## ~1.5 m behind the start, and narrows: `--cave-grid` in showcase/safari_intro_cave_probe.gd maps it). The lens opens at
+## his front-right 1.8 m out (the room's wide part: he is seen whole, visor and brass camera), swings round his right at
+## 1.15 m - the glow crystals come in behind him - and comes in from his rear-right (phi -160). Stone >= 0.26 m from the
+## lens (the tight spot is the narrowing behind him).
+func intro_data() -> Dictionary:
+	var hc := AstronautModel.HELMET_CY
+	return {
+		"title": "The Crystal Cave",
+		"title_lines": ["THE", "CRYSTAL CAVE"],
+		"subtitle": "",
+		"title_style": intro_title_style(),
+		"scene1": {"local_path": [Vector3(-0.5, 0.9, -12.6), Vector3(-1.0, 2.2, -9.8)],
+			"local_look_from": Vector3(0.95, 0.5, -17.8), "local_look_to": Vector3(0.8, 0.4, -19.0), "ease": "inout",
+			"local_spores_at": Vector3(0.3, 0.9, -15.6), "spore_cols": [C_TEAL_LIGHT, C_GOLD]},
+		"total": 9.4,
+		"cut": 3.7,
+		"terrain_follow": false,
+		"double_light": {"color": Color(0.8, 1.0, 0.95), "energy": 0.5, "range": 4.0},
+		"swoop": {
+			"walk_m": 0.6, "walk_steady": 0.8, "walk_stop": 1.4, "freeze": 1.9, "push0": 3.9, "push1": 4.9,
+			"phi": [Vector3(0.0, -58.0, -16.0), Vector3(2.1, -102.0, -27.0), Vector3(3.9, -160.0, 0.0)],
+			"r": [Vector3(0.0, 1.8, 0.0), Vector3(2.0, 1.15, -0.3), Vector3(3.9, 0.72, -0.8), Vector3(4.9, 0.0, 0.0)],
+			"h": [Vector3(0.0, 0.9, 0.0), Vector3(2.0, 1.25, 0.12), Vector3(4.9, hc, 0.0)],
+			"look_y": [Vector3(0.0, 0.85, 0.0), Vector3(2.0, 1.0, 0.0), Vector3(3.9, hc, 0.0), Vector3(4.9, hc - 0.6, 0.0)],
+			"lead": [Vector3(0.0, 0.0, 0.0), Vector3(2.0, 0.4, 0.0), Vector3(3.9, 0.3, 0.0)],
+		},
+	}

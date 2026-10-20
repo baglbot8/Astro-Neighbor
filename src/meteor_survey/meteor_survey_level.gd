@@ -149,9 +149,24 @@ func _start() -> void:
 		return
 	_enter_rock()
 	await _warm_up()
-	layer.show_awake_ui(true)
-	hud.show_play(true)
-	await layer.fade_to(0.0, FADE_SEC)
+	# THE START CUTSCENE (src/planet_safari/safari_intro.gd; `intro_data` below), on the FIRST attempt only - a retry
+	# after the retry card keeps its own quick fade (`_retry`). Without it (the dev switch "off", or a later attempt)
+	# `lift` IS the old show-the-controls-and-fade-in, and the survey's own HUD shows before the fade exactly as before;
+	# with it the HUD shows at control. The 2:15 clock starts in `_begin_attempt`, at control, either way.
+	var intro := intro_data() if attempt <= 1 else {}
+	var plays := SafariIntro.kind_for_data(intro) != ""
+	if not plays:
+		hud.show_play(true)
+	else:
+		# The intro fades SafariLayer's controls in before control; its film counter reads `film_left`, which
+		# `_begin_attempt` only fills at control - so it showed a red "Film 0" while fading in. Filled here first (the
+		# same values `_begin_attempt` sets again). "off" is left exactly as it was (it shows the same old "Film 0").
+		film_start = FILM
+		film_left = FILM
+	if not await SafariIntro.lift(self, intro):
+		return
+	if plays:
+		hud.show_play(true)
 	for l: String in START_LINES:
 		hud.say(l if l != START_LINES[-1] or MobileUI.is_mobile() else START_LINE_HOVER_KEYS)
 	_begin_attempt()
@@ -695,6 +710,40 @@ func _restore_haze() -> void:
 	_fog_env.fog_light_color = _fog_saved["color"]
 	_fog_env.fog_enabled = bool(_fog_saved["enabled"])
 	_fog_saved = {}
+
+
+## THE START CUTSCENE'S DATA (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder JUNGLE+METEOR intro,
+## 2026-10-20; polish round the same night). Data only. SCENE 1 has ONE subject, the FIRST WEAK POINT (CRACK_SPOTS[0],
+## (36, 12)): a slow push-in from 3 m up toward the split boulder, a glowing lava seam running in to it from the left,
+## its warm plume rising, the big turquoise planet over the top left. The crack sits in the right third, clear of the
+## name in the middle, and fills more of the frame as the lens comes down to 2 m (the critic: the old high crane had
+## no subject and ended on ~50% hazy dome). It is only looked at: the weak points exist as geometry before they are
+## marked, the beacons stay hidden, nothing of the survey's state is touched. Places are (degrees round from the start,
+## bearing) as `dir_from_start` reads them (the start is the rock's top, heading -Z); 1 degree = 0.38 m on the 22 m
+## rock. Scene 2 is the generic swoop. Chosen by looking at scout frames (showcase/safari_intro_meteor_scout.gd).
+static func intro_data() -> Dictionary:
+	return {
+		"title": "The Meteor",
+		"title_lines": ["THE", "METEOR"],
+		"subtitle": "Prof. Comet's Survey",
+		"title_style": {
+			"title_file": "res://src/planet_safari/titles/meteor_title.gd",
+			"stroke": 0.17, "outline": 0.05, "halo": 0.24, "slant": 0.0, "wobble": 0.0,
+			"sway_deg": 0.0, "sway_hz": 0.2, "tracking": 0.15, "line_gap": 0.38,
+			"core": Color("#dc9a5e"), "core_top": Color("#f3d79c"), "outline_col": Color("#1b171f"),
+			"shadow_col": Color("#e0763a", 0.45),
+			"tip_kind": "none", "bulb_r": 0.0, "backdrop_scale": 0.75,
+			"spark_kind": "rise", "sparks": 12,
+			"spark_cols": [Color("#ff9a4a"), Color("#e9bf73"), Color("#c9b6a8")],
+		},
+		"scene1": {"path": [Vector2(13.0, 1.0), Vector2(16.5, 2.5), Vector2(20.0, 4.0)],
+			"height": Vector2(3.0, 2.0), "ease": "inout",
+			"look_from": Vector3(37.0, -8.0, 1.5), "look_to": Vector3(37.0, -5.0, 1.8),
+			# embers lifting round the weak point (the intro's own particles; nothing of the survey's)
+			"spores_at": Vector2(36.0, 12.0), "spore_cols": [Color("#ff9a4a"), Color("#e9bf73")]},
+		"total": 8.5,
+		"cut": 3.9,
+	}
 
 
 func _log(msg: String) -> void:

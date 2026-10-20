@@ -2900,3 +2900,73 @@ func debug_places() -> Dictionary:
 		"perches": _perches.map(func(pc: Dictionary) -> Vector3: return pc["pos"]),
 		"brought": pacing.brought.duplicate() if pacing != null else {},
 	}
+
+
+# ======================================================================================== THE SAFARI START CUTSCENE
+## Vela's data for the start cutscene (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder GV,
+## 2026-10-20). Data only: SafariIntro plays it, nothing here runs in the safari, and nothing reads the world's
+## random numbers. The look of the name is in src/planet_safari/titles/vela_title.gd (the frost crest with the
+## mirror moon and two listening masts, with their amber lamps, and frost-silver letters).
+const INTRO_SUBTITLE := "The Listening Array"
+
+
+## THE NAME'S LOOK (TitleLettering's style; the letters themselves are drawn by vela_title.gd `glyph`, so the
+## stroke-font keys here only size the atlas cells). "halo" is set so each cell's margin (TitleLettering._margin, (stroke + halo) / 2
+## + 0.06 = 0.2 cap heights) just holds the letters' drop shadow; with the backdrop baked at 0.5 that keeps the atlas
+## near 2000 x 700 (texture memory +11.8 MB at the intro's peak, measured; 1930 x 962 and +15.3 MB before). Still and silent: no slant, no wobble, the faintest sway, and
+## diamond dust that twinkles in place instead of drifting. Colours are this world's own (vela_meshes.gd).
+func intro_title_style() -> Dictionary:
+	return {
+		"lines": ["VELA'S STILL", "FROST"],
+		"stroke": 0.16, "outline": 0.05, "halo": 0.12,
+		"slant": 0.0, "wobble": 0.0, "sway_deg": 0.5, "sway_hz": 0.18,
+		"tracking": 0.17, "line_gap": 0.5,
+		"core": Meshes.DOWN, "outline_col": Color("#1d2444"), "halo_col": Meshes.SLATE_DARK,
+		"tip_kind": "none", "bulb_r": 0.0,
+		"spark_kind": "twinkle", "sparks": 12, "spark_cols": [Meshes.DOWN, Meshes.ICE_TIP, Color("#e9d9b6")],
+		"title_file": "res://src/planet_safari/titles/vela_title.gd",
+		"backdrop_scale": 0.5,
+	}
+
+
+## SCENE 1 of the combined start ("c"): ONE slow sideways glide past the Long Array - the eight masts with their amber
+## lamps standing in a curving line over the frost, the dishes half-buried among them - rising a little as it goes.
+## Chosen from survey frames: the array is what this world is (Vela keeps it and listens to it); the frozen lake is
+## a pale patch at this distance and the mirror moon is an event, not always there. The lens stays on the start's
+## side of the array looking out, so the pad (behind the start) is never in view.
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(25.0, 68.0), Vector2(21.0, 84.0), Vector2(18.0, 100.0)], "height": Vector2(2.2, 2.8),
+		"ease": "inout", "look_from": Vector3(44.0, 86.0, 1.6), "look_to": Vector3(40.0, 102.0, 1.2),
+		# ambient life for the intro only: diamond dust glinting over the array (SafariIntro's own particles)
+		"spores_at": Vector2(40.0, 92.0), "spore_cols": [Meshes.DOWN, Meshes.ICE_TIP]}
+
+
+## SCENE 2 (the swoop) MIRRORED to his RIGHT side: the pad here is laid out like Grig's, not Zorp's - the control post
+## at (-0.55, 1.48) in the start frame (x right, z back), left-behind, where SafariIntro's default swoop opens (see
+## grig.gd `intro_swoop_mirrored`, the same measurement and the same mirrored keys).
+static func intro_swoop_mirrored() -> Dictionary:
+	# KNOWN, NOT FIXED: the fly sign's near post (2.0 m right of the start, 0.3 m ahead, leaning back toward the pad)
+	# stands in the right edge of the frame from about 5.0 to 6.5 s. Ending the orbit 12 degrees short of straight
+	# behind (-168) only shortened that by ~0.5 s and made the push into the helmet turn at 30 deg/s (21.6 with -180),
+	# so the plain mirror is kept (grig.gd has the same measurement).
+	return {"phi": [Vector3(0.0, -128.0, 0.0), Vector3(1.4, -148.0, -12.0), Vector3(3.0, -180.0, 0.0)],
+		# Aimed further ahead of him early on (1.4 m, the default 0.5): the post, 0.6 m to the left of his line, then
+		# falls ~54 degrees off the lens axis - outside the frame's ~45 degree half-width - and he keeps room in front.
+		"lead": [Vector3(0.0, 1.4, 0.0), Vector3(1.4, 1.0, 0.0), Vector3(3.0, 0.0, 0.0)],
+		# The orbit's radius as it was when this was measured (1.4 m opening, 2.2 m at the widest): the runner's
+		# 2026-10-20 default (1.7 / 2.3) widened the background enough to bring the fly sign's post from the frame's
+		# right edge into its right third from 4.0 s on, and the control post back into the left edge (frames before
+		# and after the runner swap, same planet, same seed).
+		"r": [Vector3(0.0, 1.4, 0.0), Vector3(1.4, 2.2, 0.0), Vector3(3.0, 1.45, -0.9), Vector3(3.85, 0.0, 0.0)]}
+
+
+## THE START CUTSCENE'S DATA, in the one shape SafariIntro reads.
+func intro_data() -> Dictionary:
+	return {
+		"subtitle": INTRO_SUBTITLE,
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"swoop": intro_swoop_mirrored(),
+		"total": 8.5,
+		"cut": 3.9,
+	}

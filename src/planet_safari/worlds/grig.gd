@@ -3220,3 +3220,79 @@ func debug_places() -> Dictionary:
 		"drawing": _drawing.global_position if _drawing != null else Vector3.ZERO,
 		"shelves": _shelves.map(func(n: Node3D) -> Vector3: return n.global_position),
 	}
+
+
+# ======================================================================================== THE SAFARI START CUTSCENE
+## Grig's data for the start cutscene (src/planet_safari/safari_intro.gd, FOR A PLANET BUILDER; builder GV,
+## 2026-10-20). Data only: SafariIntro plays it, nothing here runs in the safari, and nothing reads the world's
+## random numbers. The look of the name is in src/planet_safari/titles/grig_title.gd (the henge crest and the
+## chalk-lit letters).
+const INTRO_SUBTITLE := "Nine Stones, Counted"
+
+
+## THE NAME'S LOOK (TitleLettering's style; the letters themselves are drawn by grig_title.gd `glyph`, so the
+## stroke-font keys here only size the atlas cells). "halo" is set so each cell's margin (TitleLettering._margin, (stroke + halo) / 2
+## + 0.06 = 0.2 cap heights) just holds the letters' drop shadow; with the backdrop baked at 0.5 that keeps the atlas
+## near 2000 x 700 (texture memory +11.8 MB at the intro's peak, measured; 1930 x 962 and +15.3 MB before). Grig is square and steady: no slant, no wobble, barely a sway;
+## chalk dust falls instead of spores rising. Every colour is one Grig's world already draws with (grig_meshes.gd).
+func intro_title_style() -> Dictionary:
+	return {
+		"lines": ["GRIG'S CHALK", "STEPS"],
+		"stroke": 0.17, "outline": 0.05, "halo": 0.11,
+		"slant": 0.0, "wobble": 0.0, "sway_deg": 0.6, "sway_hz": 0.22,
+		"tracking": 0.16, "line_gap": 0.5,
+		"core": Meshes.CHALK, "outline_col": Color("#3a2d22"), "halo_col": Meshes.BUFF_DARK,
+		"tip_kind": "none", "bulb_r": 0.0,
+		"spark_kind": "fall", "sparks": 10, "spark_cols": [Meshes.CHALK, Color("#e6d9b8"), Meshes.BUFF],
+		"title_file": "res://src/planet_safari/titles/grig_title.gd",
+		"backdrop_scale": 0.5,
+	}
+
+
+## SCENE 1 of the combined start ("c"): ONE slow crane up and back from just outside the henge - the nearest
+## stones close and tall against the sky first, then the whole ring of nine standing round the landing point, the
+## edge-on ring arcing behind them. Chosen from survey frames (the henge is THE thing this world is known for; the
+## steps' edges read only as faint lines). On this 9.5 m planet the far stones sit on the horizon, so the lens rises
+## to 3.8 m to look down into the ring. The rocket is behind the lens all shot long (the henge is at bearing 49, the
+## pad at 180).
+func intro_scene_c() -> Dictionary:
+	return {"path": [Vector2(44.0, 49.0), Vector2(37.5, 49.0), Vector2(31.0, 49.0)], "height": Vector2(1.6, 3.8),
+		"ease": "inout", "look_from": Vector3(64.0, 49.0, 1.4), "look_to": Vector3(66.0, 49.0, 0.2),
+		# ambient life for the intro only: chalk motes over the henge (SafariIntro's own particles)
+		"spores_at": Vector2(64.0, 49.0), "spore_cols": [Color("#e6d9b8"), Meshes.BUFF]}
+
+
+## SCENE 2 (the swoop) MIRRORED to his RIGHT side. The pad is not laid out the same on every world: measured in the
+## start frame (x right, z back), Zorp's control post stands at (+0.95, 1.35) - right-behind, so SafariIntro's default
+## swoop comes round his LEFT - but here it is at (-0.62, 1.39), with the fuel hose at (-0.41, 1.96): the default
+## opening (128 degrees toward his left, 1.4 m out, 1.6 m behind the start) put the lens inside the post (the first
+## frames: its column filled the right half of the frame for 2 s). The same path round his right side is the exact
+## mirror of the Zorp one the critic passed: the post then sits ~39 degrees off the lens axis at the opening, as
+## Zorp's did on the left, and the fly sign (right, 0.5 m AHEAD of the start) stays ~58 degrees off. Same keys as
+## SafariIntro._path_c (scene 2 lasts 8.5 - 3.9 = 4.6 s, its default length, so the times are unscaled), phi negated.
+static func intro_swoop_mirrored() -> Dictionary:
+	# KNOWN, NOT FIXED: the fly sign's near post (1.9 m right of the start, 0.5 m ahead, leaning back toward the pad)
+	# stands in the right edge of the frame from about 5.0 to 7.0 s. Tried: ending the orbit 12 degrees (-168) or 25
+	# degrees (-155) short of straight behind - the post stayed in view (it leans toward the lens) and the push into
+	# the helmet then turned at 30 and 48 deg/s (21.6 with -180), so the plain mirror is kept.
+	return {"phi": [Vector3(0.0, -128.0, 0.0), Vector3(1.4, -148.0, -12.0), Vector3(3.0, -180.0, 0.0)],
+		# Aimed further ahead of him early on (1.4 m, the default 0.5): the post, 0.6 m to the left of his line, then
+		# falls ~54 degrees off the lens axis - outside the frame's ~45 degree half-width - and he keeps room in front.
+		"lead": [Vector3(0.0, 1.4, 0.0), Vector3(1.4, 1.0, 0.0), Vector3(3.0, 0.0, 0.0)],
+		# The orbit's radius as it was when this was measured (1.4 m opening, 2.2 m at the widest): the runner's
+		# 2026-10-20 default (1.7 / 2.3) widened the background enough to bring the fly sign's post from the frame's
+		# right edge into its right third from 4.0 s on, and the control post back into the left edge (frames before
+		# and after the runner swap, same planet, same seed).
+		"r": [Vector3(0.0, 1.4, 0.0), Vector3(1.4, 2.2, 0.0), Vector3(3.0, 1.45, -0.9), Vector3(3.85, 0.0, 0.0)]}
+
+
+## THE START CUTSCENE'S DATA, in the one shape SafariIntro reads.
+func intro_data() -> Dictionary:
+	return {
+		"subtitle": INTRO_SUBTITLE,
+		"title_style": intro_title_style(),
+		"scene1": intro_scene_c(),
+		"swoop": intro_swoop_mirrored(),
+		"total": 8.5,
+		"cut": 3.9,
+	}
