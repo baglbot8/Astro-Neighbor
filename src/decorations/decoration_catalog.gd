@@ -113,7 +113,7 @@ func get_items() -> Array:
 	]
 	var out: Array = []
 	for r in raw + COZY:
-		out.append({
+		var def := {
 			"id": "deco_" + str(r[0]),
 			"name": str(r[1]),
 			"kind": "decoration",
@@ -124,7 +124,11 @@ func get_items() -> Array:
 			"icon_color": str(r[6]),
 			"desc": str(r[7]),
 			"scene": SCENE_DIR + str(r[0]) + ".tscn",
-		})
+		}
+		# SETS_SPEC 1: the Cozy Home rows also count as a set (display only, no bonus) - src/decorations/deco_sets.gd.
+		if COZY.has(r):
+			def["set"] = "cozy"
+		out.append(def)
 	# THE TANGLE (docs/JUNGLE_PLANET_SPEC.md 3, builder J3): Moss's stall goods. Same columns as above,
 	# but column 4 is the STALL price: the def carries "price": 0 (so Cosmo Depot never stocks it) and
 	# "source": "moss" (so no favour hands one out) - src/tangle/moss_stock.gd explains both.
@@ -138,6 +142,7 @@ func get_items() -> Array:
 			"price": 0,
 			"stall_price": int(r[4]),
 			"source": "moss",
+			"set": "tangle",
 			"footprint": float(r[5]),
 			"icon_color": str(r[6]),
 			"desc": str(r[7]),
@@ -156,12 +161,54 @@ func get_items() -> Array:
 			"rarity": str(r[3]),
 			"price": 0,
 			"source": "stamps",
+			"set": "normal",
 			"footprint": float(r[5]),
 			"icon_color": str(r[6]),
 			"desc": str(r[7]),
 			"scene": SCENE_DIR + str(r[0]) + ".tscn",
 		})
+	# FURNITURE SETS (docs/SETS_SPEC.md 3): one data file per set in SETS_DIR. Pieces carry "set"; the bonus
+	# also carries "source": "set" and price 0 (never stocked, never a random favour roll).
+	for set_path in SET_FILES:
+		if not ResourceLoader.exists(set_path):
+			continue
+		var set_script: Variant = load(set_path)
+		var sid := str(set_script.SET["id"])
+		var rows: Array = (set_script.PIECES as Array).duplicate()
+		rows.append(set_script.BONUS)
+		for r in rows:
+			# A row with no scene yet is left out (never sold, never given) rather than registered unplaceable;
+			# the Sets page still names it from the set file (deco_sets.gd).
+			var scene := SCENE_DIR + str(r[0]) + ".tscn"
+			if not ResourceLoader.exists(scene):
+				continue
+			var def := {
+				"id": "deco_" + str(r[0]),
+				"name": str(r[1]),
+				"kind": "decoration",
+				"category": str(r[2]),
+				"rarity": str(r[3]),
+				"price": int(r[4]),
+				"footprint": float(r[5]),
+				"icon_color": str(r[6]),
+				"desc": str(r[7]),
+				"scene": scene,
+				"set": sid,
+			}
+			if r == set_script.BONUS:
+				def["price"] = 0
+				def["source"] = "set"
+			out.append(def)
 	return out
+
+
+const SET_FILES: Array[String] = [
+	"res://src/decorations/sets/set_tinker.gd",
+	"res://src/decorations/sets/set_glowshroom.gd",
+	"res://src/decorations/sets/set_long_dusk.gd",
+	"res://src/decorations/sets/set_chalk_terrace.gd",
+	"res://src/decorations/sets/set_frost_cabin.gd",
+]
 
 
 ## THE COZY HOME SET (builder FURNSHOP, 2026-10-01, docs/DAILY_STAMPS_SPEC.md 3: "12 new shop decorations

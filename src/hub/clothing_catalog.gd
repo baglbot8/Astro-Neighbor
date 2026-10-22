@@ -2,7 +2,8 @@ extends RefCounted
 ## Clothing catalog for Suit-Up. `Catalog` (src/autoload/catalog.gd) instantiates this at boot and
 ## registers every dictionary returned by `get_items()`. Format documented at the top of catalog.gd.
 ##
-## 23 items: 18 suits, 3 hats, 2 backpack cowls. The starter `suit_white` and the cave's `suit_prism`
+## 23 items: 18 suits, 3 hats, 2 backpack cowls (plus, 2026-10-21, 7 suits and 7 hats for the sets and
+## variety: docs/SETS_SPEC.md - 37 in SUITS/GEAR). The starter `suit_white` and the cave's `suit_prism`
 ## (found once in the cave's treasure chest, src/cave/) are priced 0 ("not sold"), so the store stocks
 ## 21, priced in the same four tiers as decoration_catalog.gd (everyday 300-400: 4 items; most
 ## 800-1500: 8; rare 2400-3600: 5; showpiece 5600-7000: the crown, the twin-jet cowl and the two
@@ -55,6 +56,33 @@ const SUITS: Array = [
 		"Black as between-the-stars, lit by a single mint seam. Very cool. Slightly smug."],
 	["suit_prism", "Prism Suit", "suit", "legendary", 0, "#e9e6f2", "#7d5fcf", "#b8f2ff",
 		"Found in a chest deep in the cave. Pearl white, violet boots, and it catches rainbows."],
+	# THE FOUR NEW SET SUITS (docs/SETS_SPEC.md 1-3), one per neighbour set; Bolt's is suit_gearworks
+	# above. Each takes its colour story from that neighbour's world, priced in the "most" tier. Colour
+	# blocking on the nominal swatches (showcase/astronaut_wardrobe.tscn -- --blocking): every row added
+	# here has a hue gap >= 30 deg, an HSV value gap >= 0.15 and a CIE L* gap >= 20.
+	# The swatches are picked on the RENDERED suit, not the paint (wardrobe -- --swatch=..., which
+	# prints the rendered torso colour): the model warms and cream-tints light suits (SUIT_TINT) and the
+	# shell shader lifts warm chroma, so a "pale ice" #b3d9e0 rendered as grey #adaf9e - the same as the
+	# Chalk Terrace suit - and terracotta #c4745a rendered as neon orange (S 0.68). Frost is therefore a
+	# glacier blue that renders ice-blue (#5a8aa8), Long Dusk a muted clay that renders terracotta
+	# (#a36745), and the three extras are toned so none renders above S 0.67. Cherry Pop was checked
+	# against Rust Rover side by side: it renders red (torso hue 352 deg) where Rust Rover renders
+	# orange-brick (11 deg), with cream trim against Rust Rover's mint.
+	["suit_glowshroom", "Glowshroom Suit", "suit", "uncommon", 1250, "#8a76bd", "#5fd3f0", "#b8ecff",
+		"Hollow-violet with river-glow cuffs. Zorp says it hums at night. It does not."],
+	["suit_long_dusk", "Long Dusk Suit", "suit", "uncommon", 1300, "#a07a6e", "#3a4f70", "#ffd2a8",
+		"Sun-baked clay with slate-blue bands, for evenings that never quite end."],
+	["suit_chalk_terrace", "Chalk Terrace Suit", "suit", "uncommon", 1200, "#e4dac2", "#6f8a64", "#d8ecc8",
+		"Chalk cream with sage trim. Grig says it hides the dust. Mostly."],
+	["suit_frost_cabin", "Frost Cabin Suit", "suit", "uncommon", 1400, "#5c94da", "#362f70", "#cfe8ff",
+		"Glacier blue with deep navy cuffs, quilted for the coldest porch on Vela."],
+	# Three more for variety, each in a hue the rack did not have: cherry red, lemon-lime, orchid.
+	["suit_cherry_pop", "Cherry Pop Suit", "suit", "common", 380, "#b05a72", "#f2dcae", "#ffd0c8",
+		"Cherry red with vanilla cuffs. Looks great on a picnic blanket."],
+	["suit_lemon_lime", "Lemon Lime Suit", "suit", "uncommon", 950, "#cdd06a", "#574a8c", "#f0f4b8",
+		"Zesty lemon-lime with plum boots. Bright enough to find in the dark."],
+	["suit_orchid", "Orchid Suit", "suit", "uncommon", 1150, "#96609c", "#bfe3c4", "#f2c8ec",
+		"Deep orchid with pale mint trim. Smells faintly of greenhouse."],
 ]
 
 ## Columns: id, name, category, rarity, price, style key, style value, icon colour, description.
@@ -65,6 +93,22 @@ const GEAR: Array = [
 		"A springy antenna with a glowing bobble. Zorp approves loudly."],
 	["hat_crown", "Star Crown", "hat", "legendary", 5600, "hat_id", "hat_crown", "#ffe27a",
 		"Professor Comet says it is ceremonial. He wears his to watch the stars."],
+	# SET HATS (docs/SETS_SPEC.md 1-3): one per neighbour set, worn with that set's suit.
+	["hat_tinker_goggles", "Tinker Goggles", "hat", "uncommon", 1300, "hat_id", "hat_tinker_goggles", "#c9933f",
+		"Brass goggles strapped round your helmet. Bolt swears they make you better at bolts."],
+	["hat_toadstool", "Toadstool Cap", "hat", "uncommon", 1200, "hat_id", "hat_toadstool", "#8f6cc4",
+		"A soft violet mushroom cap with glowing spots. Zorp keeps asking if it is ripe."],
+	["hat_dusk_sunhat", "Dusk Sun Hat", "hat", "uncommon", 1100, "hat_id", "hat_dusk_sunhat", "#c99a62",
+		"A wide woven brim for a sun that never sets. Fen ties hers with the same blue band."],
+	["hat_chalk_headlamp", "Chalk Headlamp", "hat", "uncommon", 1000, "hat_id", "hat_chalk_headlamp", "#e4dac2",
+		"A climber's lamp on a sage strap. Grig uses his to read the terrace steps."],
+	["hat_frost_bobble", "Frost Bobble Hat", "hat", "common", 950, "hat_id", "hat_frost_bobble", "#34407a",
+		"A chunky knitted beanie with a bobble on top. Vela knitted the first one."],
+	# Two more for variety.
+	["hat_flower_crown", "Flower Crown", "hat", "common", 380, "hat_id", "hat_flower_crown", "#f0a6b4",
+		"A ring of little meadow flowers round your helmet. Never wilts. Never needs water."],
+	["hat_orbit_ring", "Orbit Ring", "hat", "rare", 2600, "hat_id", "hat_orbit_ring", "#e8c77a",
+		"A tiny planet ring tilted round your helmet, with a moon that goes round and round."],
 	# BACKPACKS ARE COSMETIC SHELLS, and their names and copy have to say so. Every astronaut flies
 	# with a working thruster pack from minute one (docs/STYLE_GUIDE.md R2.8), so a store selling a
 	# "Jet Pack" with "twin thrusters that puff blue when you hop" was selling the player something
@@ -110,8 +154,27 @@ const STAMP_SUITS: Array = [
 ]
 
 
+## SET MEMBERSHIP (docs/SETS_SPEC.md 3): every set suit and hat carries "set": "<set id>" in its def.
+## A side table, not a new column, so every row above keeps the format other files parse.
+const SETS: Dictionary = {
+	"suit_gearworks": "tinker", "hat_tinker_goggles": "tinker",
+	"suit_glowshroom": "glowshroom", "hat_toadstool": "glowshroom",
+	"suit_long_dusk": "long_dusk", "hat_dusk_sunhat": "long_dusk",
+	"suit_chalk_terrace": "chalk_terrace", "hat_chalk_headlamp": "chalk_terrace",
+	"suit_frost_cabin": "frost_cabin", "hat_frost_bobble": "frost_cabin",
+}
+
+
 ## Every clothing definition, suits first (cheapest to most expensive), then hats and backpacks.
 func get_items() -> Array:
+	var out := _defs()
+	for d: Dictionary in out:
+		if SETS.has(d["id"]):
+			d["set"] = SETS[d["id"]]
+	return out
+
+
+func _defs() -> Array:
 	var out: Array = []
 	for row: Array in SUITS:
 		out.append({

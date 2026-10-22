@@ -4,6 +4,8 @@ extends ItemGridPanel
 ## stall.
 ##   open(items, "buy", "Cosmo Depot", "Pip & Pop")   # items: Array of Catalog defs or ids
 ##   open([], "sell", "Cosmo Depot", "Pip & Pop")     # empty list in sell mode = everything sellable in the bag
+##   open(DecoSets.order_book(), "order", ...)        # docs/SETS_SPEC.md 4.3: buy rules, "Order" wording,
+##                                                     # the set's progress on each card and in the toast
 ##   open([], "build", "Build Bench")                 # BUILD_PLAN Phase 2 builder F: entries are read
 ##                                                     # from ProjectSystem.bench_items() plus any unfitted
 ##                                                     # rocket-part gift in the bag - `items` is ignored
@@ -20,6 +22,8 @@ signal purchased(item_id: String)
 signal sold(item_id: String)
 signal built(item_id: String)
 signal fitted(part_id: String)
+
+const DecoSets := preload("res://src/decorations/deco_sets.gd")
 
 ## docs/OPEN_ISSUES.md 66: at 0.4, selling the decorations neighbours give you was 56% of all income -
 ## more than playing the game (mean reward-decoration price MEASURED at 370: a 20,000-draw sample of
@@ -83,6 +87,8 @@ func _hook_hints() -> Array:
 func _hook_empty_text() -> PackedStringArray:
 	if mode == "build":
 		return ["Nothing to build", "A neighbour's project will ask for something soon."]
+	if mode == "order":
+		return ["No sets started", "Get one piece of a set and we can order the rest."]
 	return ["Sold out!", "Come back tomorrow for new stock."]
 
 func _ready() -> void:
@@ -165,9 +171,13 @@ func open(items: Array, shop_mode: String = "buy", title: String = "Shop", keepe
 	var default_sub := ""
 	if mode == "sell":
 		default_sub = "Sell your items"
+	elif mode == "order":
+		default_sub = "Order book: any piece of a set you've started"
 	elif mode == "build":
 		default_sub = "Scrap becomes fixes"
 	_subtitle_label.text = keeper if keeper != "" else default_sub
+	if mode == "order":
+		_subtitle_label.text = default_sub
 	_subtitle_label.visible = _subtitle_label.text != ""
 	_balance_label.text = str(GameState.stardust)
 	_scrap_label.text = str(GameState.scrap)
@@ -282,6 +292,10 @@ func _hook_fill_extra(extra: HBoxContainer, entry: Dictionary) -> void:
 	if mode == "sell":
 		var owned := UIStyle.make_label("  (you have %d)" % int(entry.get("count", 0)), "Soft")
 		extra.add_child(owned)
+	elif mode == "order" or DecoSets.set_of(str(entry["id"])) != "":
+		var prog := DecoSets.progress_text(str(entry["id"]))
+		if prog != "":
+			extra.add_child(UIStyle.make_label("  " + prog, "Soft"))
 	else:
 		# A regular shop item that ALSO carries a scrap cost (none ship yet - every project item is
 		# "build"-only per project_system.gd's schema - but a future stall could sell one for
@@ -329,7 +343,7 @@ func _hook_actions(entry: Dictionary) -> Array:
 	var short := int(entry.get("price", 0)) - GameState.stardust
 	if short > 0:
 		return [{"id": "buy", "label": "Need %d more" % short, "primary": true, "disabled": true}]
-	return [{"id": "buy", "label": "Buy", "primary": true}]
+	return [{"id": "buy", "label": "Order" if mode == "order" else "Buy", "primary": true}]
 
 func _build_actions(entry: Dictionary) -> Array:
 	var def: Dictionary = entry["def"]
@@ -376,7 +390,7 @@ func _enter_actions() -> void:
 	# Can't-afford feedback happens right on the card, before the action list.
 	var e := selected_entry()
 	if not e.is_empty():
-		if mode == "buy" and not GameState.can_afford(int(e["price"])):
+		if (mode == "buy" or mode == "order") and not GameState.can_afford(int(e["price"])):
 			_cant_afford()
 			return
 		if mode == "build":
@@ -415,7 +429,8 @@ func _try_buy(entry: Dictionary) -> void:
 	if not GameState.can_afford(p):
 		_cant_afford()
 		return
-	var ok: bool = await _confirm.ask("Buy %s for %d?" % [item_name, p], "Buy", "No", p)
+	var verb := "Order" if mode == "order" else "Buy"
+	var ok: bool = await _confirm.ask("%s %s for %d?" % [verb, item_name, p], verb, "No", p)
 	if not ok or not is_open:
 		_leave_actions()
 		return
@@ -433,15 +448,24 @@ func _try_buy(entry: Dictionary) -> void:
 		_leave_actions()
 		refresh()
 		return
-	if not GameState.spend_stardust(p):
+	if not buy_now(id, p):
 		_cant_afford()
 		return
-	GameState.add_item(id, 1)
 	UIStyle.play_sfx("ui_buy")
-	EventBus.toast_requested.emit("You bought a %s!" % item_name, id)
+	var line := ("Pip & Pop ordered you %s!" if mode == "order" else "You bought %s!") % DecoSets.a_an(item_name)
+	EventBus.toast_requested.emit(DecoSets.with_progress(line, id), id)
 	purchased.emit(id)
 	_leave_actions()
 	refresh()
+
+## The charge-and-hand-over step of a buy or an order, without the confirm dialog: false (and nothing
+## charged, nothing given) when the player is short. GameState.add_item also records the piece as collected
+## and grants a set's bonus on its 6th piece (deco_sets.gd), so an order completes a set like a favour does.
+static func buy_now(item_id: String, price: int) -> bool:
+	if not GameState.spend_stardust(price):
+		return false
+	GameState.add_item(item_id, 1)
+	return true
 
 func _try_sell(entry: Dictionary) -> void:
 	var def: Dictionary = entry["def"]

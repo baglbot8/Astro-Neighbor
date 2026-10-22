@@ -200,6 +200,12 @@ var picked_collectibles: Dictionary = {}
 ## Purchased clothing ids (owned wardrobe).
 var wardrobe: Array = ["suit_white"]
 
+## FURNITURE SETS (docs/SETS_SPEC.md 4): every decoration and clothing id the player has EVER had, id -> true.
+## "Collected" for the Sets page, neighbour gifts and the set bonus. Placing or selling never removes an id.
+## Saved as an array; a save with no "collected" key fills it once from bag + placed + wardrobe (`from_dict`).
+var collected: Dictionary = {}
+const DecoSets := preload("res://src/decorations/deco_sets.gd")
+
 ## Space trash sitting on the home planet, waiting to be cleaned up.
 ## Array of {"id": String, "dir": [x,y,z] (unit vector, LOCAL to the planet), "kind": String}.
 var trash_home: Array = []
@@ -279,6 +285,46 @@ func part_fit_scrap() -> int:
 func add_item(item_id: String, count: int = 1) -> void:
 	inventory[item_id] = int(inventory.get(item_id, 0)) + count
 	EventBus.item_added.emit(item_id, count)
+	# Every way an item arrives (favour, shop, order book, stamp card, chest) comes through here, so this is
+	# the one hook for "collected" and the set bonus (DecoSets.on_collected grants it once, flag-gated).
+	mark_collected(item_id)
+
+
+# ----------------------------------------------------------------------------- collected (SETS_SPEC 4)
+## Records `item_id` as ever owned (decorations and clothing only). The first time, checks its set's bonus.
+func mark_collected(item_id: String) -> void:
+	if collected.has(item_id) or not _collectable(item_id):
+		return
+	collected[item_id] = true
+	DecoSets.on_collected(item_id)
+
+
+func is_collected(item_id: String) -> bool:
+	return collected.has(item_id) or wardrobe.has(item_id)
+
+
+static func _collectable(item_id: String) -> bool:
+	var kind := str(Catalog.get_item(item_id).get("kind", ""))
+	if kind == "decoration" or kind == "clothing":
+		return true
+	return kind == "" and item_id.begins_with("deco_")
+
+
+## Fills `collected` from what the player holds now: the bag, every placed decoration on every planet and the
+## wardrobe. Quiet (no bonus check) - used once for a save written before the record existed.
+func _fill_collected_from_holdings() -> void:
+	for id: Variant in inventory.keys():
+		if _collectable(str(id)):
+			collected[str(id)] = true
+	for pid: Variant in placed_decorations.keys():
+		var arr: Variant = placed_decorations[pid]
+		if not (arr is Array):
+			continue
+		for e: Variant in arr:
+			if e is Dictionary and _collectable(str((e as Dictionary).get("item", ""))):
+				collected[str((e as Dictionary)["item"])] = true
+	for id: Variant in wardrobe:
+		collected[str(id)] = true
 
 func remove_item(item_id: String, count: int = 1) -> bool:
 	var have: int = int(inventory.get(item_id, 0))
@@ -508,6 +554,7 @@ func to_dict() -> Dictionary:
 		"flags": flags,
 		"picked_collectibles": picked_collectibles,
 		"wardrobe": wardrobe,
+		"collected": _collected_for_save(),
 		"settings": settings,
 		"trash_home": trash_home,
 		"trash_last_check_unix": trash_last_check_unix,
@@ -552,6 +599,14 @@ func from_dict(d: Dictionary) -> void:
 	flags = d.get("flags", {})
 	picked_collectibles = d.get("picked_collectibles", {})
 	wardrobe = d.get("wardrobe", ["suit_white"])
+	# SETS_SPEC 4: an old save has no record - fill it once from bag + placed + wardrobe.
+	collected = {}
+	var rec: Variant = d.get("collected", null)
+	if rec is Array:
+		for id: Variant in rec:
+			collected[str(id)] = true
+	else:
+		_fill_collected_from_holdings()
 	settings = d.get("settings", settings)
 	trash_home = d.get("trash_home", [])
 	# Old saves have no key here. Defaulting to "now" (not 0) means an existing save does not
@@ -564,6 +619,16 @@ func from_dict(d: Dictionary) -> void:
 	# campaign_active/story_done/rocket_parts to the real new-game values (see `reset_new_game`).
 	EventBus.campaign_changed.emit()
 	EventBus.rocket_parts_changed.emit(rocket_parts.size())
+
+## The record as saved: the ids, plus any wardrobe item that skipped add_item (Suit-Up writes the wardrobe
+## directly), so the file alone says everything ever owned.
+func _collected_for_save() -> Array:
+	for id: Variant in wardrobe:
+		collected[str(id)] = true
+	var out: Array = collected.keys()
+	out.sort()
+	return out
+
 
 ## JSON has no integer type - every whole number round-trips through the save file as a float,
 ## so a reloaded inventory reads {"deco_moon_lamp": 2.0}. Every consumer currently casts with
@@ -609,6 +674,8 @@ func reset_new_game() -> void:
 	stardust = STARTING_STARDUST
 	# Starter kit so the first minute of play already has something to place.
 	inventory = {"deco_moon_lamp": 1, "deco_star_flag": 1, "deco_crater_bench": 1}
+	collected = {}
+	_fill_collected_from_holdings()
 	# Turn the trap's defaults back around: a new game plays the campaign from a clean slate.
 	campaign_active = true
 	story_done = false

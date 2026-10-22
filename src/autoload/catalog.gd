@@ -11,6 +11,8 @@ extends Node
 ##   "footprint": 0.8,                  # approximate radius in meters for placement collision
 ##   "icon_color": "#f7e27a",           # used for inventory swatches when no icon texture
 ##   "style": {...}                     # clothing only: keys merged into GameState.player_style
+##   "set": "tinker",                   # optional: furniture set (docs/SETS_SPEC.md; src/decorations/deco_sets.gd)
+##   "source": "set" | "moss" | ...     # optional: only one giver hands it out - never stocked, never a random reward
 ## }
 
 var _items: Dictionary = {}

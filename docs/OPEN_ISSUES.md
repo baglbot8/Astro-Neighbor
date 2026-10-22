@@ -2247,3 +2247,11 @@ render per channel, toward the cockpit rock's masked on-screen mean rgb(97.7,78.
 * **The builders' memory figures used the older planet files.** Tangle was +3.4 MB by the builder and +5.6 MB by the critic with the new
   files; always re-measure in the merged tree.
 
+
+## 78. [2026-10-22] A decoration's OmniLight paints nearby crochet black in stripes at night (open)
+
+Found by the furniture-sets builder SETS-A. At night, an OmniLight on a placed decoration turns nearby crochet (toon)
+surfaces black in stitch-row stripes. Seen on the shipped Reading Lamp pole and Cosmic Mushrooms, on Forward+ and on
+Compatibility; removing the light removes it. Not `yl_relief_light` (it is clamped 0.5-1.5). Cause not found. The 35
+set pieces of 2026-10-22 use no OmniLight because of it (emissive parts + halo + ground glow). If it is fixed, the
+set lamps could get lights back. Diagnose before building: bisect in a scene with one lamp on the home planet.

@@ -89,6 +89,9 @@ extends Node
 ## ["show_carry_item"], default on) - Player.set_carry_item reads it; the gift is still in the bag and
 ## the delivery still completes by talking to the recipient.
 
+## Furniture sets: neighbour gifts from their own set (docs/SETS_SPEC.md 4.1). Loaded by path, no class_name.
+const DecoSets := preload("res://src/decorations/deco_sets.gd")
+
 ## "stardust_shard" was removed from this list on 2026-09-11 (lead, end of Phase 1). Phase 1 builder D
 ## took the shards off home, hub and grig - the only worlds that grew them - and they have no shop
 ## price, so a "bring N stardust shards" favor could never be finished: a soft-lock found by the
@@ -497,11 +500,17 @@ func complete(favor: Dictionary, npc: Node = null) -> Dictionary:
 	# standing trust rather than the favour that just happened to tip it over.
 	var trust_before := int(GameState.npc_data(npc_id).get("friendship", 0))
 
-	var reward: Dictionary = Catalog.random_reward_decoration(_rng)
+	var reward: Dictionary = set_gift(npc_id)
+	if reward.is_empty():
+		reward = Catalog.random_reward_decoration(_rng)
 	var reward_id := str(reward.get("id", "")) if not reward.is_empty() else ""
 	var reward_name := str(reward.get("name", "")) if not reward.is_empty() else ""
 	var stardust := int(favor.get("reward_stardust", REWARD_STARDUST_MIN))
 	if reward_id != "":
+		# A set outfit piece goes on the wardrobe rail as well as in the bag, as the stamp card and the cave
+		# chest already do with clothing.
+		if str(reward.get("kind", "")) == "clothing" and not GameState.wardrobe.has(reward_id):
+			GameState.wardrobe.append(reward_id)
 		GameState.add_item(reward_id)
 	else:
 		stardust += 40        # no decoration catalogue yet: pay in stardust instead
@@ -519,7 +528,7 @@ func complete(favor: Dictionary, npc: Node = null) -> Dictionary:
 	EventBus.favor_completed.emit(str(favor.get("id", "")), reward_id, stardust)
 	AudioManager.play_sfx("quest_complete")
 	if reward_id != "":
-		EventBus.toast_requested.emit("You got a %s!" % reward_name, reward_id)
+		EventBus.toast_requested.emit(DecoSets.with_progress("You got %s!" % DecoSets.a_an(reward_name), reward_id), reward_id)
 	EventBus.toast_requested.emit("+%d Stardust" % stardust, "stardust_shard")
 
 	# One-time signature gift the first time trust crosses "best friend" — on top of the usual
@@ -538,6 +547,17 @@ func complete(favor: Dictionary, npc: Node = null) -> Dictionary:
 	if player2 != null and player2.has_method("play_emote"):
 		player2.call("play_emote", "happy")
 	return {"item_id": reward_id, "item_name": reward_name, "stardust": stardust}
+
+
+## FURNITURE SETS (docs/SETS_SPEC.md 4.1): a neighbour pays from THEIR set (a piece or outfit item never
+## collected, picked at random); the Commons crowd and anyone else pays from the Cozy Home set. {} when there
+## is nothing left, and `complete()` falls back to the old Catalog.random_reward_decoration roll. Stardust,
+## trust bonuses and the signature gift are untouched.
+func set_gift(npc_id: String) -> Dictionary:
+	var pool: Array = DecoSets.gift_pool(npc_id)
+	if pool.is_empty():
+		return {}
+	return Catalog.get_item(str(pool[_rng.randi_range(0, pool.size() - 1)]))
 
 
 # ============================================================================= progress

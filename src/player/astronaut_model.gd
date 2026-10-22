@@ -460,6 +460,8 @@ var _lamp_mat: ShaderMaterial
 var _jet_mats: Array[ShaderMaterial] = []
 ## Exhaust markers on whichever backpack is fitted; their -Y is the thrust direction.
 var _jet_nozzles: Array[Node3D] = []
+## A hat part that turns slowly (the Orbit Ring's moon). Set by `_build_hat`, spun in `tick`.
+var _hat_spin: Node3D
 var _puffs: JetPuffs
 
 static var _star_tex: ImageTexture
@@ -602,6 +604,8 @@ func tick(delta: float, speed_factor: float) -> void:
 	for i in P.COUNT:
 		_pose[i] = lerpf(_pose[i], _target[i], k)
 	_apply_pose(delta)
+	if _hat_spin != null:
+		_hat_spin.rotate_object_local(Vector3.UP, HAT_SPIN_RATE * delta)
 	if _state in EMOTE_DURATIONS and not _emote_done and _state_time >= float(EMOTE_DURATIONS[_state]):
 		_emote_done = true
 		emote_finished.emit(_state)
@@ -1635,6 +1639,7 @@ func _surface_node(n: String, parent: Node, dir: Vector3, r: Vector3, lift: floa
 
 ## Hats sit on the helmet (local space = helmet centre). Sizes follow the 0.70 m helmet.
 func _build_hat(hat: Node3D, hat_id: String, accent: Color) -> void:
+	_hat_spin = null
 	match hat_id:
 		"hat_cap":
 			# The Animal Crossing ball cap from reference/"AC Reference 2 copy.jpg": a soft dome
@@ -1680,8 +1685,418 @@ func _build_hat(hat: Node3D, hat_id: String, accent: Color) -> void:
 				var cone := _mi(_cylinder(0.0, 0.042, 0.11, 10), m_gold, spike, Vector3(0.0, 0.055, 0.0), "Cone")
 				cone.rotation.x = 0.3
 				_mi(_sphere(0.026, 10, 5), MaterialLib.glow(gems[i], 1.6), spike, Vector3(0.0, 0.115, -0.033), "Gem")
+		# ---- SET HATS and two extras (docs/SETS_SPEC.md 1-3, 2026-10-21). Geometry rules every one of
+		# them follows, because the helmet is a superellipsoid and the window is load-bearing:
+		#   * anything that touches the dome is built THROUGH AstroShapes.surface_point (the `_hug_*`
+		#     helpers below), with its inner face buried in the shell, so it cannot float off the flat
+		#     sides or be punched through at the chamfers;
+		#   * the window's top edge is at polar angle 57 deg (y 0.185) at the front, and the rim lamp
+		#     sits at 66 deg, so nothing at the front comes below 50 deg - the navy visor stays whole;
+		#   * the ear pods reach up to about 8 deg above the equator at the sides; nothing goes lower
+		#     than 15 deg above it there.
+		"hat_tinker_goggles":
+			# Bolt's set: brass goggles on a leather strap, riveted, with a cog on the side.
+			var m_strap := _shell_toon(Color("#6b4c3a"), {"limb": 0.20})
+			var m_brass := MaterialLib.metal(Color("#c9933f"), {"spec": 0.45, "spec_size": 150.0})
+			var m_brass_dark := MaterialLib.metal(Color("#8f6428"), {"spec": 0.30})
+			var m_steel := MaterialLib.metal(Color("#a3adbd"), {"spec": 0.35})
+			var m_lens := _shell_toon(Color("#b8682e"), {"spec": 0.55, "rim": 0.25, "limb": 0.10})
+			# Strap: 42 deg at the brow (well above the window), 82 deg at the back - goggles pushed up.
+			var g_front := deg_to_rad(42.0)
+			var g_back := deg_to_rad(82.0)
+			var g_side := (g_front + g_back) * 0.5
+			_mi(_hug_ring(_inflate(HELMET_R, -0.006), _inflate(HELMET_R, 0.011), g_front, g_side, g_back, deg_to_rad(4.6), 32),
+					m_strap, hat, Vector3.ZERO, "GoggleStrap")
+			for sx: float in [-1.0, 1.0]:
+				var phi := 0.36 * sx
+				var cup := _surface_node("GoggleCup", hat, _hat_dir(_edge_theta(phi, g_front, g_side, g_back), phi), HELMET_R, 0.002)
+				_mi(_cylinder(0.058, 0.066, 0.050, 12), m_brass, cup, Vector3(0.0, 0.022, 0.0), "Cup")
+				_mi(_torus(0.044, 0.064, 12, 3), m_brass_dark, cup, Vector3(0.0, 0.047, 0.0), "Rim")
+				var lens := _mi(_cylinder(0.047, 0.047, 0.010, 12), m_lens, cup, Vector3(0.0, 0.046, 0.0), "Lens")
+				YarnLite.keep_glossy(lens)
+			var bridge := _surface_node("GoggleBridge", hat, _hat_dir(g_front - 0.02, 0.0), HELMET_R, 0.004)
+			_mi(_rounded_box(Vector3(0.075, 0.030, 0.032), 0.010, 8), m_brass_dark, bridge, Vector3(0.0, 0.012, 0.0), "Bridge")
+			# Round bolt heads down the strap (the Tinker set's motif).
+			for phi: float in [1.15, -1.15, 2.1, -2.1, PI]:
+				var rivet := _surface_node("Rivet", hat, _hat_dir(_edge_theta(phi, g_front, g_side, g_back), phi), HELMET_R, 0.009)
+				var head := _mi(_sphere(0.017, 6, 3), m_steel, rivet, Vector3.ZERO, "Head")
+				head.scale = Vector3(1.0, 0.6, 1.0)
+			# A cog on the left side of the strap.
+			var cog := _surface_node("Cog", hat, _hat_dir(_edge_theta(PI * 0.5, g_front, g_side, g_back), PI * 0.5), HELMET_R, 0.008)
+			_mi(_cylinder(0.044, 0.044, 0.018, 12), m_brass, cog, Vector3(0.0, 0.006, 0.0), "Wheel")
+			for i in 8:
+				var a := TAU * float(i) / 8.0
+				var tooth := _mi(_box(Vector3(0.022, 0.018, 0.020)), m_brass, cog, Vector3(0.049 * cos(a), 0.006, 0.049 * sin(a)), "Tooth")
+				tooth.rotation.y = -a
+			_mi(_cylinder(0.016, 0.016, 0.028, 8), m_steel, cog, Vector3(0.0, 0.010, 0.0), "Hub")
+		"hat_toadstool":
+			# Zorp's set: a soft violet mushroom cap with glowing river-blue spots and a dark gilled
+			# underside (STYLE_GUIDE "Shape language": a wide flattened cap with a dark gilled underside).
+			# The helmet itself is the stalk. A flattened superellipse dome, not a ball.
+			var m_cap := _shell_toon(Color("#8f6cc4"), {"limb": 0.22})
+			var m_gill := _shell_toon(Color("#4f3f78"), {"limb": 0.16})
+			var m_spot := MaterialLib.glow(Color("#8fe8ff"), 0.9, Color("#cdf3ff"))
+			var cap := _node("Toadstool", hat, Vector3(0.0, TOAD_Y, 0.0))
+			_mi(_lathe("toadstool", _toadstool_profile(), 28), m_cap, cap, Vector3.ZERO, "Cap")
+			_mi(_lathe("toad_gill", PackedVector2Array([
+					Vector2(TOAD_R - 0.004, -0.027), Vector2(TOAD_R - 0.07, -0.022), Vector2(0.20, -0.004)]), 28),
+					m_gill, cap, Vector3.ZERO, "Gills")
+			# Spots: [polar angle from the top (deg), azimuth (deg), radius].
+			for sp: Vector3 in [Vector3(0.0, 0.0, 0.046), Vector3(42.0, 30.0, 0.042), Vector3(42.0, 150.0, 0.040),
+					Vector3(42.0, 270.0, 0.042), Vector3(70.0, 90.0, 0.034), Vector3(70.0, 210.0, 0.036),
+					Vector3(70.0, 330.0, 0.034)]:
+				var u := deg_to_rad(90.0 - sp.x)
+				var phi := deg_to_rad(sp.y)
+				var pr := _toad_point(u)
+				var pn := _toad_normal(u)
+				var pos := Vector3(pr.x * sin(phi), pr.y, -pr.x * cos(phi))
+				var nrm := Vector3(pn.x * sin(phi), pn.y, -pn.x * cos(phi)).normalized()
+				var spot_node := _node("Spot", cap, pos)
+				if absf(nrm.dot(Vector3.UP)) < 0.999:
+					spot_node.basis = Basis.looking_at(nrm, Vector3.UP) * Basis(Vector3.RIGHT, -PI * 0.5)
+				var spot := _mi(_cylinder(sp.z * 0.82, sp.z, 0.010, 8), m_spot, spot_node, Vector3(0.0, 0.002, 0.0), "Dot")
+				spot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		"hat_dusk_sunhat":
+			# Fen's set: a wide woven straw sun hat, worn tipped back off the brow, with a slate-blue
+			# band round the crown, a woven ring on the brim and a terracotta edge (woven bands, low long
+			# shapes). One lathe body; the crown base is 2 cm clear of the dome all round (measured
+			# against the shell at the tilted back edge, the tightest place) and the brim's inner edge
+			# is buried in the shell, so from below the brim meets the helmet with no daylight.
+			var m_straw := _shell_toon(Color("#c99a62"), {"limb": 0.22})
+			var m_band := _shell_toon(Color("#3a4f70"), {"limb": 0.20})
+			var m_edge := _shell_toon(Color("#b8664a"), {"limb": 0.20})
+			var sun := _node("SunHat", hat, Vector3(0.0, SUNHAT_Y, 0.0))
+			sun.rotation.x = SUNHAT_TILT
+			_mi(_lathe("sunhat", PackedVector2Array([
+					Vector2(0.0, 0.165), Vector2(0.17, 0.160), Vector2(0.26, 0.140), Vector2(0.305, 0.100),
+					Vector2(0.325, 0.050), Vector2(0.340, 0.006), Vector2(0.420, -0.010), Vector2(0.470, -0.030),
+					Vector2(0.470, -0.052), Vector2(0.420, -0.030), Vector2(0.330, -0.018), Vector2(0.230, -0.022)]), 28),
+					m_straw, sun, Vector3.ZERO, "Straw")
+			_mi(_lathe("sunhat_band", PackedVector2Array([
+					Vector2(0.318, 0.064), Vector2(0.331, 0.060), Vector2(0.347, 0.010), Vector2(0.342, 0.000)]), 28),
+					m_band, sun, Vector3.ZERO, "Band")
+			_mi(_lathe("sunhat_ring", PackedVector2Array([
+					Vector2(0.392, -0.008), Vector2(0.400, -0.001), Vector2(0.414, -0.004), Vector2(0.420, -0.014)]), 28),
+					m_band, sun, Vector3.ZERO, "WovenRing")
+			_mi(_lathe("sunhat_edge", PackedVector2Array([
+					Vector2(0.462, -0.026), Vector2(0.490, -0.036), Vector2(0.504, -0.047), Vector2(0.490, -0.060),
+					Vector2(0.462, -0.054)]), 28),
+					m_edge, sun, Vector3.ZERO, "Edge")
+		"hat_chalk_headlamp":
+			# Grig's set: a climber's headlamp. A sage elastic band round the helmet and one over the
+			# crown, and a chalk-stone lamp head built of stacked steps with carved grooves.
+			var m_band := _shell_toon(Color("#6f8a64"), {"limb": 0.20})
+			# The housing is weathered terrace stone, a clear value step below the cream dome it sits
+			# on (chalk-on-chalk vanished at gameplay distance); the stacked step on top is the chalk.
+			var m_stone := _shell_toon(Color("#8f8574"), {"limb": 0.22})
+			var m_chalk := _shell_toon(Color("#e4dac2"), {"limb": 0.22})
+			var m_groove := _shell_toon(Color("#5f5749"), {"limb": 0.18})
+			var m_lens := MaterialLib.glow(Color("#fff0c8"), 1.4, Color("#fff6dc"))
+			var l_front := deg_to_rad(44.0)
+			var l_back := deg_to_rad(84.0)
+			var l_side := (l_front + l_back) * 0.5
+			_mi(_hug_ring(_inflate(HELMET_R, -0.006), _inflate(HELMET_R, 0.013), l_front, l_side, l_back, deg_to_rad(5.6), 36),
+					m_band, hat, Vector3.ZERO, "Band")
+			_mi(_hug_meridian(_inflate(HELMET_R, -0.006), _inflate(HELMET_R, 0.008), l_front, l_back, deg_to_rad(3.2), 16),
+					m_band, hat, Vector3.ZERO, "TopStrap")
+			# The lamp head sits FLUSH on the brow: its back face is the shell's own tangent plane at
+			# the band (local -Z = the surface normal), buried 8 mm, so no edge lifts off the dome. A
+			# block tipped any less than the slope stood up off the crown like a chimney from the side.
+			var ld := _hat_dir(l_front, 0.0)
+			var lp := AstroShapes.surface_point(HELMET_R, ld)
+			var ln := AstroShapes.surface_normal(HELMET_R, ld)
+			var lamp := _node("Headlamp", hat, lp + ln * (0.5 * 0.072 - 0.008))
+			lamp.basis = Basis.looking_at(ln, Vector3.UP)
+			_mi(_rounded_box(Vector3(0.150, 0.100, 0.072), 0.022, 10), m_stone, lamp, Vector3.ZERO, "Housing")
+			_mi(_rounded_box(Vector3(0.112, 0.034, 0.054), 0.011, 8), m_chalk, lamp, Vector3(0.0, 0.050, -0.004), "Step")
+			for gy: float in [-0.024, 0.024]:
+				_mi(_box(Vector3(0.154, 0.007, 0.050)), m_groove, lamp, Vector3(0.0, gy, -0.008), "Groove")
+			var lens := _mi(_cylinder(0.034, 0.038, 0.016, 12), m_lens, lamp, Vector3(0.0, -0.004, -0.040), "Lens")
+			lens.rotation.x = PI * 0.5
+			lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			YarnLite.keep_glossy(lens)
+		"hat_frost_bobble":
+			# Vela's set: a chunky knitted bobble beanie - navy knit, pale ice turned-up cuff and a big
+			# pom-pom (the crochet look's own pom-pom). The beanie is the shell's own
+			# superellipsoid inflated 20 mm, like the cap, so it hugs the squircle everywhere.
+			var m_knit := _shell_toon(Color("#34407a"), {"limb": 0.22})
+			var m_cuff := _shell_toon(Color("#cadde4"), {"limb": 0.20})
+			var b_front := 48.0
+			var b_side := 74.0
+			var b_back := 94.0
+			_mi(AstroShapes.hair_cap(_inflate(HELMET_R, 0.020), 0.014, {
+				"front_deg": b_front, "side_deg": b_side, "back_deg": b_back,
+				"scallop_deg": 0.0, "scallops": 1, "part_deg": 0.0,
+			}, 28, 5), m_knit, hat, Vector3.ZERO, "Beanie")
+			# The cuff follows the beanie's own edge from 10 deg above it to 1 deg below it.
+			_mi(_hug_ring(_inflate(HELMET_R, 0.010), _inflate(HELMET_R, 0.038), deg_to_rad(b_front - 4.5),
+					deg_to_rad(b_side - 4.5), deg_to_rad(b_back - 4.5), deg_to_rad(5.5), 28),
+					m_cuff, hat, Vector3.ZERO, "Cuff")
+			var bobble := _mi(_sphere(0.082, 12, 6), m_cuff, hat, Vector3(0.0, HELMET_R.y + 0.020 + 0.056, 0.0), "Bobble")
+			bobble.scale = Vector3(1.0, 0.92, 1.0)
+		"hat_flower_crown":
+			# A vine round the crown with seven little five-petal flowers on it.
+			var m_vine := _shell_toon(Color("#6f9a5a"), {"limb": 0.20})
+			var m_heart := _shell_toon(Color("#e0b04a"), {"limb": 0.16})
+			var petal_cols: Array[Color] = [Color("#f0a6b4"), Color("#f3d98a"), Color("#b9a3e3"), Color("#f2eee4")]
+			var f_front := deg_to_rad(40.0)
+			var f_back := deg_to_rad(54.0)
+			var f_side := (f_front + f_back) * 0.5
+			_mi(_hug_ring(_inflate(HELMET_R, -0.004), _inflate(HELMET_R, 0.011), f_front, f_side, f_back, deg_to_rad(3.2), 32),
+					m_vine, hat, Vector3.ZERO, "Vine")
+			for i in 7:
+				var phi := TAU * float(i) / 7.0
+				var fl := _surface_node("Flower", hat, _hat_dir(_edge_theta(phi, f_front, f_side, f_back), phi), HELMET_R, 0.012)
+				fl.rotate_object_local(Vector3.UP, 0.7 * float(i))
+				var m_petal := _shell_toon(petal_cols[i % petal_cols.size()], {"limb": 0.18})
+				_mi(_flower_mesh(0.068, 0.012), m_petal, fl, Vector3.ZERO, "Petals")
+				var heart := _mi(_sphere(0.019, 6, 3), m_heart, fl, Vector3(0.0, 0.008, 0.0), "Heart")
+				heart.scale = Vector3(1.0, 0.6, 1.0)
+				if i % 2 == 0:
+					var leaf := _mi(_sphere(0.028, 5, 2), m_vine, fl, Vector3(0.0, -0.003, 0.062), "Leaf")
+					leaf.scale = Vector3(0.55, 0.30, 1.0)
+		"hat_orbit_ring":
+			# A tiny planet ring round the helmet, Saturn-style: a flat tilted annulus whose inner edge
+			# is buried inside the dome (so it grows out of the shell with no gap), in two bands, with
+			# a little moon riding the outer band round and round (HAT_SPIN_RATE).
+			var m_inner := _shell_toon(Color("#e8c77a"), {"limb": 0.20})
+			var m_outer := _shell_toon(Color("#b9a6dc"), {"limb": 0.20})
+			var m_moon := _shell_toon(Color("#d8d4e6"), {"limb": 0.24})
+			var tilt := _node("OrbitTilt", hat, Vector3(0.0, ORBIT_Y, 0.0))
+			tilt.rotation = Vector3(ORBIT_PITCH, 0.0, ORBIT_ROLL)
+			var spin := _node("OrbitSpin", tilt, Vector3.ZERO)
+			_mi(_lathe("orbit_in", PackedVector2Array([
+					Vector2(0.18, 0.007), Vector2(0.405, 0.007), Vector2(0.405, -0.007), Vector2(0.18, -0.007)]), 40),
+					m_inner, spin, Vector3.ZERO, "InnerBand")
+			_mi(_lathe("orbit_out", PackedVector2Array([
+					Vector2(0.403, 0.006), Vector2(0.462, 0.005), Vector2(0.472, 0.0), Vector2(0.462, -0.005),
+					Vector2(0.403, -0.006)]), 40),
+					m_outer, spin, Vector3.ZERO, "OuterBand")
+			_mi(_sphere(0.042, 12, 6), m_moon, spin, Vector3(0.0, 0.036, -0.435), "Moon")
+			_hat_spin = spin
 		_:
 			pass
+
+
+## ---- HAT GEOMETRY (2026-10-21, docs/SETS_SPEC.md). The numbers below are placed against the shell,
+## not by eye: the helmet is the superellipsoid HELMET_R (AstroShapes.SHELL_EXP), its radius at height
+## y is r(y) = R_xz * (1 - (y / R_y)^n)^(1/n), and every clearance quoted is from that formula.
+##
+## Toadstool cap: a flattened superellipse dome (exponent TOAD_N, so a cap with shoulders, not a ball)
+## whose rim sits at y TOAD_Y. At that height the shell is 0.273 m in radius, so the 0.385 m cap
+## overhangs it by 11 cm - the mushroom read - and the dome clears the shell's crown by 9.5 cm. The
+## gills' inner edge (r 0.20) is buried 7 cm inside the shell, so the underside meets the helmet.
+const TOAD_Y := 0.24
+const TOAD_R := 0.385
+const TOAD_H := 0.19
+const TOAD_N := 2.6
+## Sun hat: brim plane at y SUNHAT_Y, tipped back SUNHAT_TILT (front up) so the brim clears the
+## window's top edge (y 0.185) by 5 cm at the front. Tightest place: the crown base at the BACK,
+## where the tilt drops it to y 0.175 and the shell is 0.316 m deep - 2.3 cm inside the 0.34 crown.
+const SUNHAT_Y := 0.21
+const SUNHAT_TILT := 0.12
+## Orbit ring plane: centre y ORBIT_Y, pitched front-up and rolled. At the front it crosses z -0.30
+## at y 0.28 (the window's top is 0.185); its lowest point (the rolled side, y 0.106 at r 0.47) is
+## 5 cm above the top of the ear pods. The 0.18 inner radius is inside the shell on every azimuth.
+const ORBIT_Y := 0.19
+const ORBIT_PITCH := 0.30
+const ORBIT_ROLL := 0.18
+## The Orbit Ring's moon: one turn every ~18 s - alive, never busy.
+const HAT_SPIN_RATE := 0.35
+
+static var _hat_cache: Dictionary = {}
+
+
+## Unit direction at polar angle `theta` from +Y and azimuth `phi` (0 = the front, -Z): the same
+## frame AstroShapes.hair_cap uses, so a band can follow a cap's edge exactly.
+static func _hat_dir(theta: float, phi: float) -> Vector3:
+	var s := sin(theta)
+	return Vector3(s * sin(phi), cos(theta), -s * cos(phi))
+
+
+## Polar angle of a hair_cap-style edge at azimuth `phi` (AstroShapes.hair_cap's own blend). With
+## side == (front + back) / 2 it reduces to a smooth tilted ring, mid + amp * cos(phi).
+static func _edge_theta(phi: float, front: float, side: float, back: float) -> float:
+	var cf := cos(phi)
+	return side + (front - side) * maxf(cf, 0.0) + (back - side) * maxf(-cf, 0.0)
+
+
+## A closed strap round the dome, centred on `_edge_theta(front, side, back)`, `hw` radians wide each
+## way. Its outer face is the shell inflated to `r_out` and its two lips run down to `r_in` (inside
+## the shell), so it hugs the squircle with no gap and cannot be punched through.
+static func _hug_ring(r_in: Vector3, r_out: Vector3, front: float, side: float, back: float, hw: float,
+		segs: int) -> ArrayMesh:
+	var key := "ring|%s|%s|%.4f|%.4f|%.4f|%.4f|%d" % [str(r_in), str(r_out), front, side, back, hw, segs]
+	if _hat_cache.has(key):
+		return _hat_cache[key]
+	var c := PackedVector3Array()
+	var sd := PackedVector3Array()
+	for j in segs:
+		var phi := TAU * float(j) / float(segs)
+		var th := _edge_theta(phi, front, side, back)
+		c.append(_hat_dir(th, phi))
+		sd.append(Vector3(cos(th) * sin(phi), -sin(th), -cos(th) * cos(phi)))
+	var m := _hug_strip(r_in, r_out, c, sd, hw, true)
+	_hat_cache[key] = m
+	return m
+
+
+## An open strap over the crown from the brow (polar angle `front`) to the back (`back`), in the
+## sagittal plane.
+static func _hug_meridian(r_in: Vector3, r_out: Vector3, front: float, back: float, hw: float, samples: int) -> ArrayMesh:
+	var key := "meridian|%s|%s|%.4f|%.4f|%.4f|%d" % [str(r_in), str(r_out), front, back, hw, samples]
+	if _hat_cache.has(key):
+		return _hat_cache[key]
+	var c := PackedVector3Array()
+	var sd := PackedVector3Array()
+	for k in samples + 1:
+		var t := lerpf(front, -back, float(k) / float(samples))
+		c.append(Vector3(0.0, cos(t), -sin(t)))
+		sd.append(Vector3.RIGHT)
+	var m := _hug_strip(r_in, r_out, c, sd, hw, false)
+	_hat_cache[key] = m
+	return m
+
+
+## The strap mesh behind `_hug_ring` / `_hug_meridian`: along unit directions `centre`, `hw` radians
+## to each side along the unit tangent `side`. Outer face (two quads across, so a wide strap still
+## follows the curvature), both lips, and end caps when it is not `closed`.
+static func _hug_strip(r_in: Vector3, r_out: Vector3, centre: PackedVector3Array, side: PackedVector3Array,
+		hw: float, closed: bool) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := centre.size()
+	var th := tan(hw)
+	var cols: Array[PackedVector3Array] = []
+	for k in n:
+		cols.append(PackedVector3Array([(centre[k] + side[k] * th).normalized(), centre[k],
+				(centre[k] - side[k] * th).normalized()]))
+	var steps := n if closed else n - 1
+	for k in steps:
+		var k1 := (k + 1) % n
+		var a: PackedVector3Array = cols[k]
+		var b: PackedVector3Array = cols[k1]
+		for i in 2:
+			AstroShapes._quad(st, AstroShapes.surface_point(r_out, a[i]), AstroShapes.surface_point(r_out, a[i + 1]),
+					AstroShapes.surface_point(r_out, b[i + 1]), AstroShapes.surface_point(r_out, b[i]),
+					AstroShapes.surface_normal(r_out, a[i]), AstroShapes.surface_normal(r_out, a[i + 1]),
+					AstroShapes.surface_normal(r_out, b[i + 1]), AstroShapes.surface_normal(r_out, b[i]))
+		for e: int in [0, 2]:
+			var sg := 1.0 if e == 0 else -1.0
+			var na := side[k] * sg
+			var nb := side[k1] * sg
+			AstroShapes._quad(st, AstroShapes.surface_point(r_in, a[e]), AstroShapes.surface_point(r_out, a[e]),
+					AstroShapes.surface_point(r_out, b[e]), AstroShapes.surface_point(r_in, b[e]), na, na, nb, nb)
+	if not closed:
+		for end: int in [0, n - 1]:
+			var cc: PackedVector3Array = cols[end]
+			var nn := (centre[end] - centre[1 if end == 0 else n - 2]).normalized()
+			for i in 2:
+				AstroShapes._quad(st, AstroShapes.surface_point(r_in, cc[i]), AstroShapes.surface_point(r_out, cc[i]),
+						AstroShapes.surface_point(r_out, cc[i + 1]), AstroShapes.surface_point(r_in, cc[i + 1]), nn, nn, nn, nn)
+	return st.commit()
+
+
+## A surface of revolution about +Y from a 2D (radius, height) profile, ordered so the outside is on
+## the profile's left (top -> rim -> underside). Normals are smoothed across a bend under 40 deg and
+## kept crisp at a sharper one, so a brim edge or a cap lip reads as an edge (STYLE_GUIDE R2.3).
+static func _lathe(key: String, profile: PackedVector2Array, segs: int) -> ArrayMesh:
+	var ck := "lathe|%s|%d" % [key, segs]
+	if _hat_cache.has(ck):
+		return _hat_cache[ck]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var m := profile.size()
+	var sn: Array[Vector2] = []
+	for i in m - 1:
+		var t := profile[i + 1] - profile[i]
+		sn.append(Vector2(-t.y, t.x).normalized())
+	for i in m - 1:
+		var na := sn[i]
+		var nb := sn[i]
+		if i > 0 and sn[i - 1].dot(sn[i]) > 0.77:
+			na = (sn[i - 1] + sn[i]).normalized()
+		if i < m - 2 and sn[i + 1].dot(sn[i]) > 0.77:
+			nb = (sn[i] + sn[i + 1]).normalized()
+		for j in segs:
+			var p0 := TAU * float(j) / float(segs)
+			var p1 := TAU * float(j + 1) / float(segs)
+			AstroShapes._quad(st, _rev(profile[i], p0), _rev(profile[i + 1], p0), _rev(profile[i + 1], p1), _rev(profile[i], p1),
+					_rev_n(na, p0), _rev_n(nb, p0), _rev_n(nb, p1), _rev_n(na, p1))
+	var mesh: ArrayMesh = st.commit()
+	_hat_cache[ck] = mesh
+	return mesh
+
+
+static func _rev(p: Vector2, phi: float) -> Vector3:
+	return Vector3(p.x * sin(phi), p.y, -p.x * cos(phi))
+
+
+static func _rev_n(n: Vector2, phi: float) -> Vector3:
+	return Vector3(n.x * sin(phi), n.y, -n.x * cos(phi)).normalized()
+
+
+## The toadstool's profile: the superellipse dome from the top to the rim, then a rolled lip.
+static func _toadstool_profile() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for k in 10:
+		out.append(_toad_point(deg_to_rad(90.0 - 10.0 * float(k))))
+	out.append(Vector2(TOAD_R + 0.008, -0.012))
+	out.append(Vector2(TOAD_R - 0.004, -0.027))
+	return out
+
+
+## Point on the toadstool dome at superellipse parameter `u` (0 = rim, PI/2 = top).
+static func _toad_point(u: float) -> Vector2:
+	var e := 2.0 / TOAD_N
+	return Vector2(TOAD_R * pow(maxf(cos(u), 0.0), e), TOAD_H * pow(maxf(sin(u), 0.0), e))
+
+
+## Outward normal of that dome at `u` (the superellipse's gradient).
+static func _toad_normal(u: float) -> Vector2:
+	var e := 2.0 * (TOAD_N - 1.0) / TOAD_N
+	return Vector2(pow(maxf(cos(u), 0.0), e) / TOAD_R, pow(maxf(sin(u), 0.0), e) / TOAD_H).normalized()
+
+
+## A five-petal flower as ONE lobed slab (80 triangles), lying in XZ with its face up: a domed top
+## fan, a rim, a flat underside. Five flattened spheres cost 240 and read no better at 2 m.
+static func _flower_mesh(r: float, thick: float) -> ArrayMesh:
+	var key := "flower|%.4f|%.4f" % [r, thick]
+	if _hat_cache.has(key):
+		return _hat_cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 20
+	var top := Vector3(0.0, thick, 0.0)
+	var bot := Vector3(0.0, -thick * 0.5, 0.0)
+	for j in n:
+		var a0 := TAU * float(j) / float(n)
+		var a1 := TAU * float(j + 1) / float(n)
+		var p0 := _flower_edge(a0, r)
+		var p1 := _flower_edge(a1, r)
+		var u0 := p0 + Vector3(0.0, thick * 0.35, 0.0)
+		var u1 := p1 + Vector3(0.0, thick * 0.35, 0.0)
+		var l0 := p0 * 0.94 + Vector3(0.0, -thick * 0.5, 0.0)
+		var l1 := p1 * 0.94 + Vector3(0.0, -thick * 0.5, 0.0)
+		var o0 := Vector3(p0.x, 0.0, p0.z).normalized()
+		var o1 := Vector3(p1.x, 0.0, p1.z).normalized()
+		AstroShapes._tri(st, top, u0, u1, Vector3.UP, (Vector3.UP + o0 * 0.4).normalized(), (Vector3.UP + o1 * 0.4).normalized())
+		AstroShapes._quad(st, u0, l0, l1, u1, o0, o0, o1, o1)
+		AstroShapes._tri(st, bot, l1, l0, Vector3.DOWN, Vector3.DOWN, Vector3.DOWN)
+	var m: ArrayMesh = st.commit()
+	_hat_cache[key] = m
+	return m
+
+
+static func _flower_edge(a: float, r: float) -> Vector3:
+	var k := r * (0.50 + 0.50 * pow(absf(cos(2.5 * a)), 0.8))
+	return Vector3(k * cos(a), 0.0, k * sin(a))
+
+
+static func _box(size: Vector3) -> BoxMesh:
+	var m := BoxMesh.new()
+	m.size = size
+	return m
 
 
 ## Packs sit on the small torso, right under the enormous helmet. Every antenna is therefore SHORT

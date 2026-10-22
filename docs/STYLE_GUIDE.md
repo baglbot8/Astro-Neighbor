@@ -62,7 +62,7 @@ New references: `reference/astronaut 1.jpeg`, `astronaut 2.jpeg`, `astronaut 3.j
 7. **Puffy, softly segmented limbs** — a few subtle ribs or seams at the elbows, knees and waist so the suit reads as thick fabric over a pressure layer, not as skin-tight neoprene.
 8. **Off-white / cream suit**, never pure white (this also serves R2.6).
 
-Keep the chibi proportions from "Character rules", keep the opaque visor (R2.2), keep the four colour zones, and stay under the 6,000-tri budget.
+Keep the chibi proportions from "Character rules", keep the opaque visor (R2.2), keep the four colour zones, and stay under the 6,000-tri budget for the body. A hat adds at most 1,400 tris on top (amended 2026-10-22: the bare astronaut measured 5,912 tris and the older cap and crown already add 1,360 and 1,282, so "6,000 with a hat" was never met; the seven hats added that day add 720-1,272).
 
 ## R2.8 — JETPACK BOOST [PLAYER BUILDER]
 

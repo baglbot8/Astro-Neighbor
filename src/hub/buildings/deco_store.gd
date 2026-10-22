@@ -3,7 +3,9 @@ extends Building
 ## striped barrel awning, a big display window with three decorations turning slowly on a turntable,
 ## a rooftop satellite dish that sweeps, a sign that glows after dusk, and crates stacked outside.
 ##
-## Door -> Pip & Pop: buy from the daily stock, sell from your bag, or leave.
+## Door -> Pip & Pop: buy from the daily stock, sell from your bag, order a set piece, or leave.
+## ORDER BOOK (docs/SETS_SPEC.md 4.3): any piece of any set the player has started, at its normal price, any
+## day - DecoSets.order_book(). Never a bonus piece, never Moss's or Norm's goods.
 ## Daily stock = 8 decorations picked from a seed of GameState.day_count, plus the 3 cheapest
 ## (so there is always something a broke astronaut can afford).
 
@@ -12,6 +14,7 @@ const KEEPER := "Pip & Pop"
 const ALIEN_ACCENT := Color("#7ad9a0")
 const DAILY_PICKS := 8
 const ALWAYS_STOCKED := 3
+const DecoSets := preload("res://src/decorations/deco_sets.gd")
 
 const ORANGE := Color("#bd6242")
 const ORANGE_LIT := Color("#d1794b")
@@ -330,7 +333,8 @@ func _on_door(player: Node3D) -> void:
 		"...and I'm Pop! We sell EVERYTHING. Almost.",
 	], "alien", ALIEN_ACCENT)
 	while true:
-		var choice: int = await ask("What'll it be?", ["Buy", "Sell", "Leave"])
+		# "Order" sits after "Sell" so Buy and Sell keep their old places.
+		var choice: int = await ask("What'll it be?", ["Buy", "Sell", "Order", "Leave"])
 		if choice == 0:
 			# ECON (2026-09-29): spare film leads the shelf (CameraGoods). MOSS2 (2026-09-30): the lenses
 			# moved to Moss on The Tangle (docs/JUNGLE_PLANET_SPEC.md 6); film stays here so nobody is
@@ -338,6 +342,13 @@ func _on_door(player: Node3D) -> void:
 			await _open_shop(CameraGoods.depot_stock() + daily_stock(), "buy")
 		elif choice == 1:
 			await _open_shop([], "sell")
+		elif choice == 2:
+			var book := DecoSets.order_book()
+			if book.is_empty():
+				await say(KEEPER, ["Our order book is for sets!",
+					"Get one piece of a set - from us or a neighbour - and we can order the rest."], "alien", ALIEN_ACCENT)
+			else:
+				await _open_shop(book, "order")
 		else:
 			break
 	await say(KEEPER, ["Come back tomorrow — the stock rotates!"], "alien", ALIEN_ACCENT)
@@ -366,9 +377,12 @@ func daily_stock() -> Array:
 	pool.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("price", 0)) < int(b.get("price", 0)))
 	var chosen: Array = []
 	var used: Dictionary = {}
-	for i in ALWAYS_STOCKED:
-		chosen.append(pool[i])
-		used[str(pool[i].get("id", ""))] = true
+	# The always-stocked three are the cheapest NON-set goods: two set pieces are priced at 260/280, and
+	# without this they would take over the "something a broke astronaut can afford" shelf for good.
+	var staples: Array = pool.filter(func(d: Dictionary) -> bool: return str(d.get("set", "")) == "" or str(d.get("set", "")) == "cozy")
+	for i in mini(ALWAYS_STOCKED, staples.size()):
+		chosen.append(staples[i])
+		used[str(staples[i].get("id", ""))] = true
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(["cosmo_depot", GameState.day_count])
 	var guard := 0

@@ -14,8 +14,20 @@ extends Control
 ##
 ## Rows come from `Journal.entries()` (src/onboarding/journal.gd). With no favours the panel turns
 ## into a little field guide of what grows where, so it is useful on day one too.
+##
+## SETS PAGE (docs/SETS_SPEC.md 5): a second tab. One card per furniture set (src/decorations/deco_sets.gd):
+## who it belongs to, n/6, every piece ticked when ever collected and greyed when not, the bonus as "???"
+## until earned, the matching outfit, and one line saying where pieces come from. `open_over(src, "sets")`
+## opens straight onto it; the left/right keys (or a tap on the tab) switch pages.
 
 signal closed
+
+const DecoSets := preload("res://src/decorations/deco_sets.gd")
+const PAGE_FAVOURS := "favours"
+const PAGE_SETS := "sets"
+## SETS_SPEC 5: touch targets of at least 48 dp. Desktop 48 px at 1280x720; mobile uses MobileUI.MIN_TOUCH.
+const TAB_MIN_H := 48.0
+const TICK := 20.0
 
 const PANEL_WIDTH := 760.0
 ## MOBILE (R2.10): a wider panel, because the mobile Theme sets every string 1.2x and the favour
@@ -37,6 +49,7 @@ var _backdrop: ColorRect
 var _panel: PanelContainer
 var _subtitle: Label
 var _scroll: ScrollContainer
+var _well: PanelContainer
 var _list: VBoxContainer
 var _close_button: Button
 var _repeat := UIFocus.NavRepeat.new()
@@ -46,12 +59,16 @@ var _cooldown := 0.0
 ## (and, oddly, ItemGlyph) invalid at runtime. Duck-typed instead.
 var _reopen_pause: Node
 var _paused_tree := false
+var page := PAGE_FAVOURS
+var _title: Label
+var _tab_favours: Button
+var _tab_sets: Button
 
 
 # ============================================================================= entry point
 ## Opens the log over `source`. When `source` is the pause menu it is closed first and reopened
 ## when the log closes, so "Favours" reads as a sub-page rather than a second stacked menu.
-static func open_over(source: Node) -> JournalPanel:
+static func open_over(source: Node, start_page: String = PAGE_FAVOURS) -> JournalPanel:
 	if source == null or not source.is_inside_tree():
 		return null
 	# Always live under the HUD's CanvasLayer when there is one. A caller such as a Town Hall
@@ -68,6 +85,7 @@ static func open_over(source: Node) -> JournalPanel:
 		host.add_child(panel)
 	if panel.is_open:
 		return panel
+	panel.page = start_page
 	if _is_open_pause_menu(source):
 		panel._reopen_pause = source
 		# Same frame, so the tree never actually resumes between the two menus.
@@ -129,11 +147,22 @@ func _build() -> void:
 	titles.add_theme_constant_override("separation", -6)
 	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(titles)
-	titles.add_child(UIStyle.make_label("Favours", "Title"))
+	_title = UIStyle.make_label("Favours", "Title")
+	titles.add_child(_title)
 	_subtitle = UIStyle.make_label("", "Soft")
 	titles.add_child(_subtitle)
+	# The two pages, as tabs at the right of the header (no extra height for the list).
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	tabs.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(tabs)
+	_tab_favours = _make_tab("Favours", PAGE_FAVOURS)
+	tabs.add_child(_tab_favours)
+	_tab_sets = _make_tab("Sets", PAGE_SETS)
+	tabs.add_child(_tab_sets)
 
 	var well := PanelContainer.new()
+	_well = well
 	well.theme_type_variation = "Inset"
 	well.custom_minimum_size = Vector2(0.0, BODY_HEIGHT)
 	box.add_child(well)
@@ -164,10 +193,30 @@ func _build() -> void:
 		pair.add_child(UIStyle.make_label("scroll", "Hint"))
 		footer.add_child(pair)
 	_close_button = UIStyle.make_button("Back", "PillPrimary", MobileUI.pick(180.0, 260.0))
-	if MobileUI.is_mobile():
-		_close_button.custom_minimum_size.y = MobileUI.MIN_TOUCH
+	# 48 dp minimum on desktop too (SETS_SPEC 5); the pill measured 46 px tall at 1280x720 before.
+	_close_button.custom_minimum_size.y = MobileUI.pick(TAB_MIN_H, MobileUI.MIN_TOUCH)
 	_close_button.pressed.connect(close)
 	footer.add_child(_close_button)
+
+
+func _make_tab(text: String, which: String) -> Button:
+	var b := UIStyle.make_button(text, "Tab", MobileUI.pick(120.0, 190.0))
+	b.custom_minimum_size.y = MobileUI.pick(TAB_MIN_H, MobileUI.MIN_TOUCH)
+	b.pressed.connect(func() -> void: show_page(which))
+	return b
+
+
+## Switches page (and rebuilds it). Public so a caller or a test can land on the Sets page.
+func show_page(which: String) -> void:
+	if which != PAGE_SETS:
+		which = PAGE_FAVOURS
+	if which != page:
+		UIStyle.play_tick()
+	page = which
+	if is_open:
+		refresh()
+		_scroll.scroll_vertical = 0
+		_relayout()
 
 
 # ============================================================================= open / close
@@ -219,6 +268,14 @@ func _panel_width() -> float:
 
 
 func _relayout() -> void:
+	# The header's 48 dp tabs (88 px on a phone) made the panel 11 px taller than a 2340x1080 phone's 720 px
+	# view (measured 2026-10-21). The list well gives the height back so the whole panel always fits.
+	_well.custom_minimum_size.y = BODY_HEIGHT
+	_panel.reset_size()
+	var sa0 := MobileUI.safe_area()
+	var room := size.y - sa0.y - sa0.w - 16.0
+	if room > 0.0 and _panel.size.y > room:
+		_well.custom_minimum_size.y = maxf(200.0, BODY_HEIGHT - (_panel.size.y - room))
 	_panel.reset_size()
 	# Centred inside the SAFE rectangle, not the raw viewport (see Platform.safe_area_insets).
 	var sa := MobileUI.safe_area()
@@ -226,10 +283,18 @@ func _relayout() -> void:
 
 
 # ============================================================================= content
-## Rebuilds the rows from Journal.entries(). Called on every open.
+## Rebuilds the current page. Called on every open and on a tab switch.
 func refresh() -> void:
 	for c in _list.get_children():
+		_list.remove_child(c)
 		c.queue_free()
+	var on_sets := page == PAGE_SETS
+	_tab_favours.theme_type_variation = "Tab" if on_sets else "TabActive"
+	_tab_sets.theme_type_variation = "TabActive" if on_sets else "Tab"
+	_title.text = "Sets" if on_sets else "Favours"
+	if on_sets:
+		_build_sets_page()
+		return
 	var rows := Journal.entries()
 	var ready := Journal.ready_count()
 	if rows.is_empty():
@@ -362,6 +427,135 @@ func _build_field_guide() -> void:
 		guide.add_child(card)
 
 
+# ============================================================================= sets page
+func _build_sets_page() -> void:
+	var sets: Array = DecoSets.all_sets()
+	var done := 0
+	var bonus_sets := 0
+	var pieces := 0
+	for st: Dictionary in sets:
+		var sid := str(st["id"])
+		pieces += DecoSets.collected_count(sid)
+		if str(st.get("bonus", "")) != "":
+			bonus_sets += 1
+			if DecoSets.bonus_earned(sid):
+				done += 1
+	_subtitle.text = "%d %s collected · %d of %d neighbour sets complete" % [pieces, "piece" if pieces == 1 else "pieces", done, bonus_sets]
+	for st: Dictionary in sets:
+		_list.add_child(_make_set_card(st))
+
+
+func _make_set_card(st: Dictionary) -> Control:
+	var sid := str(st["id"])
+	var have := DecoSets.collected_count(sid)
+	var total := DecoSets.piece_total(sid)
+	var card := PanelContainer.new()
+	card.theme_type_variation = "Card"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	card.add_child(col)
+
+	# --- whose set, its name, n/6
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	col.add_child(head)
+	head.add_child(_name_pill(str(st.get("giver", "")), _set_accent(st)))
+	var title := UIStyle.make_label(str(st.get("name", sid)), "")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	head.add_child(title)
+	var complete := total > 0 and have >= total
+	var bar := _make_bar(float(have) / float(maxi(1, total)), complete)
+	bar.custom_minimum_size.x = MobileUI.pick(150.0, 190.0)
+	head.add_child(bar)
+	var count := UIStyle.make_label("%d/%d" % [have, total], "Header")
+	count.custom_minimum_size = Vector2(MobileUI.pick(64.0, 84.0), 0.0)
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(count)
+
+	# --- every piece: ticked when ever collected, greyed when not; then the bonus, then the outfit
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 14)
+	flow.add_theme_constant_override("v_separation", 2)
+	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(flow)
+	var names: Dictionary = st.get("names", {})
+	for pid: String in st.get("pieces", []):
+		flow.add_child(_chip(str(names.get(pid, UIStyle.pretty_id(pid))), GameState.is_collected(pid)))
+	var bonus := str(st.get("bonus", ""))
+	if bonus != "":
+		var earned := DecoSets.bonus_earned(sid)
+		flow.add_child(_chip("Bonus: " + (str(st.get("bonus_name", "")) if earned else "???"), earned, true))
+	var outfit: Array = st.get("outfit", [])
+	if not outfit.is_empty():
+		var bits: PackedStringArray = []
+		for cid: String in outfit:
+			var d: Dictionary = Catalog.get_item(cid)
+			bits.append(str(d.get("name", UIStyle.pretty_id(cid))) + (" (got it)" if GameState.is_collected(cid) else ""))
+		var ol := UIStyle.make_label("Outfit: " + ", ".join(bits) + " · Suit-Up", "Hint")
+		ol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ol.custom_minimum_size = Vector2(_panel_width() - 120.0, 0.0)
+		col.add_child(ol)
+
+	# --- where the pieces come from
+	var where := UIStyle.make_label(str(st.get("where", "")), "Small")
+	where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	where.custom_minimum_size = Vector2(_panel_width() - 120.0, 0.0)
+	where.add_theme_color_override("font_color", UIStyle.NAME_BLUE)
+	col.add_child(where)
+	return card
+
+
+func _set_accent(st: Dictionary) -> Color:
+	var npc := str(st.get("neighbour", ""))
+	if npc != "":
+		var a := str(NpcData.get_data(npc).get("accent", ""))
+		if a != "":
+			return Color(a)
+	return UIStyle.NAME_BLUE
+
+
+## One piece: a tick (or an empty ring) and its name, greyed when not collected.
+func _chip(text: String, got: bool, star := false) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := SetTick.new()
+	t.on = got
+	t.star = star
+	t.custom_minimum_size = Vector2(TICK, TICK) * MobileUI.pick(1.0, 1.2)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(t)
+	var l := UIStyle.make_label(text, "Small")
+	if not got:
+		l.add_theme_color_override("font_color", Color(UIStyle.TEXT_SOFT, 0.85))
+	row.add_child(l)
+	return row
+
+
+## The tick drawn by hand: Baloo 2 is not guaranteed to carry a check-mark glyph.
+class SetTick extends Control:
+	var on := false
+	var star := false
+
+	func _draw() -> void:
+		var r := minf(size.x, size.y) * 0.5
+		var c := size * 0.5
+		if on:
+			draw_circle(c, r, UIStyle.YELLOW if star else UIStyle.GREEN_EDGE)
+			var pts := PackedVector2Array([c + Vector2(-0.48, 0.02) * r, c + Vector2(-0.14, 0.38) * r,
+				c + Vector2(0.50, -0.34) * r])
+			draw_polyline(pts, UIStyle.WHITE, maxf(2.0, r * 0.28), true)
+		else:
+			draw_arc(c, r - 1.5, 0.0, TAU, 24, Color(UIStyle.TEXT_SOFT, 0.7), 2.0, true)
+			if star:
+				draw_string(UIStyle.font(), c + Vector2(-r * 0.32, r * 0.42), "?", HORIZONTAL_ALIGNMENT_LEFT,
+					-1, int(r * 1.3), Color(UIStyle.TEXT_SOFT, 0.9))
+
+
 # ============================================================================= input
 func _process(delta: float) -> void:
 	if not is_open:
@@ -372,6 +566,8 @@ func _process(delta: float) -> void:
 	var step := _repeat.poll(delta)
 	if step.y != 0:
 		_scroll.scroll_vertical += int(SCROLL_STEP * float(step.y))
+	if step.x != 0:
+		show_page(PAGE_SETS if step.x > 0 else PAGE_FAVOURS)
 	if UIFocus.accept_pressed() or UIFocus.cancel_pressed():
 		if UIFocus.cancel_pressed():
 			UIStyle.play_cancel()
